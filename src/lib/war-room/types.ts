@@ -121,6 +121,14 @@ export type WarRoomData = {
       lastMovedAt: string;
       dueAt: string;
       dependencyIds: string[];
+      doneApproval: {
+        required: boolean;
+        approved: boolean;
+        approvedBy: string;
+        approvedRole: string;
+        approvedAt: string;
+        note: string;
+      };
       decisionLog: Array<{
         at: string;
         author: string;

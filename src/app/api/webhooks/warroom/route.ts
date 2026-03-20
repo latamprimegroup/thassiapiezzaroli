@@ -4,7 +4,8 @@ import {
   resolveAdapterByProvider,
   type ProviderName,
 } from "@/lib/integrations/warroom-adapters";
-import { ingestIntegrationEvent, markProviderError } from "@/lib/integrations/warroom-integration-store";
+import { listDeadLetterEvents } from "@/lib/persistence/war-room-ops-store";
+import { processDueWebhookRetries, processIncomingWebhook } from "@/lib/integrations/warroom-webhook-service";
 
 export const runtime = "nodejs";
 
@@ -36,7 +37,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Nao autorizado." }, { status: 401 });
   }
 
-  const payload = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+  const rawBody = await request.text();
+  const payload = (() => {
+    try {
+      return (JSON.parse(rawBody || "{}") as Record<string, unknown>) ?? {};
+    } catch {
+      return {};
+    }
+  })();
   const provider = parseProvider(request, payload);
 
   const adapter = provider ? resolveAdapterByProvider(provider) : resolveAdapterByPayload(payload);
@@ -44,24 +52,56 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Nao foi possivel identificar o provider do webhook." }, { status: 400 });
   }
 
-  try {
-    const normalized = adapter.adapt(payload);
-    ingestIntegrationEvent(normalized);
-    return NextResponse.json({
-      ok: true,
-      provider: normalized.provider,
-      receivedAt: normalized.receivedAt,
-      normalizedFields: [
-        "valor_bruto",
-        "valor_liquido",
-        "spend",
-        "cart_abandonment_rate",
-        "card_approval_rate",
-        "upsell_take_rates",
-      ],
-    });
-  } catch (error) {
-    markProviderError(adapter.provider, error instanceof Error ? error.message : "Falha no adapter.");
-    return NextResponse.json({ error: "Falha ao adaptar payload do webhook." }, { status: 400 });
+  const signature =
+    request.headers.get("x-signature") ||
+    request.headers.get("x-webhook-signature") ||
+    request.headers.get("x-hub-signature-256") ||
+    "";
+  const eventId =
+    request.headers.get("x-event-id") ||
+    request.headers.get("x-webhook-id") ||
+    (typeof payload.event_id === "string" ? payload.event_id : "") ||
+    (typeof payload.id === "string" ? payload.id : "") ||
+    `auto-${Date.now()}`;
+
+  const result = await processIncomingWebhook({
+    provider: adapter.provider,
+    payload,
+    eventId,
+    rawBody,
+    signature,
+  });
+
+  if (!result.ok) {
+    return NextResponse.json({ error: result.message }, { status: result.statusCode });
   }
+
+  return NextResponse.json({
+    ok: true,
+    duplicate: result.duplicate,
+    provider: adapter.provider,
+    eventId,
+    status: result.status,
+    normalizedFields: [
+      "valor_bruto",
+      "valor_liquido",
+      "spend",
+      "cart_abandonment_rate",
+      "card_approval_rate",
+      "upsell_take_rates",
+    ],
+  });
+}
+
+export async function GET(request: Request) {
+  if (!isAuthorized(request)) {
+    return NextResponse.json({ error: "Nao autorizado." }, { status: 401 });
+  }
+  const retries = await processDueWebhookRetries(50);
+  const deadLetters = await listDeadLetterEvents(25);
+  return NextResponse.json({
+    retries,
+    deadLetterSize: deadLetters.length,
+    deadLetters,
+  });
 }

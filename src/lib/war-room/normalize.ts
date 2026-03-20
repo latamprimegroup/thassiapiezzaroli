@@ -284,6 +284,20 @@ export function normalizeWarRoomData(
       lastMovedAt: toString(row.lastMovedAt, fallbackTask.lastMovedAt),
       dueAt: toString(row.dueAt, fallbackTask.dueAt),
       dependencyIds: toStringArray(row.dependencyIds, fallbackTask.dependencyIds),
+      doneApproval: {
+        required:
+          typeof toObject(row.doneApproval).required === "boolean"
+            ? Boolean(toObject(row.doneApproval).required)
+            : fallbackTask.doneApproval.required,
+        approved:
+          typeof toObject(row.doneApproval).approved === "boolean"
+            ? Boolean(toObject(row.doneApproval).approved)
+            : fallbackTask.doneApproval.approved,
+        approvedBy: toString(toObject(row.doneApproval).approvedBy, fallbackTask.doneApproval.approvedBy),
+        approvedRole: toString(toObject(row.doneApproval).approvedRole, fallbackTask.doneApproval.approvedRole),
+        approvedAt: toString(toObject(row.doneApproval).approvedAt, fallbackTask.doneApproval.approvedAt),
+        note: toString(toObject(row.doneApproval).note, fallbackTask.doneApproval.note),
+      },
       decisionLog: (decisionInput as unknown[]).map((decision, decisionIndex) => {
         const decisionRow = toObject(decision);
         const fallbackDecision = fallbackTask.decisionLog[decisionIndex % fallbackTask.decisionLog.length];

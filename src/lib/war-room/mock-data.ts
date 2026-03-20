@@ -302,6 +302,14 @@ export const mockWarRoomData: WarRoomData = {
         lastMovedAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
         dueAt: new Date(Date.now() + 1000 * 60 * 60 * 5).toISOString(),
         dependencyIds: [],
+        doneApproval: {
+          required: false,
+          approved: false,
+          approvedBy: "",
+          approvedRole: "",
+          approvedAt: "",
+          note: "",
+        },
         decisionLog: [
           {
             at: "08:20",
@@ -323,6 +331,14 @@ export const mockWarRoomData: WarRoomData = {
         lastMovedAt: new Date(Date.now() - 1000 * 60 * 60 * 26).toISOString(),
         dueAt: new Date(Date.now() + 1000 * 60 * 60 * 12).toISOString(),
         dependencyIds: ["DEM-001"],
+        doneApproval: {
+          required: false,
+          approved: false,
+          approvedBy: "",
+          approvedRole: "",
+          approvedAt: "",
+          note: "",
+        },
         decisionLog: [
           {
             at: "09:05",
@@ -344,6 +360,14 @@ export const mockWarRoomData: WarRoomData = {
         lastMovedAt: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
         dueAt: new Date(Date.now() + 1000 * 60 * 60 * 6).toISOString(),
         dependencyIds: ["DEM-001"],
+        doneApproval: {
+          required: true,
+          approved: false,
+          approvedBy: "",
+          approvedRole: "",
+          approvedAt: "",
+          note: "",
+        },
         decisionLog: [
           {
             at: "10:40",
@@ -365,6 +389,14 @@ export const mockWarRoomData: WarRoomData = {
         lastMovedAt: new Date(Date.now() - 1000 * 60 * 60 * 25).toISOString(),
         dueAt: new Date(Date.now() + 1000 * 60 * 60 * 2).toISOString(),
         dependencyIds: [],
+        doneApproval: {
+          required: false,
+          approved: false,
+          approvedBy: "",
+          approvedRole: "",
+          approvedAt: "",
+          note: "",
+        },
         decisionLog: [
           {
             at: "07:58",

@@ -7,9 +7,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useWarRoom } from "@/context/war-room-context";
 import { isFatigueImminent } from "@/lib/metrics/kpis";
 import type { DemandDepartment, DemandStatus, FinancialImpact, WarRoomData } from "@/lib/war-room/types";
+import type { UserRole } from "@/lib/auth/rbac";
 
 type CommandCenterModuleProps = {
   actorName: string;
+  actorRole: UserRole;
 };
 
 type DemandTask = WarRoomData["commandCenter"]["tasks"][number];
@@ -104,12 +106,13 @@ function sortByPriority(a: DemandTask, b: DemandTask) {
   return b.createdAt.localeCompare(a.createdAt);
 }
 
-export function CommandCenterModule({ actorName }: CommandCenterModuleProps) {
+export function CommandCenterModule({ actorName, actorRole }: CommandCenterModuleProps) {
   const { data, addActivity } = useWarRoom();
   const [tasks, setTasks] = useState<DemandTask[]>(data.commandCenter.tasks);
   const [decisionDrafts, setDecisionDrafts] = useState<Record<string, string>>({});
   const [dragTaskId, setDragTaskId] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const canApproveDone = actorRole === "ceo" || actorRole === "mediaBuyer";
 
   const fatigueWinners = useMemo(
     () => data.liveAdsTracking.filter((row) => row.roas > 2.5 && isFatigueImminent(row)),
@@ -123,11 +126,55 @@ export function CommandCenterModule({ actorName }: CommandCenterModuleProps) {
     return () => window.clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      const response = await fetch("/api/command-center/tasks", { cache: "no-store" });
+      if (!response.ok || !active) {
+        return;
+      }
+      const payload = (await response.json()) as { tasks?: DemandTask[] };
+      if (active && Array.isArray(payload.tasks) && payload.tasks.length > 0) {
+        setTasks(payload.tasks);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function persistTasks(nextTasks: DemandTask[]) {
+    await fetch("/api/command-center/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tasks: nextTasks }),
+    }).catch(() => undefined);
+  }
+
+  function commitTasks(updater: (current: DemandTask[]) => DemandTask[]) {
+    setTasks((prev) => {
+      const next = updater(prev);
+      void persistTasks(next);
+      return next;
+    });
+  }
+
   function updateTask(taskId: string, updater: (task: DemandTask) => DemandTask) {
-    setTasks((prev) => prev.map((task) => (task.id === taskId ? updater(task) : task)));
+    commitTasks((prev) => prev.map((task) => (task.id === taskId ? updater(task) : task)));
   }
 
   function moveTask(taskId: string, department: DemandDepartment, status: DemandStatus) {
+    const current = tasks.find((task) => task.id === taskId);
+    if (
+      status === "done" &&
+      current?.department === "editorsCreative" &&
+      current.doneApproval.required &&
+      !current.doneApproval.approved
+    ) {
+      addActivity("COO", actorName, "bloqueou done sem aprovacao", taskId, "exige aprovacao de Midia/CEO");
+      return;
+    }
+
     const at = new Date().toISOString();
     const movedLabel = COLUMNS.find((column) => column.id === status)?.label ?? status;
     updateTask(taskId, (task) => ({
@@ -233,6 +280,14 @@ export function CommandCenterModule({ actorName }: CommandCenterModuleProps) {
       lastMovedAt: nowIso,
       dueAt: dueIso,
       dependencyIds: [],
+      doneApproval: {
+        required: false,
+        approved: false,
+        approvedBy: "",
+        approvedRole: "",
+        approvedAt: "",
+        note: "",
+      },
       decisionLog: [{ at: toShortTime(nowIso), author: actorName, note: "Demanda base criada automaticamente." }],
     };
     const copyTask: DemandTask = {
@@ -248,6 +303,14 @@ export function CommandCenterModule({ actorName }: CommandCenterModuleProps) {
       lastMovedAt: nowIso,
       dueAt: dueIso,
       dependencyIds: [trafficTask.id],
+      doneApproval: {
+        required: false,
+        approved: false,
+        approvedBy: "",
+        approvedRole: "",
+        approvedAt: "",
+        note: "",
+      },
       decisionLog: [{ at: toShortTime(nowIso), author: actorName, note: "Tarefa espelho aberta pelo trafego." }],
     };
     const editTask: DemandTask = {
@@ -263,11 +326,45 @@ export function CommandCenterModule({ actorName }: CommandCenterModuleProps) {
       lastMovedAt: nowIso,
       dueAt: dueIso,
       dependencyIds: [trafficTask.id],
+      doneApproval: {
+        required: true,
+        approved: false,
+        approvedBy: "",
+        approvedRole: "",
+        approvedAt: "",
+        note: "",
+      },
       decisionLog: [{ at: toShortTime(nowIso), author: actorName, note: "Tarefa espelho aberta pelo trafego." }],
     };
 
-    setTasks((prev) => [trafficTask, copyTask, editTask, ...prev]);
+    commitTasks((prev) => [trafficTask, copyTask, editTask, ...prev]);
     addActivity("COO", actorName, "acionou workflow espelho", effectiveSelectedFatigueCreativeId, "trafego -> copy + edicao");
+  }
+
+  async function approveTask(taskId: string) {
+    const currentTask = tasks.find((task) => task.id === taskId);
+    if (!currentTask) {
+      return;
+    }
+    const response = await fetch("/api/command-center/approve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        taskId,
+        note: `Aprovado por ${actorName} (${actorRole}).`,
+        task: currentTask,
+      }),
+    });
+    if (!response.ok) {
+      addActivity("COO", actorName, "falhou ao aprovar tarefa", taskId, "sem permissao ou task ausente");
+      return;
+    }
+    const payload = (await response.json()) as { task?: DemandTask };
+    if (!payload.task) {
+      return;
+    }
+    updateTask(taskId, () => payload.task as DemandTask);
+    addActivity("COO", actorName, "aprovou qualidade para done", taskId, "gate Midia/CEO");
   }
 
   const throughput = useMemo(() => {
@@ -349,6 +446,23 @@ export function CommandCenterModule({ actorName }: CommandCenterModuleProps) {
             Dep: {task.dependencyIds.length}
           </div>
         </div>
+
+        {task.doneApproval.required && (
+          <div className="mb-2 rounded border border-white/10 bg-black/40 px-1.5 py-1 text-[11px]">
+            {task.doneApproval.approved ? (
+              <p className="text-[#10B981]">
+                Gate Done: aprovado por {task.doneApproval.approvedBy || "--"} ({task.doneApproval.approvedRole || "--"})
+              </p>
+            ) : (
+              <p className="text-[#FF9900]">Gate Done: aguardando aprovacao de Head Midia/CEO</p>
+            )}
+            {!task.doneApproval.approved && canApproveDone && (
+              <Button type="button" className="mt-1 h-6 px-2 text-[11px]" onClick={() => void approveTask(task.id)}>
+                Aprovar Qualidade
+              </Button>
+            )}
+          </div>
+        )}
 
         {countdown ? (
           <div className={`mb-2 rounded border px-1.5 py-1 text-[11px] ${isSlaExpired ? "border-rose-300/50 text-rose-200" : "border-[#FF9900]/40 text-[#FFD39A]"}`}>

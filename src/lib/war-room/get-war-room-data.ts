@@ -1,5 +1,7 @@
 import { mergeWarRoomWithIntegrations } from "@/lib/integrations/warroom-integration-store";
 import { runPullSyncForGatewayAttribution } from "@/lib/integrations/warroom-pull-sync";
+import { processDueWebhookRetries } from "@/lib/integrations/warroom-webhook-service";
+import { mergeCommandCenterFromStore } from "@/lib/command-center/command-center-persistence";
 import { mockWarRoomData } from "./mock-data";
 import { normalizeWarRoomData } from "./normalize";
 import { loadWarRoomFromApi } from "./source-api";
@@ -35,9 +37,11 @@ async function loadBySource(source: DataSource): Promise<WarRoomData> {
 export async function getWarRoomData(): Promise<WarRoomData> {
   const source = resolveSource();
   try {
+    await processDueWebhookRetries(20);
     await runPullSyncForGatewayAttribution();
     const base = await loadBySource(source);
-    return mergeWarRoomWithIntegrations(base);
+    const withIntegrations = mergeWarRoomWithIntegrations(base);
+    return mergeCommandCenterFromStore(withIntegrations);
   } catch (error) {
     console.error("[war-room] Falha ao carregar dados reais:", error);
     const fallback = normalizeWarRoomData(
@@ -50,6 +54,7 @@ export async function getWarRoomData(): Promise<WarRoomData> {
       "fallback",
       `Fallback (erro em ${source})`,
     );
-    return mergeWarRoomWithIntegrations(fallback);
+    const withIntegrations = mergeWarRoomWithIntegrations(fallback);
+    return mergeCommandCenterFromStore(withIntegrations);
   }
 }

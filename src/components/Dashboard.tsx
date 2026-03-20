@@ -257,7 +257,9 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
             )}
             {activeSection === "copyResearch" && isSectionAllowed && <CopyResearchModule />}
             {activeSection === "trafficAttribution" && isSectionAllowed && <TrafficAttributionModule />}
-            {activeSection === "commandCenter" && isSectionAllowed && <CommandCenterModule actorName={activeUser.name} />}
+            {activeSection === "commandCenter" && isSectionAllowed && (
+              <CommandCenterModule actorName={activeUser.name} actorRole={sessionState.role} />
+            )}
             {activeSection === "squadSync" && isSectionAllowed && (
               <SquadSyncModule canInputDailyFeedback={permissions.canInputAuctionMetrics} actorName={activeUser.name} />
             )}
