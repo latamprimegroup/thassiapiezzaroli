@@ -17,6 +17,7 @@ import {
   ShieldAlert,
   Wallet,
 } from "lucide-react";
+import type { WarRoomData } from "@/lib/war-room/types";
 
 type DepartmentId = "ads" | "copy" | "tech" | "finance";
 
@@ -25,14 +26,6 @@ type Department = {
   label: string;
   subtitle: string;
   icon: LucideIcon;
-};
-
-type Creative = {
-  id: string;
-  hookRate: number;
-  holdRate: number;
-  roas: number;
-  verdict: "Escalar" | "Matar";
 };
 
 const departments: Department[] = [
@@ -62,34 +55,6 @@ const departments: Department[] = [
   },
 ];
 
-const creatives: Creative[] = [
-  { id: "CRTV-001", hookRate: 31.8, holdRate: 44.2, roas: 2.8, verdict: "Escalar" },
-  { id: "CRTV-014", hookRate: 18.1, holdRate: 37.5, roas: 1.7, verdict: "Matar" },
-  { id: "CRTV-026", hookRate: 23.4, holdRate: 41.6, roas: 2.3, verdict: "Escalar" },
-  { id: "CRTV-031", hookRate: 16.8, holdRate: 29.7, roas: 1.4, verdict: "Matar" },
-  { id: "CRTV-040", hookRate: 28.5, holdRate: 46.1, roas: 2.5, verdict: "Escalar" },
-];
-
-const productionFlow = {
-  roteirizando: ["UGC: Autoridade + Prova Social", "Corte: Objecao de preco", "Oferta: Bonus relampago"],
-  gravando: ["Hook 7s - Dor aguda do avatar", "Demo com prova visual", "Depoimento formato selfie"],
-  editando: ["Versao 15s para Reels", "Versao 45s com CTA forte", "Pacote com 5 thumb hooks"],
-};
-
-const copyAngles = [
-  "Mecanismo unico com comparativo direto",
-  "Antes x Depois orientado por resultado",
-  "Quebra de objecao para publico cético",
-  "Storytelling de transformacao em 30 dias",
-];
-
-const hooksBacklog = [
-  "Pare de fazer isso antes de subir o proximo anuncio",
-  "O erro que esta drenando seu ROAS silenciosamente",
-  "Como dobrar retencao sem aumentar CPM",
-  "3 sinais de que seu criativo virou um zumbi de performance",
-];
-
 const formatCurrency = (value: number) =>
   value.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 
@@ -103,20 +68,27 @@ function statusStyles(hookRate: number) {
   return "bg-emerald-500/15 text-emerald-200 border border-emerald-400/30";
 }
 
-export default function Dashboard() {
+type DashboardProps = {
+  data: WarRoomData;
+};
+
+export default function Dashboard({ data }: DashboardProps) {
   const [activeDepartment, setActiveDepartment] = useState<DepartmentId>("ads");
+  const creatives = data.ads.creatives;
 
   const adsMetrics = useMemo(() => {
-    const investmentTotal = 187_450;
-    const avgRoas = creatives.reduce((sum, current) => sum + current.roas, 0) / creatives.length;
-    const avgCpm = 41.3;
+    const investmentTotal = data.ads.investmentTotal;
+    const avgRoas = data.ads.avgRoas;
+    const avgCpm = data.ads.avgCpm;
     const criticalHooks = creatives.filter((creative) => creative.hookRate < 20).length;
     const winners = creatives.filter((creative) => creative.roas > 2.2).length;
 
     return { investmentTotal, avgRoas, avgCpm, criticalHooks, winners };
-  }, []);
+  }, [data.ads.avgCpm, data.ads.avgRoas, data.ads.investmentTotal, creatives]);
 
-  const updatedAt = new Date().toLocaleDateString("pt-BR", {
+  const updatedAtDate = new Date(data.updatedAt);
+  const safeUpdatedAtDate = Number.isNaN(updatedAtDate.getTime()) ? new Date() : updatedAtDate;
+  const updatedAt = safeUpdatedAtDate.toLocaleDateString("pt-BR", {
     day: "2-digit",
     month: "long",
     year: "numeric",
@@ -181,6 +153,9 @@ export default function Dashboard() {
               Atualizado em {updatedAt}
             </div>
           </header>
+          <div className="mb-6 inline-flex rounded-lg border border-cyan-300/30 bg-cyan-500/10 px-3 py-1 text-xs text-cyan-100">
+            Fonte de dados: {data.sourceLabel}
+          </div>
 
           {activeDepartment === "ads" && (
             <section className="space-y-5">
@@ -274,7 +249,7 @@ export default function Dashboard() {
                 <div className="rounded-xl border border-white/10 bg-slate-900/70 p-4">
                   <h3 className="mb-3 text-lg font-semibold text-white">Central de Angulos</h3>
                   <ul className="space-y-2">
-                    {copyAngles.map((angle) => (
+                    {data.copy.angles.map((angle) => (
                       <li key={angle} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-slate-200">
                         {angle}
                       </li>
@@ -285,7 +260,7 @@ export default function Dashboard() {
                 <div className="rounded-xl border border-white/10 bg-slate-900/70 p-4">
                   <h3 className="mb-3 text-lg font-semibold text-white">Backlog de Ganchos para Gravar</h3>
                   <ul className="space-y-2">
-                    {hooksBacklog.map((hook) => (
+                    {data.copy.hooksBacklog.map((hook) => (
                       <li key={hook} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-slate-200">
                         {hook}
                       </li>
@@ -301,7 +276,7 @@ export default function Dashboard() {
                     <h4 className="font-semibold text-indigo-100">Roteirizando</h4>
                   </div>
                   <ul className="space-y-2 text-sm text-indigo-100/90">
-                    {productionFlow.roteirizando.map((item) => (
+                    {data.copy.productionFlow.roteirizando.map((item) => (
                       <li key={item}>• {item}</li>
                     ))}
                   </ul>
@@ -313,7 +288,7 @@ export default function Dashboard() {
                     <h4 className="font-semibold text-cyan-100">Gravando</h4>
                   </div>
                   <ul className="space-y-2 text-sm text-cyan-100/90">
-                    {productionFlow.gravando.map((item) => (
+                    {data.copy.productionFlow.gravando.map((item) => (
                       <li key={item}>• {item}</li>
                     ))}
                   </ul>
@@ -325,7 +300,7 @@ export default function Dashboard() {
                     <h4 className="font-semibold text-emerald-100">Editando</h4>
                   </div>
                   <ul className="space-y-2 text-sm text-emerald-100/90">
-                    {productionFlow.editando.map((item) => (
+                    {data.copy.productionFlow.editando.map((item) => (
                       <li key={item}>• {item}</li>
                     ))}
                   </ul>
@@ -341,8 +316,8 @@ export default function Dashboard() {
                   <Gauge className="h-4 w-4 text-cyan-300" />
                   <span className="text-sm">Page Load (Drop-off)</span>
                 </div>
-                <p className="text-3xl font-semibold text-white">27,4%</p>
-                <p className="mt-2 text-sm text-slate-400">Abandono antes de 3s. Prioridade: otimizar LCP e imagens.</p>
+                <p className="text-3xl font-semibold text-white">{formatPercent(data.tech.pageLoadDropOff)}</p>
+                <p className="mt-2 text-sm text-slate-400">{data.tech.pageLoadNote}</p>
               </div>
 
               <div className="rounded-xl border border-white/10 bg-slate-900/70 p-4">
@@ -350,10 +325,8 @@ export default function Dashboard() {
                   <MonitorPlay className="h-4 w-4 text-cyan-300" />
                   <span className="text-sm">Retencao da VSL</span>
                 </div>
-                <p className="text-3xl font-semibold text-white">42,8%</p>
-                <p className="mt-2 text-sm text-slate-400">
-                  Queda acentuada no minuto 1:15. Testar hook mais agressivo no inicio.
-                </p>
+                <p className="text-3xl font-semibold text-white">{formatPercent(data.tech.vslRetention)}</p>
+                <p className="mt-2 text-sm text-slate-400">{data.tech.vslNote}</p>
               </div>
 
               <div className="rounded-xl border border-white/10 bg-slate-900/70 p-4">
@@ -361,8 +334,8 @@ export default function Dashboard() {
                   <BadgeDollarSign className="h-4 w-4 text-cyan-300" />
                   <span className="text-sm">Conversao de Checkout</span>
                 </div>
-                <p className="text-3xl font-semibold text-white">5,6%</p>
-                <p className="mt-2 text-sm text-slate-400">Upsell em +0,8pp apos simplificacao do formulario.</p>
+                <p className="text-3xl font-semibold text-white">{formatPercent(data.tech.checkoutConversion)}</p>
+                <p className="mt-2 text-sm text-slate-400">{data.tech.checkoutNote}</p>
               </div>
             </section>
           )}
@@ -374,7 +347,7 @@ export default function Dashboard() {
                   <CircleDollarSign className="h-4 w-4" />
                   <span className="text-sm">Faturamento Real</span>
                 </div>
-                <p className="text-3xl font-semibold text-white">{formatCurrency(498_320)}</p>
+                <p className="text-3xl font-semibold text-white">{formatCurrency(data.finance.revenue)}</p>
               </div>
 
               <div className="rounded-xl border border-sky-400/30 bg-sky-500/10 p-4">
@@ -382,7 +355,7 @@ export default function Dashboard() {
                   <CreditCard className="h-4 w-4" />
                   <span className="text-sm">Aprovacao Cartao/PIX</span>
                 </div>
-                <p className="text-3xl font-semibold text-white">86,9%</p>
+                <p className="text-3xl font-semibold text-white">{formatPercent(data.finance.approvalRate)}</p>
               </div>
 
               <div className="rounded-xl border border-violet-400/30 bg-violet-500/10 p-4">
@@ -390,7 +363,7 @@ export default function Dashboard() {
                   <Wallet className="h-4 w-4" />
                   <span className="text-sm">LTV</span>
                 </div>
-                <p className="text-3xl font-semibold text-white">{formatCurrency(1_740)}</p>
+                <p className="text-3xl font-semibold text-white">{formatCurrency(data.finance.ltv)}</p>
               </div>
             </section>
           )}

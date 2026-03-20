@@ -1,9 +1,9 @@
-import Dashboard from "@/components/Dashboard";
+import { NextResponse } from "next/server";
 import { getWarRoomData } from "@/lib/war-room/get-war-room-data";
 
 export const runtime = "nodejs";
 
-export default async function Home() {
+export async function GET() {
   const data = await getWarRoomData();
-  return <Dashboard data={data} />;
+  return NextResponse.json(data);
 }
