@@ -145,12 +145,28 @@ export function CommandCenterModule({ actorName, actorRole }: CommandCenterModul
     };
   }, []);
 
+  async function persistTasks(nextTasks: DemandTask[]) {
+    await fetch("/api/command-center/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tasks: nextTasks }),
+    }).catch(() => undefined);
+  }
+
+  function commitTasks(updater: (current: DemandTask[]) => DemandTask[]) {
+    setTasks((prev) => {
+      const next = updater(prev);
+      void persistTasks(next);
+      return next;
+    });
+  }
+
   useEffect(() => {
     if (intelligence.autoMirrorTriggers.length === 0) {
       return;
     }
     const timer = window.setTimeout(() => {
-      commitTasks((prev) => {
+      setTasks((prev) => {
         let changed = false;
         const next = [...prev];
         for (const trigger of intelligence.autoMirrorTriggers) {
@@ -218,28 +234,13 @@ export function CommandCenterModule({ actorName, actorRole }: CommandCenterModul
         }
         if (changed) {
           addActivity("Sistema", "War Room AI", "gerou tarefas espelho automaticas", "Command Center", "assets em vermelho");
+          void persistTasks(next);
         }
         return changed ? next : prev;
       });
     }, 0);
     return () => window.clearTimeout(timer);
   }, [addActivity, intelligence.autoMirrorTriggers]);
-
-  async function persistTasks(nextTasks: DemandTask[]) {
-    await fetch("/api/command-center/tasks", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tasks: nextTasks }),
-    }).catch(() => undefined);
-  }
-
-  function commitTasks(updater: (current: DemandTask[]) => DemandTask[]) {
-    setTasks((prev) => {
-      const next = updater(prev);
-      void persistTasks(next);
-      return next;
-    });
-  }
 
   function updateTask(taskId: string, updater: (task: DemandTask) => DemandTask) {
     commitTasks((prev) => prev.map((task) => (task.id === taskId ? updater(task) : task)));
