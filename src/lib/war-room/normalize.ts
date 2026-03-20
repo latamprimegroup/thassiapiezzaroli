@@ -43,7 +43,7 @@ function toNumberArray(value: unknown, fallback: number[]): number[] {
 }
 
 function toSquad(value: unknown, fallback: SquadKey): SquadKey {
-  return value === "facebook" || value === "googleYoutube" ? value : fallback;
+  return value === "facebook" || value === "googleYoutube" || value === "tiktok" ? value : fallback;
 }
 
 function toStage(value: unknown, fallback: PipelineStage): PipelineStage {
@@ -84,6 +84,7 @@ function deriveLegacyLiveRows(value: unknown): WarRoomData["liveAdsTracking"] {
       campaign: index % 2 === 0 ? "Legacy Facebook" : "Legacy Google/YouTube",
       adName: `Criativo legado ${index + 1}`,
       impressions,
+      clicks: Math.round(impressions * 0.065),
       views3s,
       views15s,
       ic,
@@ -128,6 +129,7 @@ export function normalizeWarRoomData(
 
   const fbInput = toObject(squadsInput.facebook);
   const gInput = toObject(squadsInput.googleYoutube);
+  const ttInput = toObject(squadsInput.tiktok);
 
   const liveInput = Array.isArray(input.liveAdsTracking)
     ? input.liveAdsTracking
@@ -144,6 +146,7 @@ export function normalizeWarRoomData(
       campaign: toString(row.campaign, fallbackRow.campaign),
       adName: toString(row.adName, fallbackRow.adName),
       impressions: toNumber(row.impressions, fallbackRow.impressions),
+      clicks: toNumber(row.clicks, fallbackRow.clicks),
       views3s: toNumber(row.views3s, fallbackRow.views3s),
       views15s: toNumber(row.views15s, fallbackRow.views15s),
       ic: toNumber(row.ic, fallbackRow.ic),
@@ -304,6 +307,14 @@ export function normalizeWarRoomData(
         validatedCreatives: toNumber(gInput.validatedCreatives, fallback.squads.googleYoutube.validatedCreatives),
         managerComment: toString(gInput.managerComment, fallback.squads.googleYoutube.managerComment),
       },
+      tiktok: {
+        name: toString(ttInput.name, fallback.squads.tiktok.name),
+        focus: toString(ttInput.focus, fallback.squads.tiktok.focus),
+        creativeVelocity: toNumber(ttInput.creativeVelocity, fallback.squads.tiktok.creativeVelocity),
+        creativeVelocityTarget: toNumber(ttInput.creativeVelocityTarget, fallback.squads.tiktok.creativeVelocityTarget),
+        validatedCreatives: toNumber(ttInput.validatedCreatives, fallback.squads.tiktok.validatedCreatives),
+        managerComment: toString(ttInput.managerComment, fallback.squads.tiktok.managerComment),
+      },
     },
     liveAdsTracking: liveAdsTracking.length > 0 ? liveAdsTracking : fallback.liveAdsTracking,
     creativeFactory: {
@@ -313,7 +324,12 @@ export function normalizeWarRoomData(
     finance: {
       netRevenue: toNumber(financeInput.netRevenue, derivedNetRevenue),
       profitMargin: toNumber(financeInput.profitMargin, derivedProfitMargin),
+      contributionMargin: toNumber(financeInput.contributionMargin, fallback.finance.contributionMargin),
       approvalRate: toNumber(financeInput.approvalRate, fallback.finance.approvalRate),
+      approvalCard: toNumber(financeInput.approvalCard, fallback.finance.approvalCard),
+      approvalPix: toNumber(financeInput.approvalPix, fallback.finance.approvalPix),
+      ltv24h: toNumber(financeInput.ltv24h, fallback.finance.ltv24h),
+      upsellTakeRate: toNumber(financeInput.upsellTakeRate, fallback.finance.upsellTakeRate),
       ltv: toNumber(financeInput.ltv, fallback.finance.ltv),
     },
     contingency: {
@@ -337,6 +353,18 @@ export function normalizeWarRoomData(
           lastCheck: toString(row.lastCheck, fallbackAccount.lastCheck),
         };
       }),
+      fanpages: (Array.isArray(contingencyInput.fanpages) ? contingencyInput.fanpages : fallback.contingency.fanpages).map(
+        (item, index) => {
+          const row = toObject(item);
+          const fallbackPage = fallback.contingency.fanpages[index % fallback.contingency.fanpages.length];
+          return {
+            name: toString(row.name, fallbackPage.name),
+            status: toStatus(row.status, fallbackPage.status),
+            score: toNumber(row.score, fallbackPage.score),
+            lastCheck: toString(row.lastCheck, fallbackPage.lastCheck),
+          };
+        },
+      ),
     },
     activityLog: activityLog.length > 0 ? activityLog : fallback.activityLog,
     oldSchema: {

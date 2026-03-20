@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   Lock,
   MessageSquareText,
+  Music2,
   MonitorPlay,
   Radar,
   Rocket,
@@ -57,6 +58,12 @@ const sections: Section[] = [
     label: "Squad Google/YouTube",
     subtitle: "Search / VVC / Display",
     icon: MonitorPlay,
+  },
+  {
+    id: "tiktok",
+    label: "Squad TikTok",
+    subtitle: "UGC / Spark Ads",
+    icon: Music2,
   },
   {
     id: "factory",
@@ -286,9 +293,9 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
             })}
           </nav>
 
-          <div className="mt-6 rounded-xl border border-amber-400/40 bg-amber-500/10 p-3">
-            <p className="text-xs uppercase tracking-[0.14em] text-amber-200">Inteligencia</p>
-            <div className="mt-2 space-y-1 text-sm text-amber-100">
+          <div className="mt-6 rounded-xl border border-[#FF9900]/50 bg-[#FF9900]/15 p-3">
+            <p className="text-xs uppercase tracking-[0.14em] text-[#FFB347]">Inteligencia de Guerra</p>
+            <div className="mt-2 space-y-1 text-sm text-[#FFD39A]">
               <p>{intelligence.goldHooks} criativos com badge Gancho de Ouro.</p>
               <p>{intelligence.retentionBottleneck} gargalos de retencao identificados.</p>
               <p>{intelligence.winners} anuncios com WINNER DETECTED.</p>
@@ -457,11 +464,22 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
                   </CardHeader>
                   <CardContent className="space-y-2 text-sm text-slate-200">
                     <p>
-                      Taxa de aprovacao de pagamento:{" "}
+                      Taxa de aprovacao total:{" "}
                       <span className="font-semibold text-white">{formatPercent(viewData.finance.approvalRate)}</span>
                     </p>
                     <p>
+                      Cartao: <span className="font-semibold text-white">{formatPercent(viewData.finance.approvalCard)}</span> | Pix:{" "}
+                      <span className="font-semibold text-white">{formatPercent(viewData.finance.approvalPix)}</span>
+                    </p>
+                    <p>
                       LTV consolidado: <span className="font-semibold text-white">{formatCurrency(viewData.finance.ltv)}</span>
+                    </p>
+                    <p>
+                      LTV 24h: <span className="font-semibold text-white">{formatCurrency(viewData.finance.ltv24h)}</span>
+                    </p>
+                    <p>
+                      Upsell Take Rate:{" "}
+                      <span className="font-semibold text-white">{formatPercent(viewData.finance.upsellTakeRate)}</span>
                     </p>
                     {permissions.canViewSensitiveFinancials && (
                       <>
@@ -472,6 +490,12 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
                         <p>
                           Margem de lucro:{" "}
                           <span className="font-semibold text-emerald-200">{formatPercent(viewData.finance.profitMargin)}</span>
+                        </p>
+                        <p>
+                          Margem de contribuicao:{" "}
+                          <span className="font-semibold text-emerald-200">
+                            {formatPercent(viewData.finance.contributionMargin)}
+                          </span>
                         </p>
                       </>
                     )}
@@ -718,6 +742,55 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
               <DailyBriefing
                 items={viewData.dailyBriefing}
                 squadFilter="googleYoutube"
+                allowReply={permissions.canUploadCreativeVersions || permissions.canManageCreativeBacklog}
+              />
+            </section>
+          )}
+
+          {activeSection === "tiktok" && isSectionAllowed && (
+            <section className="space-y-5">
+              <div className="grid gap-4 xl:grid-cols-3">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Squad TikTok</CardTitle>
+                    <CardDescription>{viewData.squads.tiktok.focus}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="text-sm text-slate-200">{viewData.squads.tiktok.managerComment}</CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Creative Velocity</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-2xl font-semibold">{viewData.squads.tiktok.creativeVelocity}/semana</p>
+                    <p className="mt-1 text-sm text-slate-400">
+                      Meta: {viewData.squads.tiktok.creativeVelocityTarget} | Validados: {viewData.squads.tiktok.validatedCreatives}
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Alerta de guerra</CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-sm text-slate-200">
+                    Monitorar fadiga em Spark Ads com frequencia acima de 3 e queda de CTR unico.
+                  </CardContent>
+                </Card>
+              </div>
+
+              <LiveAdsTable
+                title="Live Ads Tracking - Squad TikTok"
+                subtitle="Proatividade em fadiga criativa com Burn Rate preditivo"
+                rows={viewData.liveAdsTracking}
+                squadFilter="tiktok"
+                hideRoasReal={!canShowRoas}
+                emphasizeRetention={retentionSpotlight}
+                simplified={permissions.simplifiedPerformanceView}
+                showDeepDive
+              />
+              <DailyBriefing
+                items={viewData.dailyBriefing}
+                squadFilter="tiktok"
                 allowReply={permissions.canUploadCreativeVersions || permissions.canManageCreativeBacklog}
               />
             </section>

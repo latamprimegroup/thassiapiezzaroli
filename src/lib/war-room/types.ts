@@ -1,4 +1,4 @@
-export type SquadKey = "facebook" | "googleYoutube";
+export type SquadKey = "facebook" | "googleYoutube" | "tiktok";
 
 export type PipelineStage = "Roteiro" | "Gravacao" | "Edicao" | "Teste" | "Winner";
 
@@ -38,6 +38,7 @@ export type WarRoomData = {
     campaign: string;
     adName: string;
     impressions: number;
+    clicks: number;
     views3s: number;
     views15s: number;
     ic: number;
@@ -86,7 +87,12 @@ export type WarRoomData = {
   finance: {
     netRevenue: number;
     profitMargin: number;
+    contributionMargin: number;
     approvalRate: number;
+    approvalCard: number;
+    approvalPix: number;
+    ltv24h: number;
+    upsellTakeRate: number;
     ltv: number;
   };
   contingency: {
@@ -97,6 +103,12 @@ export type WarRoomData = {
       lastCheck: string;
     }>;
     adAccounts: Array<{
+      name: string;
+      status: "ok" | "warning" | "blocked";
+      score: number;
+      lastCheck: string;
+    }>;
+    fanpages: Array<{
       name: string;
       status: "ok" | "warning" | "blocked";
       score: number;

@@ -28,12 +28,16 @@ export function safeDivide(numerator: unknown, denominator: unknown): number {
 export function computeKpis(row: LiveRow) {
   const hookRate = safeDivide(row.views3s, row.impressions) * 100;
   const holdRate = safeDivide(row.views15s, row.views3s) * 100;
+  const pageDrop = (1 - safeDivide(row.lp, row.clicks)) * 100;
   const vslEfficiency = safeDivide(row.ic, row.lp) * 100;
+  const predictiveBurnRate = computePredictiveBurnRate(row);
 
   return {
     hookRate,
     holdRate,
+    pageDrop,
     vslEfficiency,
+    predictiveBurnRate,
   };
 }
 
@@ -48,6 +52,19 @@ export function isFatigueImminent(row: LiveRow) {
     return false;
   }
   return f[0] < f[1] && f[1] < f[2] && ctr[0] > ctr[1] && ctr[1] > ctr[2];
+}
+
+export function computePredictiveBurnRate(row: LiveRow) {
+  const f = row.frequencyTrend3d;
+  const ctr = row.uniqueCtrTrend3d;
+  if (f.length < 3 || ctr.length < 3) {
+    return 0;
+  }
+
+  const freqDelta = Math.max(0, f[2] - f[0]);
+  const ctrDelta = Math.max(0, ctr[0] - ctr[2]);
+  const score = freqDelta * 22 + ctrDelta * 28;
+  return Math.max(0, Math.min(100, score));
 }
 
 export function isLtvPriority(row: LiveRow, minCpa: number, ltvThreshold: number) {

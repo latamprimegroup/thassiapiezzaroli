@@ -11,7 +11,13 @@ type CreativeFactoryBoardProps = {
 const stages: PipelineStage[] = ["Roteiro", "Gravacao", "Edicao", "Teste", "Winner"];
 
 function squadLabel(squad: WarRoomData["creativeFactory"]["tasks"][number]["squad"]) {
-  return squad === "facebook" ? "Facebook" : "Google/YouTube";
+  if (squad === "facebook") {
+    return "Facebook";
+  }
+  if (squad === "tiktok") {
+    return "TikTok";
+  }
+  return "Google/YouTube";
 }
 
 function stageStyles(stage: PipelineStage) {

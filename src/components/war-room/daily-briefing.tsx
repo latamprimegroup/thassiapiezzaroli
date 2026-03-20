@@ -31,7 +31,13 @@ const initialReply: ReplyFormState = {
 };
 
 function squadLabel(squad: SquadKey) {
-  return squad === "facebook" ? "Facebook" : "Google/YouTube";
+  if (squad === "facebook") {
+    return "Facebook";
+  }
+  if (squad === "tiktok") {
+    return "TikTok";
+  }
+  return "Google/YouTube";
 }
 
 export function DailyBriefing({ items, squadFilter, allowReply = true }: DailyBriefingProps) {

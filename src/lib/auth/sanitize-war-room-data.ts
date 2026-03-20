@@ -10,6 +10,9 @@ export function sanitizeWarRoomDataForRole(input: WarRoomData, role: UserRole): 
   if (!permissions.canViewSensitiveFinancials) {
     data.finance.netRevenue = 0;
     data.finance.profitMargin = 0;
+    data.finance.contributionMargin = 0;
+    data.finance.ltv24h = 0;
+    data.finance.upsellTakeRate = 0;
   }
 
   if (!permissions.canViewRoasReal) {
@@ -25,6 +28,10 @@ export function sanitizeWarRoomDataForRole(input: WarRoomData, role: UserRole): 
 
   if (role === "videoEditor") {
     data.globalOverview.revenue = 0;
+    data.globalOverview.trafficSources = data.globalOverview.trafficSources.map((source) => ({
+      ...source,
+      spend: 0,
+    }));
   }
 
   return data;

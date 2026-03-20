@@ -30,7 +30,13 @@ const currency = (value: number) =>
   value.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 
 function squadLabel(squad: SquadKey) {
-  return squad === "facebook" ? "Facebook" : "Google/YouTube";
+  if (squad === "facebook") {
+    return "Facebook";
+  }
+  if (squad === "tiktok") {
+    return "TikTok";
+  }
+  return "Google/YouTube";
 }
 
 const PAGE_SIZE = 120;
@@ -151,8 +157,18 @@ export function LiveAdsTable({
                 <th className="px-2 py-2 font-medium">
                   <MetricTooltip label="VSL Efficiency" help="Eficiencia = IC / LP." />
                 </th>
+                {!simplified && (
+                  <th className="px-2 py-2 font-medium">
+                    <MetricTooltip label="Page Drop" help="Drop = 1 - (LP Views / Cliques). Alerta acima de 20%." />
+                  </th>
+                )}
                 {!simplified && <th className="px-2 py-2 font-medium">Freq.</th>}
                 {!simplified && <th className="px-2 py-2 font-medium">CTR Unico</th>}
+                {!simplified && (
+                  <th className="px-2 py-2 font-medium">
+                    <MetricTooltip label="Burn Rate" help="Indice preditivo de fadiga por frequencia x queda de CTR." />
+                  </th>
+                )}
                 {showDeepDive && <th className="px-2 py-2 font-medium">AOV</th>}
                 {showDeepDive && <th className="px-2 py-2 font-medium">Upsell %</th>}
                 {showDeepDive && <th className="px-2 py-2 font-medium">LTV</th>}
@@ -179,8 +195,18 @@ export function LiveAdsTable({
                       <Sparkline values={row.trend24h.holdRate} colorClass="stroke-violet-300" />
                     </td>
                     <td className="px-2 py-3">{percent(metrics.vslEfficiency)}</td>
+                    {!simplified && (
+                      <td className={`px-2 py-3 ${metrics.pageDrop > 20 ? "text-[#FF9900]" : ""}`}>
+                        {percent(metrics.pageDrop)}
+                      </td>
+                    )}
                     {!simplified && <td className="px-2 py-3">{row.frequency.toFixed(1)}</td>}
                     {!simplified && <td className="px-2 py-3">{percent(row.uniqueCtr)}</td>}
+                    {!simplified && (
+                      <td className={`px-2 py-3 ${metrics.predictiveBurnRate > 65 ? "text-[#FF9900] font-semibold" : ""}`}>
+                        {metrics.predictiveBurnRate.toFixed(0)}
+                      </td>
+                    )}
                     {showDeepDive && <td className="px-2 py-3">{currency(row.aov)}</td>}
                     {showDeepDive && <td className="px-2 py-3">{percent(row.upsellConversion)}</td>}
                     {showDeepDive && <td className="px-2 py-3">{currency(row.ltv)}</td>}
@@ -195,6 +221,7 @@ export function LiveAdsTable({
                       <div className="flex flex-wrap gap-1.5">
                         {metrics.hookRate > 30 ? <Badge variant="gold">Gancho de Ouro</Badge> : null}
                         {metrics.holdRate < 20 ? <Badge variant="warning">Gargalo de Retencao</Badge> : null}
+                        {metrics.pageDrop > 20 ? <Badge variant="warning">Page Drop Alto</Badge> : null}
                         {row.roas > 2.5 ? <Badge variant="success">WINNER DETECTED</Badge> : null}
                         {metrics.hookRate < 20 ? <Badge variant="danger">Critico</Badge> : null}
                         {isFatigueImminent(row) ? <Badge variant="warning">FADIGA IMINENTE</Badge> : null}

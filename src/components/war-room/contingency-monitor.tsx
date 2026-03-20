@@ -23,9 +23,9 @@ function statusVariant(status: "ok" | "warning" | "blocked") {
 export function ContingencyMonitor({ contingency }: ContingencyMonitorProps) {
   const hadCritical = useRef(false);
   const criticalCount = useMemo(() => {
-    const all = [...contingency.domains, ...contingency.adAccounts];
+    const all = [...contingency.domains, ...contingency.adAccounts, ...contingency.fanpages];
     return all.filter((item) => item.status === "blocked" || item.score < 50).length;
-  }, [contingency.adAccounts, contingency.domains]);
+  }, [contingency.adAccounts, contingency.domains, contingency.fanpages]);
 
   useEffect(() => {
     if (criticalCount <= 0 || hadCritical.current) {
@@ -85,6 +85,19 @@ export function ContingencyMonitor({ contingency }: ContingencyMonitorProps) {
               <div className="flex items-center gap-2">
                 <Badge variant={statusVariant(account.status)}>score {account.score}</Badge>
                 <span className="text-xs text-slate-400">{account.lastCheck}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-xs uppercase tracking-[0.12em] text-slate-400">Fanpages</p>
+          {contingency.fanpages.map((page) => (
+            <div key={page.name} className="flex items-center justify-between rounded-md border border-white/10 bg-white/5 px-2 py-1.5">
+              <span className="text-sm text-slate-100">{page.name}</span>
+              <div className="flex items-center gap-2">
+                <Badge variant={statusVariant(page.status)}>score {page.score}</Badge>
+                <span className="text-xs text-slate-400">{page.lastCheck}</span>
               </div>
             </div>
           ))}

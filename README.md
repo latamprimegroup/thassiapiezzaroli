@@ -33,7 +33,9 @@ Abra `http://localhost:3000`.
    - Live Ads Tracking + Daily Briefing + Creative Velocity
 3. **Squad Google/YouTube**
    - Live Ads Tracking + Daily Briefing + Creative Velocity
-4. **Creative Factory**
+4. **Squad TikTok**
+   - Live Ads Tracking + Burn Rate preditivo + Creative Velocity
+5. **Creative Factory**
    - Kanban: Roteiro -> Gravacao -> Edicao -> Teste -> Winner
 
 ## Regras de inteligencia
@@ -41,6 +43,14 @@ Abra `http://localhost:3000`.
 - Hook Rate (3s/Imp) > 30% => **Gancho de Ouro**
 - Hold Rate (15s/3s) < 20% => **Gargalo de Retencao**
 - ROAS > 2.5 => **WINNER DETECTED**
+
+### Targets operacionais de 9 digitos
+
+- Hook Rate (3s/Imp): alvo > 25%
+- Hold Rate (15s/3s): alvo > 30%
+- Page Drop (1 - LP Views/Cliques): alerta > 20%
+- VSL Efficiency (IC/LP): alvo > 12%
+- MER (Faturamento Total / Gasto Total): bussola de escala real
 
 ## RBAC (Role-Based Access Control)
 
@@ -81,10 +91,10 @@ Tambem foi adicionado o **Log de Atividades**, com trilha de acoes no formato:
 - **Indice de Saturacao de Criativo**:
   - badge `FADIGA IMINENTE` quando frequencia sobe e CTR unico cai por 3 dias.
 - **Funnel Deep-Dive**:
-  - colunas por criativo para `AOV`, `Upsell %`, `LTV` e `CPA`.
+  - colunas por criativo para `AOV`, `Upsell %`, `LTV`, `LTV 24h`, `CPA` e `Page Drop`.
   - priorizacao automatica com badge `PRIORIDADE LTV` (mesmo com CPA ate 10% acima da base).
 - **Painel de Contingencia**:
-  - monitor para dominios e contas com estados `ok | warning | blocked`.
+  - monitor para dominios, contas e fanpages com estados `ok | warning | blocked`.
   - alerta visual e sonoro imediato ao detectar risco critico.
 - **Sparklines 24h**:
   - tendencia embutida na tabela para Hook, Hold e ROAS.

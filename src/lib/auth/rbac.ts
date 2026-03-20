@@ -3,7 +3,7 @@ import { Clapperboard, Crown, PenSquare, SatelliteDish } from "lucide-react";
 
 export type UserRole = "ceo" | "mediaBuyer" | "copywriter" | "videoEditor";
 
-export type SectionId = "overview" | "facebook" | "googleYoutube" | "factory";
+export type SectionId = "overview" | "facebook" | "googleYoutube" | "tiktok" | "factory";
 
 export type RolePermissions = {
   label: string;
@@ -26,7 +26,7 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     label: "CEO (Admin)",
     description: "Visao total e aprovacao final",
     icon: Crown,
-    allowedSections: ["overview", "facebook", "googleYoutube", "factory"],
+    allowedSections: ["overview", "facebook", "googleYoutube", "tiktok", "factory"],
     canViewSensitiveFinancials: true,
     canViewRoasReal: true,
     canApproveScaleCampaigns: true,
@@ -41,7 +41,7 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     label: "Media Buyer",
     description: "Leilao, CPA e acionamento de squads",
     icon: SatelliteDish,
-    allowedSections: ["overview", "facebook", "googleYoutube", "factory"],
+    allowedSections: ["overview", "facebook", "googleYoutube", "tiktok", "factory"],
     canViewSensitiveFinancials: false,
     canViewRoasReal: true,
     canApproveScaleCampaigns: false,
@@ -56,7 +56,7 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     label: "Copywriter / Creative Director",
     description: "Engajamento, backlog e retencao",
     icon: PenSquare,
-    allowedSections: ["facebook", "googleYoutube", "factory"],
+    allowedSections: ["facebook", "googleYoutube", "tiktok", "factory"],
     canViewSensitiveFinancials: false,
     canViewRoasReal: true,
     canApproveScaleCampaigns: false,
@@ -71,7 +71,7 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     label: "Video Editor",
     description: "Performance por criativo e novas versoes",
     icon: Clapperboard,
-    allowedSections: ["facebook", "googleYoutube", "factory"],
+    allowedSections: ["facebook", "googleYoutube", "tiktok", "factory"],
     canViewSensitiveFinancials: false,
     canViewRoasReal: false,
     canApproveScaleCampaigns: false,

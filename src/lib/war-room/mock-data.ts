@@ -11,7 +11,8 @@ export const mockWarRoomData: WarRoomData = {
     trafficSources: [
       { source: "Facebook Ads", spend: 980_000 },
       { source: "Google/YouTube", spend: 620_000 },
-      { source: "Native + Afiliados", spend: 320_000 },
+      { source: "TikTok Ads", spend: 210_000 },
+      { source: "Native + Afiliados", spend: 110_000 },
     ],
   },
   squads: {
@@ -33,6 +34,14 @@ export const mockWarRoomData: WarRoomData = {
       managerComment:
         "Search performando com CAC baixo. Gargalo na camada de VVC com baixo hold rate apos 15s.",
     },
+    tiktok: {
+      name: "Squad TikTok",
+      focus: "UGC velocity + Spark Ads",
+      creativeVelocity: 14,
+      creativeVelocityTarget: 16,
+      validatedCreatives: 7,
+      managerComment: "Squad com bom volume, mas com sinais iniciais de fadiga por frequencia em criativos campeoes.",
+    },
   },
   liveAdsTracking: [
     {
@@ -41,6 +50,7 @@ export const mockWarRoomData: WarRoomData = {
       campaign: "Scale UGC CBO",
       adName: "Dor aguda + prova social",
       impressions: 182_440,
+      clicks: 13_830,
       views3s: 63_671,
       views15s: 21_200,
       ic: 3_102,
@@ -66,6 +76,7 @@ export const mockWarRoomData: WarRoomData = {
       campaign: "Retargeting D7",
       adName: "Quebra de objecao de preco",
       impressions: 96_200,
+      clicks: 5_940,
       views3s: 25_012,
       views15s: 4_430,
       ic: 890,
@@ -91,6 +102,7 @@ export const mockWarRoomData: WarRoomData = {
       campaign: "YouTube VVC Broad",
       adName: "Comparativo visual 45s",
       impressions: 130_900,
+      clicks: 8_550,
       views3s: 32_070,
       views15s: 5_904,
       ic: 1_204,
@@ -116,6 +128,7 @@ export const mockWarRoomData: WarRoomData = {
       campaign: "Search High Intent",
       adName: "Headline DR direcional",
       impressions: 74_330,
+      clicks: 7_210,
       views3s: 26_313,
       views15s: 13_945,
       ic: 1_833,
@@ -134,6 +147,32 @@ export const mockWarRoomData: WarRoomData = {
       },
       frequencyTrend3d: [1.5, 1.6, 1.7],
       uniqueCtrTrend3d: [3.9, 3.8, 3.7],
+    },
+    {
+      id: "TT-077",
+      squad: "tiktok",
+      campaign: "Spark Scale 25-44",
+      adName: "POV transformacao em 18s",
+      impressions: 214_110,
+      clicks: 12_820,
+      views3s: 69_900,
+      views15s: 16_420,
+      ic: 1_940,
+      lp: 8_880,
+      roas: 2.4,
+      frequency: 3.8,
+      uniqueCtr: 1.2,
+      aov: 336,
+      upsellConversion: 16.1,
+      ltv: 1_860,
+      cpa: 172,
+      trend24h: {
+        hookRate: [34.2, 33.7, 33.1, 32.9, 32.7, 32.3, 32.0, 31.6],
+        holdRate: [26.2, 25.8, 25.2, 24.8, 24.2, 23.7, 23.1, 22.6],
+        roas: [2.8, 2.7, 2.7, 2.6, 2.6, 2.5, 2.5, 2.4],
+      },
+      frequencyTrend3d: [3.0, 3.4, 3.8],
+      uniqueCtrTrend3d: [1.8, 1.5, 1.2],
     },
   ],
   creativeFactory: {
@@ -183,6 +222,15 @@ export const mockWarRoomData: WarRoomData = {
         metricContext: "ROAS > 2.5 em 48h",
         updatedAt: "11:29",
       },
+      {
+        id: "TASK-006",
+        squad: "tiktok",
+        title: "Pattern Interrupt para Spark V2",
+        owner: "Editor Nati",
+        status: "Teste",
+        metricContext: "Fadiga detectada em TT-077",
+        updatedAt: "11:38",
+      },
     ],
   },
   dailyBriefing: [
@@ -223,11 +271,31 @@ export const mockWarRoomData: WarRoomData = {
         },
       ],
     },
+    {
+      id: "BRIEF-3",
+      squad: "tiktok",
+      trafficManagerComment:
+        "Criativo TT-077 com sinais de fadiga. Preciso V2 com pattern interrupt nos 2 primeiros segundos.",
+      replies: [
+        {
+          role: "Edicao",
+          author: "Nati",
+          version: "V2",
+          assetUrl: "https://drive.google.com/file/d/brief-tt-v2",
+          note: "Inserido corte de surpresa no frame inicial para recuperar CTR unico.",
+        },
+      ],
+    },
   ],
   finance: {
     netRevenue: 2_120_000,
     profitMargin: 38.0,
+    contributionMargin: 31.5,
     approvalRate: 87.2,
+    approvalCard: 84.3,
+    approvalPix: 93.1,
+    ltv24h: 512,
+    upsellTakeRate: 21.4,
     ltv: 1_930,
   },
   contingency: {
@@ -238,6 +306,10 @@ export const mockWarRoomData: WarRoomData = {
     adAccounts: [
       { name: "BM Escala Latam", status: "ok", score: 88, lastCheck: "12:02" },
       { name: "Google Ads Conta 02", status: "blocked", score: 34, lastCheck: "12:04" },
+    ],
+    fanpages: [
+      { name: "Pagina Oficial DR", status: "ok", score: 90, lastCheck: "12:05" },
+      { name: "Pagina Escala 02", status: "warning", score: 61, lastCheck: "12:05" },
     ],
   },
   activityLog: [

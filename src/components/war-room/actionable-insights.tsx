@@ -143,7 +143,7 @@ export function ActionableInsights({ rows, role, contingency }: ActionableInsigh
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Recomendacoes da IA</CardTitle>
+        <CardTitle>Diagnostico Automatico (IA)</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
         {insights.map((insight) => (

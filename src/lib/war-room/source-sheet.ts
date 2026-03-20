@@ -102,6 +102,7 @@ export async function loadWarRoomFromSheets(): Promise<WarRoomData> {
         hookRate: pick(row, ["hookrate", "hookrate(%)", "hook"]),
         holdRate: pick(row, ["holdrate", "holdrate(%)", "hold"]),
         roas: pick(row, ["roas"]),
+        clicks: pick(row, ["clicks", "cliques"]),
         frequency: pick(row, ["frequency", "frequencia"]),
         uniqueCtr: pick(row, ["uniquectr", "ctrunico"]),
         aov: pick(row, ["aov"]),
