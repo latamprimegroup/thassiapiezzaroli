@@ -15,6 +15,7 @@ type WarRoomContextValue = {
     sentimentNotes: string;
     commandOrders: SquadSyncCommandOrder[];
   }) => void;
+  registerCreativeNaming: (entry: WarRoomData["enterprise"]["copyResearch"]["namingRegistry"][number]) => void;
 };
 
 export const WarRoomContext = createContext<WarRoomContextValue | null>(null);

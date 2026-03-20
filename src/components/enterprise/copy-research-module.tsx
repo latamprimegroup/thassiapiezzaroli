@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useWarRoom } from "@/context/war-room-context";
+import { buildCreativeDnaName, CREATIVE_DNA_REGEX, sanitizeNamingToken } from "@/lib/copy/creative-naming";
 import {
   computeBigIdeaHealthScore,
   computeSaturationStatus,
@@ -62,6 +63,19 @@ function sanitizeForId(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 }
 
+function deriveBigIdeaCode(title: string) {
+  const token = sanitizeNamingToken(title).split("_")[0] ?? "IDEIA";
+  return token || "IDEIA";
+}
+
+function nextUniqueId(registry: WarRoomData["enterprise"]["copyResearch"]["namingRegistry"]) {
+  const maxId = registry.reduce((max, item) => {
+    const digits = Number(item.uniqueId.replace(/[^0-9]/g, ""));
+    return Number.isFinite(digits) ? Math.max(max, digits) : max;
+  }, 1000);
+  return `ID${String(maxId + 1).padStart(4, "0")}`;
+}
+
 function buildInitialBigIdeas(data: WarRoomData): BigIdeaVaultRecord[] {
   return data.enterprise.copyResearch.bigIdeaVault.map((idea, index) => {
     const linked = data.liveAdsTracking[index % data.liveAdsTracking.length];
@@ -101,7 +115,7 @@ function statusLabel(status: "fresh" | "fatiguing" | "saturated") {
 }
 
 export function CopyResearchModule() {
-  const { data, addActivity } = useWarRoom();
+  const { data, addActivity, registerCreativeNaming } = useWarRoom();
   const copyModule = data.enterprise.copyResearch;
   const [script, setScript] = useState(copyModule.scriptEditor);
   const [ideas, setIdeas] = useState<BigIdeaVaultRecord[]>(() => buildInitialBigIdeas(data));
@@ -125,6 +139,15 @@ export function CopyResearchModule() {
     whyItWorks: "",
     howWeDifferentiate: "",
   });
+  const [namingDraft, setNamingDraft] = useState(() => ({
+    product: "LP9D",
+    bigIdea: deriveBigIdeaCode(buildInitialBigIdeas(data)[0]?.title ?? "IDEIA"),
+    mechanism: "INSULINA",
+    format: "VSL" as const,
+    hookVariation: "01",
+    uniqueId: nextUniqueId(data.enterprise.copyResearch.namingRegistry),
+    linkedCreativeId: data.liveAdsTracking[0]?.id ?? "N/A",
+  }));
 
   const selectedIdea = ideas.find((idea) => idea.id === selectedIdeaId) ?? ideas[0];
 
@@ -337,6 +360,59 @@ export function CopyResearchModule() {
   const compareA = ideas.find((idea) => idea.id === compareAId) ?? ideas[0];
   const compareB = ideas.find((idea) => idea.id === compareBId) ?? ideas[1] ?? ideas[0];
   const winnerByCpa = compareA && compareB ? (compareA.cpaCurrent <= compareB.cpaCurrent ? compareA : compareB) : null;
+  const activeBigIdeaCodes = useMemo(
+    () =>
+      ideasWithSaturation
+        .filter((idea) => !idea.archived && idea.shelfStatus !== "saturated")
+        .map((idea) => deriveBigIdeaCode(idea.title)),
+    [ideasWithSaturation],
+  );
+  const mechanismOptions = useMemo(() => {
+    const fromRegistry = data.enterprise.copyResearch.namingRegistry.map((item) => item.mechanism);
+    return Array.from(new Set([...fromRegistry, "INSULINA", "JUROS", "SOL", "METABOLISMO", "PROTOCOL"]));
+  }, [data.enterprise.copyResearch.namingRegistry]);
+  const namingPreview = buildCreativeDnaName({
+    product: namingDraft.product,
+    bigIdea: namingDraft.bigIdea,
+    mechanism: namingDraft.mechanism,
+    format: namingDraft.format,
+    hookVariation: namingDraft.hookVariation,
+    uniqueId: namingDraft.uniqueId,
+  });
+
+  async function copyNamingToClipboard() {
+    if (!namingPreview.valid) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(namingPreview.dnaName);
+      addActivity("Edicao", "Naming Builder", "copiou nomenclatura", namingPreview.dnaName, "meta sync");
+    } catch {
+      addActivity("Edicao", "Naming Builder", "falhou ao copiar nomenclatura", namingPreview.dnaName, "clipboard");
+    }
+  }
+
+  function saveNamingEntry() {
+    if (!namingPreview.valid) {
+      return;
+    }
+    const entry: WarRoomData["enterprise"]["copyResearch"]["namingRegistry"][number] = {
+      id: `DNA-${Date.now()}`,
+      product: namingPreview.product,
+      bigIdea: namingPreview.bigIdea,
+      mechanism: namingPreview.mechanism,
+      format: namingPreview.format,
+      hookVariation: namingPreview.hookVariation,
+      uniqueId: namingPreview.uniqueId,
+      dnaName: namingPreview.dnaName,
+      linkedCreativeId: namingDraft.linkedCreativeId,
+      createdAt: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+      active: true,
+    };
+    registerCreativeNaming(entry);
+    setNamingDraft((prev) => ({ ...prev, uniqueId: nextUniqueId([entry, ...data.enterprise.copyResearch.namingRegistry]) }));
+    addActivity("Ops", "Naming Builder", "registrou DNA universal", entry.dnaName, entry.linkedCreativeId);
+  }
 
   return (
     <section className="war-fade-in space-y-4">
@@ -408,6 +484,126 @@ export function CopyResearchModule() {
                     </Button>
                   )}
                 </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Naming Builder Universal (Meta Sync)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid gap-2 md:grid-cols-3">
+            <label className="space-y-1 text-xs text-slate-300">
+              <span>PRODUTO</span>
+              <input
+                value={namingDraft.product}
+                onChange={(event) => setNamingDraft((prev) => ({ ...prev, product: event.target.value }))}
+                className="w-full rounded border border-white/10 bg-slate-900/70 px-2 py-1.5 text-sm"
+              />
+            </label>
+            <label className="space-y-1 text-xs text-slate-300">
+              <span>BIG IDEA</span>
+              <select
+                value={namingDraft.bigIdea}
+                onChange={(event) => setNamingDraft((prev) => ({ ...prev, bigIdea: event.target.value }))}
+                className="w-full rounded border border-white/10 bg-slate-900/70 px-2 py-1.5 text-sm"
+              >
+                {activeBigIdeaCodes.length === 0 ? (
+                  <option value="IDEIA">IDEIA</option>
+                ) : (
+                  activeBigIdeaCodes.map((ideaCode) => (
+                    <option key={ideaCode} value={ideaCode}>
+                      {ideaCode}
+                    </option>
+                  ))
+                )}
+              </select>
+            </label>
+            <label className="space-y-1 text-xs text-slate-300">
+              <span>MECANISMO</span>
+              <select
+                value={namingDraft.mechanism}
+                onChange={(event) => setNamingDraft((prev) => ({ ...prev, mechanism: event.target.value }))}
+                className="w-full rounded border border-white/10 bg-slate-900/70 px-2 py-1.5 text-sm"
+              >
+                {mechanismOptions.map((mechanism) => (
+                  <option key={mechanism} value={mechanism}>
+                    {mechanism}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-1 text-xs text-slate-300">
+              <span>FORMATO</span>
+              <select
+                value={namingDraft.format}
+                onChange={(event) =>
+                  setNamingDraft((prev) => ({ ...prev, format: event.target.value as typeof namingDraft.format }))
+                }
+                className="w-full rounded border border-white/10 bg-slate-900/70 px-2 py-1.5 text-sm"
+              >
+                <option value="VSL">VSL</option>
+                <option value="UGC">UGC</option>
+                <option value="ADVERT">ADVERT</option>
+                <option value="REELS">REELS</option>
+              </select>
+            </label>
+            <label className="space-y-1 text-xs text-slate-300">
+              <span>VARIACAO HOOK</span>
+              <input
+                value={namingDraft.hookVariation}
+                onChange={(event) => setNamingDraft((prev) => ({ ...prev, hookVariation: event.target.value }))}
+                placeholder="01"
+                className="w-full rounded border border-white/10 bg-slate-900/70 px-2 py-1.5 text-sm"
+              />
+            </label>
+            <label className="space-y-1 text-xs text-slate-300">
+              <span>ID_UNICO</span>
+              <input
+                value={namingDraft.uniqueId}
+                onChange={(event) => setNamingDraft((prev) => ({ ...prev, uniqueId: event.target.value }))}
+                className="w-full rounded border border-white/10 bg-slate-900/70 px-2 py-1.5 text-sm"
+              />
+            </label>
+          </div>
+          <label className="space-y-1 text-xs text-slate-300">
+            <span>Link com Criativo (ID no dashboard/ROI)</span>
+            <select
+              value={namingDraft.linkedCreativeId}
+              onChange={(event) => setNamingDraft((prev) => ({ ...prev, linkedCreativeId: event.target.value }))}
+              className="w-full rounded border border-white/10 bg-slate-900/70 px-2 py-1.5 text-sm"
+            >
+              {data.liveAdsTracking.map((row) => (
+                <option key={row.id} value={row.id}>
+                  {row.id} | {row.adName}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="rounded border border-white/15 bg-black/40 p-3 font-mono text-sm text-[#FFD39A]">
+            {namingPreview.dnaName}
+          </div>
+          <p className={namingPreview.valid ? "text-xs text-[#10B981]" : "text-xs text-[#EA4335]"}>
+            Regex: {CREATIVE_DNA_REGEX.source} | status {namingPreview.valid ? "valido" : "invalido"}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" className="h-8 px-3 text-xs" onClick={copyNamingToClipboard} disabled={!namingPreview.valid}>
+              Copy to Clipboard
+            </Button>
+            <Button type="button" className="h-8 px-3 text-xs" onClick={saveNamingEntry} disabled={!namingPreview.valid}>
+              Gerar Nome
+            </Button>
+          </div>
+          <div className="space-y-1">
+            {data.enterprise.copyResearch.namingRegistry.slice(0, 6).map((entry) => (
+              <div key={entry.id} className="rounded border border-white/10 bg-white/5 p-2 text-xs">
+                <p className="font-mono text-slate-200">{entry.dnaName}</p>
+                <p className="text-slate-400">
+                  {entry.linkedCreativeId} | {entry.createdAt} | {entry.active ? "active" : "archived"}
+                </p>
               </div>
             ))}
           </div>

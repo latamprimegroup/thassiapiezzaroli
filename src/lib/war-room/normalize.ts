@@ -1025,6 +1025,33 @@ export function normalizeWarRoomData(
             supportInsight: toString(row.supportInsight, fallbackAvatar.supportInsight),
           };
         }),
+        namingRegistry: (Array.isArray(enterpriseCopyInput.namingRegistry)
+          ? enterpriseCopyInput.namingRegistry
+          : fallback.enterprise.copyResearch.namingRegistry
+        ).map((item, index) => {
+          const row = toObject(item);
+          const fallbackNaming =
+            fallback.enterprise.copyResearch.namingRegistry[
+              index % fallback.enterprise.copyResearch.namingRegistry.length
+            ];
+          const format = row.format;
+          return {
+            id: toString(row.id, fallbackNaming.id),
+            product: toString(row.product, fallbackNaming.product),
+            bigIdea: toString(row.bigIdea, fallbackNaming.bigIdea),
+            mechanism: toString(row.mechanism, fallbackNaming.mechanism),
+            format:
+              format === "VSL" || format === "UGC" || format === "ADVERT" || format === "REELS"
+                ? format
+                : fallbackNaming.format,
+            hookVariation: toString(row.hookVariation, fallbackNaming.hookVariation),
+            uniqueId: toString(row.uniqueId, fallbackNaming.uniqueId),
+            dnaName: toString(row.dnaName, fallbackNaming.dnaName),
+            linkedCreativeId: toString(row.linkedCreativeId, fallbackNaming.linkedCreativeId),
+            createdAt: toString(row.createdAt, fallbackNaming.createdAt),
+            active: typeof row.active === "boolean" ? row.active : fallbackNaming.active,
+          };
+        }),
         scriptEditor: toString(enterpriseCopyInput.scriptEditor, fallback.enterprise.copyResearch.scriptEditor),
       },
       trafficAttribution: {

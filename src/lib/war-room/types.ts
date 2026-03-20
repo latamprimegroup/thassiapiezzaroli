@@ -11,6 +11,7 @@ export type DemandStatus = "backlog" | "doing" | "review" | "done";
 export type FinancialImpact = "low" | "medium" | "high" | "critical";
 export type VaultStatus = "ok" | "warning" | "blocked";
 export type PixelSyncStatus = "healthy" | "unhealthy" | "no_data";
+export type CreativeFormat = "VSL" | "UGC" | "ADVERT" | "REELS";
 
 export type SquadSyncKpiSnapshot = {
   hookRate: number;
@@ -357,6 +358,19 @@ export type WarRoomData = {
         desire: string;
         objection: string;
         supportInsight: string;
+      }>;
+      namingRegistry: Array<{
+        id: string;
+        product: string;
+        bigIdea: string;
+        mechanism: string;
+        format: CreativeFormat;
+        hookVariation: string;
+        uniqueId: string;
+        dnaName: string;
+        linkedCreativeId: string;
+        createdAt: string;
+        active: boolean;
       }>;
       scriptEditor: string;
     };

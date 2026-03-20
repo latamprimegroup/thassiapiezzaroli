@@ -27,6 +27,7 @@ export function CeoFinanceModule({ canViewSensitiveFinancials }: CeoFinanceModul
   const fortress = data.integrations.fortress;
   const [simAdSpend, setSimAdSpend] = useState(fortress.scaleSimulator.defaultAdSpend);
   const [simCpaGrowthPct, setSimCpaGrowthPct] = useState(15);
+  const [mechanismQuery, setMechanismQuery] = useState("INSULINA");
 
   const cohortMax = Math.max(f.ltvCohorts.d30, f.ltvCohorts.d60, f.ltvCohorts.d90, 1);
   const cohorts = [
@@ -48,6 +49,34 @@ export function CeoFinanceModule({ canViewSensitiveFinancials }: CeoFinanceModul
     const deltaVsCurrent = projectedNet - f.netProfit;
     return { effectiveCpa, projectedPurchases, projectedGross, projectedNet, roiPct, deltaVsCurrent };
   }, [data.integrations.gateway.consolidatedGrossRevenue, data.integrations.gateway.fixedCosts, data.integrations.gateway.taxRatePct, f.gatewayFees, f.grossRevenue, f.netProfit, fortress.pixelSync.realPurchases, fortress.scaleSimulator.defaultCpa, simAdSpend, simCpaGrowthPct]);
+  const mechanismBreakdown = useMemo(() => {
+    const roiByCreative = new Map(data.integrations.attribution.realRoiLeaderboard.map((item) => [item.creativeId, item]));
+    const grouped = new Map<string, { totalProfit: number; count: number; ids: string[] }>();
+    for (const entry of data.enterprise.copyResearch.namingRegistry) {
+      const key = entry.mechanism.toUpperCase();
+      const matched =
+        roiByCreative.get(entry.linkedCreativeId) ||
+        roiByCreative.get(entry.dnaName) ||
+        data.integrations.attribution.realRoiLeaderboard.find((item) => item.creativeId.includes(entry.mechanism));
+      const profit = matched?.realProfit ?? 0;
+      const current = grouped.get(key) ?? { totalProfit: 0, count: 0, ids: [] };
+      current.totalProfit += profit;
+      current.count += 1;
+      current.ids.push(entry.uniqueId);
+      grouped.set(key, current);
+    }
+    return [...grouped.entries()]
+      .map(([mechanism, value]) => ({
+        mechanism,
+        totalProfit: value.totalProfit,
+        count: value.count,
+        ids: value.ids,
+      }))
+      .sort((a, b) => b.totalProfit - a.totalProfit);
+  }, [data.enterprise.copyResearch.namingRegistry, data.integrations.attribution.realRoiLeaderboard]);
+  const filteredMechanismBreakdown = mechanismBreakdown.filter((item) =>
+    item.mechanism.includes(mechanismQuery.trim().toUpperCase()),
+  );
 
   return (
     <section className="war-fade-in space-y-4">
@@ -315,6 +344,36 @@ export function CeoFinanceModule({ canViewSensitiveFinancials }: CeoFinanceModul
           </div>
           <p className={simulation.deltaVsCurrent >= 0 ? "text-[#10B981]" : "text-[#EA4335]"}>
             Delta vs lucro atual: {currency(simulation.deltaVsCurrent)}
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Meta Sync por Mecanismo (Nomenclatura Universal)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          <label className="space-y-1">
+            <span className="text-xs text-slate-400">Buscar mecanismo no DNA do criativo</span>
+            <input
+              value={mechanismQuery}
+              onChange={(event) => setMechanismQuery(event.target.value)}
+              placeholder="INSULINA"
+              className="w-full rounded border border-white/15 bg-[#050505] px-2 py-1 text-slate-100"
+            />
+          </label>
+          <div className="space-y-2">
+            {(filteredMechanismBreakdown.length > 0 ? filteredMechanismBreakdown : mechanismBreakdown.slice(0, 5)).map((item) => (
+              <div key={item.mechanism} className="rounded border border-white/10 bg-white/5 p-2">
+                <p className="font-mono text-slate-100">{item.mechanism}</p>
+                <p className="text-xs text-slate-300">
+                  Lucro agregado: {currency(item.totalProfit)} | IDs: {item.ids.join(", ")}
+                </p>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-slate-400">
+            O agrupamento usa o mecanismo no nome padronizado para conectar criativo, midia e receita por DNA.
           </p>
         </CardContent>
       </Card>

@@ -151,6 +151,19 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
     });
   }
 
+  function registerCreativeNaming(entry: WarRoomData["enterprise"]["copyResearch"]["namingRegistry"][number]) {
+    setViewData((prev) => {
+      const next = structuredClone(prev);
+      const existingIndex = next.enterprise.copyResearch.namingRegistry.findIndex((item) => item.id === entry.id);
+      if (existingIndex >= 0) {
+        next.enterprise.copyResearch.namingRegistry[existingIndex] = entry;
+      } else {
+        next.enterprise.copyResearch.namingRegistry = [entry, ...next.enterprise.copyResearch.namingRegistry].slice(0, 400);
+      }
+      return next;
+    });
+  }
+
   async function switchUser(userId: string) {
     setIsSwitchingUser(true);
     try {
@@ -184,6 +197,7 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
     updateTrafficCpa,
     addActivity,
     applySquadSyncFeedback,
+    registerCreativeNaming,
   };
 
   return (
