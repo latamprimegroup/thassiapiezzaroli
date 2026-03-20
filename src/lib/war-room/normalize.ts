@@ -535,9 +535,10 @@ export function normalizeWarRoomData(
         },
       },
       attribution: {
-        realRoiLeaderboard: (Array.isArray(toObject(integrationsInput.attribution).realRoiLeaderboard)
-          ? toObject(integrationsInput.attribution).realRoiLeaderboard
-          : fallback.integrations.attribution.realRoiLeaderboard
+        realRoiLeaderboard: (
+          Array.isArray(toObject(integrationsInput.attribution).realRoiLeaderboard)
+            ? (toObject(integrationsInput.attribution).realRoiLeaderboard as unknown[])
+            : fallback.integrations.attribution.realRoiLeaderboard
         ).map((item, index) => {
           const row = toObject(item);
           const fallbackItem =
