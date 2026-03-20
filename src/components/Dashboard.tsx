@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   AlertTriangle,
@@ -98,12 +98,6 @@ export default function Dashboard({ data }: DashboardProps) {
   const permissions = rolePermissions[activeRole];
   const ActiveRoleIcon = permissions.icon;
 
-  useEffect(() => {
-    if (!permissions.allowedSections.includes(activeSection)) {
-      setActiveSection(permissions.allowedSections[0]);
-    }
-  }, [activeSection, permissions.allowedSections]);
-
   const intelligence = useMemo(() => {
     const rows = data.liveAdsTracking;
     const winners = rows.filter((row) => row.roas > 2.5).length;
@@ -182,6 +176,14 @@ export default function Dashboard({ data }: DashboardProps) {
   const canShowRoas = permissions.canViewRoasReal && !hiddenFinanceForRole;
   const retentionSpotlight = permissions.emphasizeRetention;
 
+  function handleRoleSwitch(roleKey: UserRole) {
+    const nextPermissions = rolePermissions[roleKey];
+    setActiveRole(roleKey);
+    if (!nextPermissions.allowedSections.includes(activeSection)) {
+      setActiveSection(nextPermissions.allowedSections[0]);
+    }
+  }
+
   return (
     <div className="min-h-screen p-4 md:p-6">
       <div className="mx-auto grid max-w-[1600px] gap-6 xl:grid-cols-[300px_minmax(0,1fr)]">
@@ -256,7 +258,7 @@ export default function Dashboard({ data }: DashboardProps) {
                 return (
                   <button
                     key={roleKey}
-                    onClick={() => setActiveRole(roleKey)}
+                    onClick={() => handleRoleSwitch(roleKey)}
                     className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition ${
                       selected
                         ? "border-cyan-300/40 bg-cyan-500/20 text-cyan-100"
