@@ -1,5 +1,5 @@
 import { mockWarRoomData } from "./mock-data";
-import type { DailyReplyRole, PipelineStage, SquadKey, WarRoomData } from "./types";
+import type { DailyReplyRole, PipelineStage, SquadKey, TrafficSourceKey, WarRoomData } from "./types";
 
 function toNumber(value: unknown, fallback: number): number {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -44,6 +44,10 @@ function toNumberArray(value: unknown, fallback: number[]): number[] {
 
 function toSquad(value: unknown, fallback: SquadKey): SquadKey {
   return value === "facebook" || value === "googleYoutube" || value === "tiktok" ? value : fallback;
+}
+
+function toTrafficSource(value: unknown, fallback: TrafficSourceKey): TrafficSourceKey {
+  return value === "meta" || value === "google" || value === "native" ? value : fallback;
 }
 
 function toStage(value: unknown, fallback: PipelineStage): PipelineStage {
@@ -126,6 +130,7 @@ export function normalizeWarRoomData(
   const financeInput = toObject(input.finance);
   const creativeFactoryInput = toObject(input.creativeFactory);
   const contingencyInput = toObject(input.contingency);
+  const enterpriseInput = toObject(input.enterprise);
 
   const fbInput = toObject(squadsInput.facebook);
   const gInput = toObject(squadsInput.googleYoutube);
@@ -273,6 +278,12 @@ export function normalizeWarRoomData(
   const adAccountsInput = Array.isArray(contingencyInput.adAccounts)
     ? contingencyInput.adAccounts
     : fallback.contingency.adAccounts;
+  const enterpriseCeoInput = toObject(enterpriseInput.ceoFinance);
+  const enterpriseCopyInput = toObject(enterpriseInput.copyResearch);
+  const enterpriseTrafficInput = toObject(enterpriseInput.trafficAttribution);
+  const enterpriseEditorsInput = toObject(enterpriseInput.editorsProduction);
+  const enterpriseTechInput = toObject(enterpriseInput.techCro);
+  const enterpriseTrafficSquadsInput = toObject(enterpriseTrafficInput.squads);
 
   const normalized: WarRoomData = {
     source,
@@ -365,6 +376,225 @@ export function normalizeWarRoomData(
           };
         },
       ),
+    },
+    enterprise: {
+      ceoFinance: {
+        grossRevenue: toNumber(enterpriseCeoInput.grossRevenue, fallback.enterprise.ceoFinance.grossRevenue),
+        adSpend: toNumber(enterpriseCeoInput.adSpend, fallback.enterprise.ceoFinance.adSpend),
+        gatewayFees: toNumber(enterpriseCeoInput.gatewayFees, fallback.enterprise.ceoFinance.gatewayFees),
+        nfseTaxes: toNumber(enterpriseCeoInput.nfseTaxes, fallback.enterprise.ceoFinance.nfseTaxes),
+        netProfit: toNumber(enterpriseCeoInput.netProfit, fallback.enterprise.ceoFinance.netProfit),
+        mer: toNumber(enterpriseCeoInput.mer, fallback.enterprise.ceoFinance.mer),
+        ltvCohorts: {
+          d30: toNumber(toObject(enterpriseCeoInput.ltvCohorts).d30, fallback.enterprise.ceoFinance.ltvCohorts.d30),
+          d60: toNumber(toObject(enterpriseCeoInput.ltvCohorts).d60, fallback.enterprise.ceoFinance.ltvCohorts.d60),
+          d90: toNumber(toObject(enterpriseCeoInput.ltvCohorts).d90, fallback.enterprise.ceoFinance.ltvCohorts.d90),
+        },
+        paybackDays: toNumber(enterpriseCeoInput.paybackDays, fallback.enterprise.ceoFinance.paybackDays),
+        taxProvision: toNumber(enterpriseCeoInput.taxProvision, fallback.enterprise.ceoFinance.taxProvision),
+      },
+      copyResearch: {
+        uniqueMechanismProblem: toString(
+          enterpriseCopyInput.uniqueMechanismProblem,
+          fallback.enterprise.copyResearch.uniqueMechanismProblem,
+        ),
+        uniqueMechanismSolution: toString(
+          enterpriseCopyInput.uniqueMechanismSolution,
+          fallback.enterprise.copyResearch.uniqueMechanismSolution,
+        ),
+        bigIdeaVault: (Array.isArray(enterpriseCopyInput.bigIdeaVault)
+          ? enterpriseCopyInput.bigIdeaVault
+          : fallback.enterprise.copyResearch.bigIdeaVault
+        ).map((item, index) => {
+          const row = toObject(item);
+          const fallbackIdea = fallback.enterprise.copyResearch.bigIdeaVault[index % fallback.enterprise.copyResearch.bigIdeaVault.length];
+          return {
+            id: toString(row.id, fallbackIdea.id),
+            title: toString(row.title, fallbackIdea.title),
+            saturation: toNumber(row.saturation, fallbackIdea.saturation),
+            expiresAt: toString(row.expiresAt, fallbackIdea.expiresAt),
+          };
+        }),
+        avatarDossier: (Array.isArray(enterpriseCopyInput.avatarDossier)
+          ? enterpriseCopyInput.avatarDossier
+          : fallback.enterprise.copyResearch.avatarDossier
+        ).map((item, index) => {
+          const row = toObject(item);
+          const fallbackAvatar =
+            fallback.enterprise.copyResearch.avatarDossier[index % fallback.enterprise.copyResearch.avatarDossier.length];
+          return {
+            pain: toString(row.pain, fallbackAvatar.pain),
+            desire: toString(row.desire, fallbackAvatar.desire),
+            objection: toString(row.objection, fallbackAvatar.objection),
+            supportInsight: toString(row.supportInsight, fallbackAvatar.supportInsight),
+          };
+        }),
+        scriptEditor: toString(enterpriseCopyInput.scriptEditor, fallback.enterprise.copyResearch.scriptEditor),
+      },
+      trafficAttribution: {
+        squads: {
+          meta: {
+            targetCpa: toNumber(
+              toObject(enterpriseTrafficSquadsInput.meta).targetCpa,
+              fallback.enterprise.trafficAttribution.squads.meta.targetCpa,
+            ),
+            currentCpa: toNumber(
+              toObject(enterpriseTrafficSquadsInput.meta).currentCpa,
+              fallback.enterprise.trafficAttribution.squads.meta.currentCpa,
+            ),
+            roas: toNumber(toObject(enterpriseTrafficSquadsInput.meta).roas, fallback.enterprise.trafficAttribution.squads.meta.roas),
+            stability48h: toNumber(
+              toObject(enterpriseTrafficSquadsInput.meta).stability48h,
+              fallback.enterprise.trafficAttribution.squads.meta.stability48h,
+            ),
+          },
+          google: {
+            targetCpa: toNumber(
+              toObject(enterpriseTrafficSquadsInput.google).targetCpa,
+              fallback.enterprise.trafficAttribution.squads.google.targetCpa,
+            ),
+            currentCpa: toNumber(
+              toObject(enterpriseTrafficSquadsInput.google).currentCpa,
+              fallback.enterprise.trafficAttribution.squads.google.currentCpa,
+            ),
+            roas: toNumber(
+              toObject(enterpriseTrafficSquadsInput.google).roas,
+              fallback.enterprise.trafficAttribution.squads.google.roas,
+            ),
+            stability48h: toNumber(
+              toObject(enterpriseTrafficSquadsInput.google).stability48h,
+              fallback.enterprise.trafficAttribution.squads.google.stability48h,
+            ),
+          },
+          native: {
+            targetCpa: toNumber(
+              toObject(enterpriseTrafficSquadsInput.native).targetCpa,
+              fallback.enterprise.trafficAttribution.squads.native.targetCpa,
+            ),
+            currentCpa: toNumber(
+              toObject(enterpriseTrafficSquadsInput.native).currentCpa,
+              fallback.enterprise.trafficAttribution.squads.native.currentCpa,
+            ),
+            roas: toNumber(
+              toObject(enterpriseTrafficSquadsInput.native).roas,
+              fallback.enterprise.trafficAttribution.squads.native.roas,
+            ),
+            stability48h: toNumber(
+              toObject(enterpriseTrafficSquadsInput.native).stability48h,
+              fallback.enterprise.trafficAttribution.squads.native.stability48h,
+            ),
+          },
+        },
+        deepAttribution: (Array.isArray(enterpriseTrafficInput.deepAttribution)
+          ? enterpriseTrafficInput.deepAttribution
+          : fallback.enterprise.trafficAttribution.deepAttribution
+        ).map((item, index) => {
+          const row = toObject(item);
+          const fallbackItem =
+            fallback.enterprise.trafficAttribution.deepAttribution[
+              index % fallback.enterprise.trafficAttribution.deepAttribution.length
+            ];
+          return {
+            creativeId: toString(row.creativeId, fallbackItem.creativeId),
+            source: toTrafficSource(row.source, fallbackItem.source),
+            netProfit: toNumber(row.netProfit, fallbackItem.netProfit),
+            ltv: toNumber(row.ltv, fallbackItem.ltv),
+          };
+        }),
+        scaleCalculator: {
+          suggestedIncreasePct: toNumber(
+            toObject(enterpriseTrafficInput.scaleCalculator).suggestedIncreasePct,
+            fallback.enterprise.trafficAttribution.scaleCalculator.suggestedIncreasePct,
+          ),
+          reason: toString(
+            toObject(enterpriseTrafficInput.scaleCalculator).reason,
+            fallback.enterprise.trafficAttribution.scaleCalculator.reason,
+          ),
+        },
+      },
+      editorsProduction: {
+        hookLibrary: (Array.isArray(enterpriseEditorsInput.hookLibrary)
+          ? enterpriseEditorsInput.hookLibrary
+          : fallback.enterprise.editorsProduction.hookLibrary
+        ).map((item, index) => {
+          const row = toObject(item);
+          const fallbackHook =
+            fallback.enterprise.editorsProduction.hookLibrary[index % fallback.enterprise.editorsProduction.hookLibrary.length];
+          return {
+            hook: toString(row.hook, fallbackHook.hook),
+            creativeId: toString(row.creativeId, fallbackHook.creativeId),
+            hookRate: toNumber(row.hookRate, fallbackHook.hookRate),
+          };
+        }),
+        retentionHeatmap: (Array.isArray(enterpriseEditorsInput.retentionHeatmap)
+          ? enterpriseEditorsInput.retentionHeatmap
+          : fallback.enterprise.editorsProduction.retentionHeatmap
+        ).map((item, index) => {
+          const row = toObject(item);
+          const fallbackHeat =
+            fallback.enterprise.editorsProduction.retentionHeatmap[
+              index % fallback.enterprise.editorsProduction.retentionHeatmap.length
+            ];
+          return {
+            second: toNumber(row.second, fallbackHeat.second),
+            dropOff: toNumber(row.dropOff, fallbackHeat.dropOff),
+          };
+        }),
+        patternInterruptChecklist: {
+          every3s:
+            typeof toObject(enterpriseEditorsInput.patternInterruptChecklist).every3s === "boolean"
+              ? Boolean(toObject(enterpriseEditorsInput.patternInterruptChecklist).every3s)
+              : fallback.enterprise.editorsProduction.patternInterruptChecklist.every3s,
+          soundDesign:
+            typeof toObject(enterpriseEditorsInput.patternInterruptChecklist).soundDesign === "boolean"
+              ? Boolean(toObject(enterpriseEditorsInput.patternInterruptChecklist).soundDesign)
+              : fallback.enterprise.editorsProduction.patternInterruptChecklist.soundDesign,
+          vfx:
+            typeof toObject(enterpriseEditorsInput.patternInterruptChecklist).vfx === "boolean"
+              ? Boolean(toObject(enterpriseEditorsInput.patternInterruptChecklist).vfx)
+              : fallback.enterprise.editorsProduction.patternInterruptChecklist.vfx,
+        },
+      },
+      techCro: {
+        lcpSeconds: toNumber(enterpriseTechInput.lcpSeconds, fallback.enterprise.techCro.lcpSeconds),
+        abTests: (Array.isArray(enterpriseTechInput.abTests) ? enterpriseTechInput.abTests : fallback.enterprise.techCro.abTests).map(
+          (item, index) => {
+            const row = toObject(item);
+            const fallbackTest = fallback.enterprise.techCro.abTests[index % fallback.enterprise.techCro.abTests.length];
+            return {
+              test: toString(row.test, fallbackTest.test),
+              variantA: toNumber(row.variantA, fallbackTest.variantA),
+              variantB: toNumber(row.variantB, fallbackTest.variantB),
+              winner: toString(row.winner, fallbackTest.winner),
+            };
+          },
+        ),
+        checkout: {
+          cartAbandonment: toNumber(
+            toObject(enterpriseTechInput.checkout).cartAbandonment,
+            fallback.enterprise.techCro.checkout.cartAbandonment,
+          ),
+          checkoutConversion: toNumber(
+            toObject(enterpriseTechInput.checkout).checkoutConversion,
+            fallback.enterprise.techCro.checkout.checkoutConversion,
+          ),
+          gatewayAlert:
+            typeof toObject(enterpriseTechInput.checkout).gatewayAlert === "boolean"
+              ? Boolean(toObject(enterpriseTechInput.checkout).gatewayAlert)
+              : fallback.enterprise.techCro.checkout.gatewayAlert,
+        },
+        upsellFlow: (Array.isArray(enterpriseTechInput.upsellFlow)
+          ? enterpriseTechInput.upsellFlow
+          : fallback.enterprise.techCro.upsellFlow
+        ).map((item, index) => {
+          const row = toObject(item);
+          const fallbackFlow = fallback.enterprise.techCro.upsellFlow[index % fallback.enterprise.techCro.upsellFlow.length];
+          return {
+            step: toString(row.step, fallbackFlow.step),
+            clickRate: toNumber(row.clickRate, fallbackFlow.clickRate),
+          };
+        }),
+      },
     },
     activityLog: activityLog.length > 0 ? activityLog : fallback.activityLog,
     oldSchema: {

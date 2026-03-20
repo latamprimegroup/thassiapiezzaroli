@@ -13,6 +13,12 @@ export function sanitizeWarRoomDataForRole(input: WarRoomData, role: UserRole): 
     data.finance.contributionMargin = 0;
     data.finance.ltv24h = 0;
     data.finance.upsellTakeRate = 0;
+    data.enterprise.ceoFinance.netProfit = 0;
+    data.enterprise.ceoFinance.grossRevenue = 0;
+    data.enterprise.ceoFinance.gatewayFees = 0;
+    data.enterprise.ceoFinance.nfseTaxes = 0;
+    data.enterprise.ceoFinance.taxProvision = 0;
+    data.enterprise.ceoFinance.mer = 0;
   }
 
   if (!permissions.canViewRoasReal) {
@@ -31,6 +37,10 @@ export function sanitizeWarRoomDataForRole(input: WarRoomData, role: UserRole): 
     data.globalOverview.trafficSources = data.globalOverview.trafficSources.map((source) => ({
       ...source,
       spend: 0,
+    }));
+    data.enterprise.trafficAttribution.deepAttribution = data.enterprise.trafficAttribution.deepAttribution.map((item) => ({
+      ...item,
+      netProfit: 0,
     }));
   }
 

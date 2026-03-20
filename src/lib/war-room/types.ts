@@ -1,4 +1,5 @@
 export type SquadKey = "facebook" | "googleYoutube" | "tiktok";
+export type TrafficSourceKey = "meta" | "google" | "native";
 
 export type PipelineStage = "Roteiro" | "Gravacao" | "Edicao" | "Teste" | "Winner";
 
@@ -114,6 +115,95 @@ export type WarRoomData = {
       score: number;
       lastCheck: string;
     }>;
+  };
+  enterprise: {
+    ceoFinance: {
+      grossRevenue: number;
+      adSpend: number;
+      gatewayFees: number;
+      nfseTaxes: number;
+      netProfit: number;
+      mer: number;
+      ltvCohorts: {
+        d30: number;
+        d60: number;
+        d90: number;
+      };
+      paybackDays: number;
+      taxProvision: number;
+    };
+    copyResearch: {
+      uniqueMechanismProblem: string;
+      uniqueMechanismSolution: string;
+      bigIdeaVault: Array<{
+        id: string;
+        title: string;
+        saturation: number;
+        expiresAt: string;
+      }>;
+      avatarDossier: Array<{
+        pain: string;
+        desire: string;
+        objection: string;
+        supportInsight: string;
+      }>;
+      scriptEditor: string;
+    };
+    trafficAttribution: {
+      squads: Record<
+        TrafficSourceKey,
+        {
+          targetCpa: number;
+          currentCpa: number;
+          roas: number;
+          stability48h: number;
+        }
+      >;
+      deepAttribution: Array<{
+        creativeId: string;
+        source: TrafficSourceKey;
+        netProfit: number;
+        ltv: number;
+      }>;
+      scaleCalculator: {
+        suggestedIncreasePct: number;
+        reason: string;
+      };
+    };
+    editorsProduction: {
+      hookLibrary: Array<{
+        hook: string;
+        creativeId: string;
+        hookRate: number;
+      }>;
+      retentionHeatmap: Array<{
+        second: number;
+        dropOff: number;
+      }>;
+      patternInterruptChecklist: {
+        every3s: boolean;
+        soundDesign: boolean;
+        vfx: boolean;
+      };
+    };
+    techCro: {
+      lcpSeconds: number;
+      abTests: Array<{
+        test: string;
+        variantA: number;
+        variantB: number;
+        winner: string;
+      }>;
+      checkout: {
+        cartAbandonment: number;
+        checkoutConversion: number;
+        gatewayAlert: boolean;
+      };
+      upsellFlow: Array<{
+        step: string;
+        clickRate: number;
+      }>;
+    };
   };
   activityLog: Array<{
     id: string;

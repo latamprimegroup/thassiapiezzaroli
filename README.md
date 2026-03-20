@@ -24,19 +24,30 @@ npm run dev
 
 Abra `http://localhost:3000`.
 
-## Modulos da aplicacao
+## Modulos da aplicacao (Enterprise 9D)
 
-1. **Global Overview**
-   - Investimento vs Faturamento (Utmify)
-   - ROAS macro consolidado
-2. **Squad Facebook**
-   - Live Ads Tracking + Daily Briefing + Creative Velocity
-3. **Squad Google/YouTube**
-   - Live Ads Tracking + Daily Briefing + Creative Velocity
-4. **Squad TikTok**
-   - Live Ads Tracking + Burn Rate preditivo + Creative Velocity
-5. **Creative Factory**
-   - Kanban: Roteiro -> Gravacao -> Edicao -> Teste -> Winner
+1. **CEO & Financeiro**
+   - MER, Lucro Liquido Real, Payback e provisao tributaria
+   - LTV Cohort 30/60/90
+2. **Copy & Pesquisa**
+   - Unique Mechanism Matrix
+   - Big Idea Vault
+   - Avatar Dossier
+   - Script Editor com blocos Lead/Body/Offer
+3. **Trafego & Atribuicao**
+   - Squad Command (Meta/Google/Native)
+   - Deep Attribution por criativo
+   - Contingency Shield
+   - Scale Calculator
+4. **Editores & Producao**
+   - Hook Library e Retention Heatmap
+   - Pattern Interrupt Checklist
+   - Pipeline modular de criacao
+5. **Tech & CRO**
+   - LCP Monitor
+   - A/B Test Center
+   - Checkout Efficiency
+   - Upsell Flow Visualizer
 
 ## Regras de inteligencia
 
@@ -249,9 +260,11 @@ Tabelas legadas suportadas:
 ## Estrutura principal
 
 - `src/components/Dashboard.tsx`: shell principal da SPA.
+- `src/components/enterprise/*`: cockpits departamentais estritos.
 - `src/components/war-room/live-ads-table.tsx`: tabela de performance com calculo de Hook/Hold/VSL + badges.
 - `src/components/war-room/daily-briefing.tsx`: fluxo de comentario tecnico + respostas com links V2/V3.
 - `src/components/war-room/creative-factory-board.tsx`: pipeline Kanban de producao.
 - `src/components/ui/*`: componentes UI estilo Shadcn.
+- `src/context/war-room-context.tsx`: Context API para integridade de dados (CPA -> Lucro).
 - `src/app/page.tsx`: entrada principal da aplicacao.
 - `src/lib/war-room/*`: conectores de dados (API, Google Sheets e PostgreSQL).

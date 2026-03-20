@@ -312,6 +312,90 @@ export const mockWarRoomData: WarRoomData = {
       { name: "Pagina Escala 02", status: "warning", score: 61, lastCheck: "12:05" },
     ],
   },
+  enterprise: {
+    ceoFinance: {
+      grossRevenue: 5_580_000,
+      adSpend: 1_920_000,
+      gatewayFees: 201_000,
+      nfseTaxes: 474_000,
+      netProfit: 2_985_000,
+      mer: 2.91,
+      ltvCohorts: {
+        d30: 920,
+        d60: 1_480,
+        d90: 1_930,
+      },
+      paybackDays: 17,
+      taxProvision: 474_000,
+    },
+    copyResearch: {
+      uniqueMechanismProblem: "Saturacao criativa acelera CAC quando o avatar para de se reconhecer no angulo.",
+      uniqueMechanismSolution: "Sistema de rotacao orientado por Pattern Interrupt + backlog de mecanismos testados por squad.",
+      bigIdeaVault: [
+        { id: "BIG-1", title: "Metodo anti-escalada cega", saturation: 42, expiresAt: "2026-05-20" },
+        { id: "BIG-2", title: "Framework de lucratividade por cohort", saturation: 65, expiresAt: "2026-04-12" },
+      ],
+      avatarDossier: [
+        {
+          pain: "Escalar sem previsibilidade de lucro",
+          desire: "ROAS estavel com caixa positivo",
+          objection: "Ja testei varias copys sem resultado",
+          supportInsight: "Ticket tende a subir quando oferta tem comparativo visual direto.",
+        },
+      ],
+      scriptEditor:
+        "[00:00-00:20] LEAD: Dor central do avatar\n[00:20-02:10] BODY: Mecanismo unico + prova\n[02:10-03:00] OFFER: CTA com urgencia e bonus",
+    },
+    trafficAttribution: {
+      squads: {
+        meta: { targetCpa: 140, currentCpa: 148, roas: 2.58, stability48h: 78 },
+        google: { targetCpa: 150, currentCpa: 141, roas: 2.71, stability48h: 84 },
+        native: { targetCpa: 130, currentCpa: 136, roas: 2.22, stability48h: 67 },
+      },
+      deepAttribution: [
+        { creativeId: "FB-101", source: "meta", netProfit: 284_000, ltv: 1_980 },
+        { creativeId: "GG-211", source: "google", netProfit: 319_000, ltv: 2_360 },
+        { creativeId: "TT-077", source: "native", netProfit: 177_000, ltv: 1_860 },
+      ],
+      scaleCalculator: {
+        suggestedIncreasePct: 15,
+        reason: "CPA dentro do intervalo e estabilidade > 75 nas ultimas 48h.",
+      },
+    },
+    editorsProduction: {
+      hookLibrary: [
+        { hook: "Pare de escalar no escuro", creativeId: "FB-101", hookRate: 31.8 },
+        { hook: "Erro silencioso de retencao", creativeId: "TT-077", hookRate: 30.4 },
+      ],
+      retentionHeatmap: [
+        { second: 8, dropOff: 7.5 },
+        { second: 17, dropOff: 12.2 },
+        { second: 41, dropOff: 18.1 },
+      ],
+      patternInterruptChecklist: {
+        every3s: true,
+        soundDesign: true,
+        vfx: false,
+      },
+    },
+    techCro: {
+      lcpSeconds: 1.18,
+      abTests: [
+        { test: "Headline LP", variantA: 4.8, variantB: 5.4, winner: "B" },
+        { test: "Preco checkout", variantA: 5.6, variantB: 5.1, winner: "A" },
+      ],
+      checkout: {
+        cartAbandonment: 41.2,
+        checkoutConversion: 5.8,
+        gatewayAlert: false,
+      },
+      upsellFlow: [
+        { step: "Order Bump", clickRate: 26.1 },
+        { step: "Upsell 1", clickRate: 17.8 },
+        { step: "Upsell 2", clickRate: 9.6 },
+      ],
+    },
+  },
   activityLog: [
     {
       id: "LOG-001",
