@@ -44,16 +44,27 @@ export function ActionableInsights({ rows, role, contingency }: ActionableInsigh
       ];
     }
 
-    const highHookLowHold = analyzed.find(({ kpi }) => kpi.hookRate >= 30 && kpi.holdRate < 20);
+    const highHookLowHold = analyzed.find(({ kpi }) => kpi.hookRate > 25 && kpi.holdRate < 20);
     if (highHookLowHold) {
       result.push({
         id: "high-hook-low-hold",
         tone: "warning",
         text: `Sugestao: Hook Rate alto (${highHookLowHold.kpi.hookRate.toFixed(
-          1,
+          2,
         )}%) com Hold Rate baixo (${highHookLowHold.kpi.holdRate.toFixed(
-          1,
-        )}%). Peça ao Editor cortes mais rapidos nos primeiros 15s do criativo ${highHookLowHold.row.id}.`,
+          2,
+        )}%). 💡 Trocar B-Roll/Edicao no minuto 1 do criativo ${highHookLowHold.row.id}.`,
+      });
+    }
+
+    const highPageDrop = analyzed.find(({ kpi }) => kpi.pageDrop > 30);
+    if (highPageDrop) {
+      result.push({
+        id: "high-page-drop",
+        tone: "critical",
+        text: `⚡ Page Drop em ${highPageDrop.kpi.pageDrop.toFixed(
+          2,
+        )}% no ${highPageDrop.row.id}. Otimizar carregamento/imagens da LP imediatamente.`,
       });
     }
 
@@ -63,7 +74,7 @@ export function ActionableInsights({ rows, role, contingency }: ActionableInsigh
         id: "low-hook",
         tone: "critical",
         text: `Alerta: ${lowHook.row.id} com Hook Rate ${lowHook.kpi.hookRate.toFixed(
-          1,
+          2,
         )}% abaixo do limite. Reescrever abertura e testar novo angulo de dor.`,
       });
     }
@@ -102,7 +113,7 @@ export function ActionableInsights({ rows, role, contingency }: ActionableInsigh
       });
     }
 
-    const blockedEntity = [...contingency.domains, ...contingency.adAccounts].find(
+    const blockedEntity = [...contingency.domains, ...contingency.adAccounts, ...contingency.fanpages].find(
       (entity) => entity.status === "blocked" || entity.score < 50,
     );
     if (blockedEntity) {
@@ -123,7 +134,7 @@ export function ActionableInsights({ rows, role, contingency }: ActionableInsigh
           id: "retention-focus",
           tone: "warning",
           text: `Foco do perfil: reforcar retencao no ${worstRetention.row.id} (Hold ${worstRetention.kpi.holdRate.toFixed(
-            1,
+            2,
           )}%).`,
         });
       }
@@ -137,8 +148,8 @@ export function ActionableInsights({ rows, role, contingency }: ActionableInsigh
       });
     }
 
-    return result.slice(0, 4);
-  }, [contingency.adAccounts, contingency.domains, role, rows]);
+    return result.slice(0, 6);
+  }, [contingency.adAccounts, contingency.domains, contingency.fanpages, role, rows]);
 
   return (
     <Card>

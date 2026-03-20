@@ -27,6 +27,7 @@ import { ContingencyMonitor } from "@/components/war-room/contingency-monitor";
 import { CreativeFactoryBoard } from "@/components/war-room/creative-factory-board";
 import { DailyBriefing } from "@/components/war-room/daily-briefing";
 import { HealthCheck } from "@/components/war-room/health-check";
+import { KpiStatusCard } from "@/components/war-room/kpi-status-card";
 import { LiveAdsTable } from "@/components/war-room/live-ads-table";
 import { rolePermissions, type SectionId, type UserRole } from "@/lib/auth/rbac";
 import type { DemoUser } from "@/lib/auth/users";
@@ -77,7 +78,7 @@ const formatCurrency = (value: number) =>
   value.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 
 const formatPercent = (value: number) =>
-  `${value.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+  `${toFiniteNumber(value).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
 
 type DashboardProps = {
   data: WarRoomData;
@@ -139,6 +140,31 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
     return sourceTotal > 0 ? sourceTotal : viewData.globalOverview.investment;
   }, [viewData.globalOverview.investment, viewData.globalOverview.trafficSources]);
   const mer = useMemo(() => computeMer(viewData.globalOverview.revenue, totalTrafficSpend), [totalTrafficSpend, viewData.globalOverview.revenue]);
+  const avgKpis = useMemo(() => {
+    if (viewData.liveAdsTracking.length === 0) {
+      return { hookRate: 0, holdRate: 0, pageDrop: 0, vslEfficiency: 0 };
+    }
+
+    const aggregate = viewData.liveAdsTracking.reduce(
+      (acc, row) => {
+        const current = computeKpis(row);
+        return {
+          hookRate: acc.hookRate + current.hookRate,
+          holdRate: acc.holdRate + current.holdRate,
+          pageDrop: acc.pageDrop + current.pageDrop,
+          vslEfficiency: acc.vslEfficiency + current.vslEfficiency,
+        };
+      },
+      { hookRate: 0, holdRate: 0, pageDrop: 0, vslEfficiency: 0 },
+    );
+
+    return {
+      hookRate: aggregate.hookRate / viewData.liveAdsTracking.length,
+      holdRate: aggregate.holdRate / viewData.liveAdsTracking.length,
+      pageDrop: aggregate.pageDrop / viewData.liveAdsTracking.length,
+      vslEfficiency: aggregate.vslEfficiency / viewData.liveAdsTracking.length,
+    };
+  }, [viewData.liveAdsTracking]);
 
   const updatedAtDate = new Date(viewData.updatedAt);
   const safeUpdatedAtDate = Number.isNaN(updatedAtDate.getTime()) ? new Date() : updatedAtDate;
@@ -147,6 +173,13 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
     month: "long",
     year: "numeric",
   });
+  const hoursSinceUpdate = Math.max(0, (Date.now() - safeUpdatedAtDate.getTime()) / (1000 * 60 * 60));
+  const syncBadgeClass =
+    hoursSinceUpdate <= 12
+      ? "text-[#34A853]"
+      : hoursSinceUpdate <= 24
+        ? "text-[#FF9900]"
+        : "text-[#EA4335]";
 
   function appendActivity(actorRole: string, actorName: string, action: string, entity: string, reason: string) {
     setActivityLog((prev) => [
@@ -167,11 +200,13 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
     if (!permissions.canAlertSquad) {
       return;
     }
+    const activeSquadLabel =
+      activeSection === "googleYoutube" ? "Squad Google/YouTube" : activeSection === "tiktok" ? "Squad TikTok" : "Squad Facebook";
     appendActivity(
       "Media Buyer",
       "Gestor da Midia",
       "alertou squad",
-      activeSection === "googleYoutube" ? "Squad Google/YouTube" : "Squad Facebook",
+      activeSquadLabel,
       `CPA acima do KPI. Hook ${toFiniteNumber(auctionInput.hookRate)}% | Hold ${toFiniteNumber(
         auctionInput.holdRate,
       )}%`,
@@ -182,11 +217,13 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
     if (!permissions.canInputAuctionMetrics) {
       return;
     }
+    const activeSquadLabel =
+      activeSection === "googleYoutube" ? "Google/YouTube" : activeSection === "tiktok" ? "TikTok" : "Facebook";
     appendActivity(
       "Media Buyer",
       "Gestor da Midia",
       "registrou input de leilao",
-      activeSection === "googleYoutube" ? "Google/YouTube" : "Facebook",
+      activeSquadLabel,
       `CPM ${toFiniteNumber(auctionInput.cpm)} | CPC ${toFiniteNumber(auctionInput.cpc)} | Freq ${toFiniteNumber(
         auctionInput.frequency,
       )}`,
@@ -317,6 +354,9 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
             <div className="flex flex-wrap items-center gap-2 md:max-w-[660px] md:justify-end">
               <Badge variant="sky">Fonte: {viewData.sourceLabel}</Badge>
               <Badge variant="default">Atualizado em {updatedAt}</Badge>
+              <Badge variant="default">
+                <span className={syncBadgeClass}>Squad Sync: {hoursSinceUpdate.toFixed(1)}h desde ultimo input</span>
+              </Badge>
             </div>
           </header>
 
@@ -377,7 +417,7 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
           </div>
 
           {activeSection === "overview" && isSectionAllowed && (
-            <section className="space-y-5">
+            <section className="war-fade-in space-y-5">
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <Card className="bg-gradient-to-br from-slate-800 to-slate-900">
                   <CardHeader className="pb-2">
@@ -454,6 +494,42 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
                   ))}
                 </CardContent>
               </Card>
+
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <KpiStatusCard
+                  title="Hook Rate Medio"
+                  value={avgKpis.hookRate}
+                  valueLabel={formatPercent(avgKpis.hookRate)}
+                  subtitle="Benchmark DR: > 25%"
+                  goodThreshold={25}
+                  warningThreshold={20}
+                />
+                <KpiStatusCard
+                  title="Hold Rate Medio"
+                  value={avgKpis.holdRate}
+                  valueLabel={formatPercent(avgKpis.holdRate)}
+                  subtitle="Benchmark DR: > 30%"
+                  goodThreshold={30}
+                  warningThreshold={20}
+                />
+                <KpiStatusCard
+                  title="Page Drop Medio"
+                  value={avgKpis.pageDrop}
+                  valueLabel={formatPercent(avgKpis.pageDrop)}
+                  subtitle="Alerta acima de 20%"
+                  goodThreshold={20}
+                  warningThreshold={30}
+                  direction="lower-better"
+                />
+                <KpiStatusCard
+                  title="VSL Efficiency Media"
+                  value={avgKpis.vslEfficiency}
+                  valueLabel={formatPercent(avgKpis.vslEfficiency)}
+                  subtitle="Benchmark DR: > 12%"
+                  goodThreshold={12}
+                  warningThreshold={8}
+                />
+              </div>
 
               <div className="grid gap-4 xl:grid-cols-2">
                 <Card>
@@ -612,7 +688,7 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
           )}
 
           {activeSection === "facebook" && isSectionAllowed && (
-            <section className="space-y-5">
+            <section className="war-fade-in space-y-5">
               <div className="grid gap-4 xl:grid-cols-3">
                 <Card>
                   <CardHeader>
@@ -680,7 +756,7 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
           )}
 
           {activeSection === "googleYoutube" && isSectionAllowed && (
-            <section className="space-y-5">
+            <section className="war-fade-in space-y-5">
               <div className="grid gap-4 xl:grid-cols-3">
                 <Card>
                   <CardHeader>
@@ -748,7 +824,7 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
           )}
 
           {activeSection === "tiktok" && isSectionAllowed && (
-            <section className="space-y-5">
+            <section className="war-fade-in space-y-5">
               <div className="grid gap-4 xl:grid-cols-3">
                 <Card>
                   <CardHeader>
@@ -797,7 +873,7 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
           )}
 
           {activeSection === "factory" && isSectionAllowed && (
-            <section className="space-y-5">
+            <section className="war-fade-in space-y-5">
               <CreativeFactoryBoard tasks={viewData.creativeFactory.tasks} />
               <div className="grid gap-4 xl:grid-cols-2">
                 <Card>

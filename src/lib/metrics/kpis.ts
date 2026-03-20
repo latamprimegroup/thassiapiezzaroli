@@ -28,7 +28,7 @@ export function safeDivide(numerator: unknown, denominator: unknown): number {
 export function computeKpis(row: LiveRow) {
   const hookRate = safeDivide(row.views3s, row.impressions) * 100;
   const holdRate = safeDivide(row.views15s, row.views3s) * 100;
-  const pageDrop = (1 - safeDivide(row.lp, row.clicks)) * 100;
+  const pageDrop = Math.max(0, Math.min(100, (1 - safeDivide(row.lp, row.clicks)) * 100));
   const vslEfficiency = safeDivide(row.ic, row.lp) * 100;
   const predictiveBurnRate = computePredictiveBurnRate(row);
 

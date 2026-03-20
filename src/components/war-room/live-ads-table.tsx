@@ -21,9 +21,9 @@ type LiveAdsTableProps = {
 };
 
 const percent = (value: number) =>
-  `${value.toLocaleString("pt-BR", {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1,
+  `${(Number.isFinite(value) ? value : 0).toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   })}%`;
 
 const currency = (value: number) =>
@@ -42,7 +42,9 @@ function squadLabel(squad: SquadKey) {
 const PAGE_SIZE = 120;
 
 function Sparkline({ values, colorClass }: { values: number[]; colorClass: string }) {
-  const normalized = values.length > 1 ? values : [0, ...values];
+  const safeValues = values.filter((value) => Number.isFinite(value));
+  const normalized =
+    safeValues.length >= 2 ? safeValues : safeValues.length === 1 ? [safeValues[0], safeValues[0]] : [0, 0];
   const min = Math.min(...normalized);
   const max = Math.max(...normalized);
   const range = max - min || 1;
@@ -107,7 +109,7 @@ export function LiveAdsTable({
   const pagedRows = prioritizedRows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   return (
-    <Card>
+    <Card className="war-fade-in war-transition">
       <CardHeader>
         <CardTitle>{title}</CardTitle>
         {subtitle ? <p className="text-sm text-slate-400">{subtitle}</p> : null}
@@ -137,8 +139,14 @@ export function LiveAdsTable({
             </div>
           )}
         </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
+        {prioritizedRows.length === 0 && (
+          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-6 text-center text-sm text-slate-300">
+            Aguardando inputs de trafego para processar diagnostico...
+          </div>
+        )}
+        {prioritizedRows.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
             <thead>
               <tr className="border-b border-white/10 text-left text-slate-400">
                 {!simplified && <th className="px-2 py-2 font-medium">Squad</th>}
@@ -180,31 +188,43 @@ export function LiveAdsTable({
             <tbody>
               {pagedRows.map((row) => {
                 const metrics = computeKpis(row);
+                const hookClass =
+                  metrics.hookRate >= 25 ? "text-[#34A853]" : metrics.hookRate >= 20 ? "text-[#FF9900]" : "text-[#EA4335]";
+                const holdClass =
+                  metrics.holdRate >= 30 ? "text-[#34A853]" : metrics.holdRate >= 20 ? "text-[#FF9900]" : "text-[#EA4335]";
+                const vslClass =
+                  metrics.vslEfficiency >= 12
+                    ? "text-[#34A853]"
+                    : metrics.vslEfficiency >= 8
+                      ? "text-[#FF9900]"
+                      : "text-[#EA4335]";
+                const pageDropClass =
+                  metrics.pageDrop <= 20 ? "text-[#34A853]" : metrics.pageDrop <= 30 ? "text-[#FF9900]" : "text-[#EA4335]";
 
                 return (
-                  <tr key={row.id} className="border-b border-white/5 text-slate-100">
+                  <tr key={row.id} className="war-transition border-b border-white/5 text-slate-100 hover:bg-white/5">
                     {!simplified && <td className="px-2 py-3">{squadLabel(row.squad)}</td>}
                     {!simplified && <td className="px-2 py-3">{row.campaign}</td>}
                     <td className="px-2 py-3">{row.adName}</td>
-                    <td className="px-2 py-3">
+                    <td className={`px-2 py-3 ${hookClass}`}>
                       {percent(metrics.hookRate)}
                       <Sparkline values={row.trend24h.hookRate} colorClass="stroke-cyan-300" />
                     </td>
-                    <td className={`px-2 py-3 ${emphasizeRetention ? "font-semibold text-violet-200" : ""}`}>
+                    <td className={`px-2 py-3 ${holdClass} ${emphasizeRetention ? "font-semibold" : ""}`}>
                       {percent(metrics.holdRate)}
                       <Sparkline values={row.trend24h.holdRate} colorClass="stroke-violet-300" />
                     </td>
-                    <td className="px-2 py-3">{percent(metrics.vslEfficiency)}</td>
+                    <td className={`px-2 py-3 ${vslClass}`}>{percent(metrics.vslEfficiency)}</td>
                     {!simplified && (
-                      <td className={`px-2 py-3 ${metrics.pageDrop > 20 ? "text-[#FF9900]" : ""}`}>
+                      <td className={`px-2 py-3 ${pageDropClass}`}>
                         {percent(metrics.pageDrop)}
                       </td>
                     )}
-                    {!simplified && <td className="px-2 py-3">{row.frequency.toFixed(1)}</td>}
+                    {!simplified && <td className="px-2 py-3">{row.frequency.toFixed(2)}</td>}
                     {!simplified && <td className="px-2 py-3">{percent(row.uniqueCtr)}</td>}
                     {!simplified && (
                       <td className={`px-2 py-3 ${metrics.predictiveBurnRate > 65 ? "text-[#FF9900] font-semibold" : ""}`}>
-                        {metrics.predictiveBurnRate.toFixed(0)}
+                        {metrics.predictiveBurnRate.toFixed(2)}
                       </td>
                     )}
                     {showDeepDive && <td className="px-2 py-3">{currency(row.aov)}</td>}
@@ -235,8 +255,9 @@ export function LiveAdsTable({
                 );
               })}
             </tbody>
-          </table>
-        </div>
+            </table>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
