@@ -32,6 +32,16 @@ function toStringArray(value: unknown, fallback: string[]): string[] {
   return normalized.length > 0 ? normalized : fallback;
 }
 
+function toNumberArray(value: unknown, fallback: number[]): number[] {
+  if (!Array.isArray(value)) {
+    return fallback;
+  }
+  const normalized = value
+    .map((item) => toNumber(item, Number.NaN))
+    .filter((item) => Number.isFinite(item));
+  return normalized.length > 0 ? normalized : fallback;
+}
+
 function toSquad(value: unknown, fallback: SquadKey): SquadKey {
   return value === "facebook" || value === "googleYoutube" ? value : fallback;
 }
@@ -45,6 +55,10 @@ function toStage(value: unknown, fallback: PipelineStage): PipelineStage {
 
 function toReplyRole(value: unknown, fallback: DailyReplyRole): DailyReplyRole {
   return value === "Copy" || value === "Edicao" ? value : fallback;
+}
+
+function toStatus(value: unknown, fallback: "ok" | "warning" | "blocked") {
+  return value === "ok" || value === "warning" || value === "blocked" ? value : fallback;
 }
 
 function deriveLegacyLiveRows(value: unknown): WarRoomData["liveAdsTracking"] {
@@ -62,6 +76,8 @@ function deriveLegacyLiveRows(value: unknown): WarRoomData["liveAdsTracking"] {
     const lp = 3_200 + index * 380;
     const ic = Math.round(lp * (0.14 + Math.min(toNumber(row.roas, 2) * 0.03, 0.14)));
 
+    const roas = toNumber(row.roas, 1.5);
+
     return {
       id: toString(row.id, `LEG-${index + 1}`),
       squad: index % 2 === 0 ? "facebook" : "googleYoutube",
@@ -72,7 +88,20 @@ function deriveLegacyLiveRows(value: unknown): WarRoomData["liveAdsTracking"] {
       views15s,
       ic,
       lp,
-      roas: toNumber(row.roas, 1.5),
+      roas,
+      frequency: toNumber(row.frequency, 1.5 + index * 0.2),
+      uniqueCtr: toNumber(row.uniqueCtr, Math.max(0.5, 2.2 - index * 0.1)),
+      aov: toNumber(row.aov, 300 + index * 15),
+      upsellConversion: toNumber(row.upsellConversion, 12 + index * 1.2),
+      ltv: toNumber(row.ltv, 1500 + index * 120),
+      cpa: toNumber(row.cpa, 140 + index * 10),
+      trend24h: {
+        hookRate: [hookRate - 1, hookRate - 0.5, hookRate],
+        holdRate: [holdRate + 1, holdRate + 0.4, holdRate],
+        roas: [roas - 0.1, roas - 0.05, roas],
+      },
+      frequencyTrend3d: [1.2 + index * 0.2, 1.4 + index * 0.2, 1.6 + index * 0.2],
+      uniqueCtrTrend3d: [2.2 - index * 0.1, 2.1 - index * 0.1, 2.0 - index * 0.1],
     };
   });
 }
@@ -95,6 +124,7 @@ export function normalizeWarRoomData(
   const squadsInput = toObject(input.squads);
   const financeInput = toObject(input.finance);
   const creativeFactoryInput = toObject(input.creativeFactory);
+  const contingencyInput = toObject(input.contingency);
 
   const fbInput = toObject(squadsInput.facebook);
   const gInput = toObject(squadsInput.googleYoutube);
@@ -119,6 +149,19 @@ export function normalizeWarRoomData(
       ic: toNumber(row.ic, fallbackRow.ic),
       lp: toNumber(row.lp, fallbackRow.lp),
       roas: toNumber(row.roas, fallbackRow.roas),
+      frequency: toNumber(row.frequency, fallbackRow.frequency),
+      uniqueCtr: toNumber(row.uniqueCtr, fallbackRow.uniqueCtr),
+      aov: toNumber(row.aov, fallbackRow.aov),
+      upsellConversion: toNumber(row.upsellConversion, fallbackRow.upsellConversion),
+      ltv: toNumber(row.ltv, fallbackRow.ltv),
+      cpa: toNumber(row.cpa, fallbackRow.cpa),
+      trend24h: {
+        hookRate: toNumberArray(toObject(row.trend24h).hookRate, fallbackRow.trend24h.hookRate),
+        holdRate: toNumberArray(toObject(row.trend24h).holdRate, fallbackRow.trend24h.holdRate),
+        roas: toNumberArray(toObject(row.trend24h).roas, fallbackRow.trend24h.roas),
+      },
+      frequencyTrend3d: toNumberArray(row.frequencyTrend3d, fallbackRow.frequencyTrend3d),
+      uniqueCtrTrend3d: toNumberArray(row.uniqueCtrTrend3d, fallbackRow.uniqueCtrTrend3d),
     };
   });
 
@@ -211,6 +254,23 @@ export function normalizeWarRoomData(
       ? (derivedNetRevenue / toNumber(oldFinance.revenue, fallback.globalOverview.revenue)) * 100
       : fallback.finance.profitMargin);
 
+  const trafficSourcesInput = Array.isArray(globalInput.trafficSources)
+    ? globalInput.trafficSources
+    : fallback.globalOverview.trafficSources;
+  const trafficSources = (trafficSourcesInput as unknown[]).map((item, index) => {
+    const row = toObject(item);
+    const fallbackSource = fallback.globalOverview.trafficSources[index % fallback.globalOverview.trafficSources.length];
+    return {
+      source: toString(row.source, fallbackSource.source),
+      spend: toNumber(row.spend, fallbackSource.spend),
+    };
+  });
+
+  const domainsInput = Array.isArray(contingencyInput.domains) ? contingencyInput.domains : fallback.contingency.domains;
+  const adAccountsInput = Array.isArray(contingencyInput.adAccounts)
+    ? contingencyInput.adAccounts
+    : fallback.contingency.adAccounts;
+
   const normalized: WarRoomData = {
     source,
     sourceLabel,
@@ -219,6 +279,7 @@ export function normalizeWarRoomData(
       investment: toNumber(globalInput.investment, toNumber(oldAds.investmentTotal, fallback.globalOverview.investment)),
       revenue: toNumber(globalInput.revenue, toNumber(oldFinance.revenue, fallback.globalOverview.revenue)),
       utmifySyncAt: toString(globalInput.utmifySyncAt, fallback.globalOverview.utmifySyncAt),
+      trafficSources: trafficSources.length > 0 ? trafficSources : fallback.globalOverview.trafficSources,
     },
     squads: {
       facebook: {
@@ -254,6 +315,28 @@ export function normalizeWarRoomData(
       profitMargin: toNumber(financeInput.profitMargin, derivedProfitMargin),
       approvalRate: toNumber(financeInput.approvalRate, fallback.finance.approvalRate),
       ltv: toNumber(financeInput.ltv, fallback.finance.ltv),
+    },
+    contingency: {
+      domains: (domainsInput as unknown[]).map((item, index) => {
+        const row = toObject(item);
+        const fallbackDomain = fallback.contingency.domains[index % fallback.contingency.domains.length];
+        return {
+          name: toString(row.name, fallbackDomain.name),
+          status: toStatus(row.status, fallbackDomain.status),
+          score: toNumber(row.score, fallbackDomain.score),
+          lastCheck: toString(row.lastCheck, fallbackDomain.lastCheck),
+        };
+      }),
+      adAccounts: (adAccountsInput as unknown[]).map((item, index) => {
+        const row = toObject(item);
+        const fallbackAccount = fallback.contingency.adAccounts[index % fallback.contingency.adAccounts.length];
+        return {
+          name: toString(row.name, fallbackAccount.name),
+          status: toStatus(row.status, fallbackAccount.status),
+          score: toNumber(row.score, fallbackAccount.score),
+          lastCheck: toString(row.lastCheck, fallbackAccount.lastCheck),
+        };
+      }),
     },
     activityLog: activityLog.length > 0 ? activityLog : fallback.activityLog,
     oldSchema: {

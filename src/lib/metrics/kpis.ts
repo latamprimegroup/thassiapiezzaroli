@@ -36,3 +36,20 @@ export function computeKpis(row: LiveRow) {
     vslEfficiency,
   };
 }
+
+export function computeMer(grossRevenue: number, totalTrafficSpend: number) {
+  return safeDivide(grossRevenue, totalTrafficSpend);
+}
+
+export function isFatigueImminent(row: LiveRow) {
+  const f = row.frequencyTrend3d;
+  const ctr = row.uniqueCtrTrend3d;
+  if (f.length < 3 || ctr.length < 3) {
+    return false;
+  }
+  return f[0] < f[1] && f[1] < f[2] && ctr[0] > ctr[1] && ctr[1] > ctr[2];
+}
+
+export function isLtvPriority(row: LiveRow, minCpa: number, ltvThreshold: number) {
+  return row.ltv >= ltvThreshold && row.cpa <= minCpa * 1.1;
+}

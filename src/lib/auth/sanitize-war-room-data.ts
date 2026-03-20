@@ -13,7 +13,14 @@ export function sanitizeWarRoomDataForRole(input: WarRoomData, role: UserRole): 
   }
 
   if (!permissions.canViewRoasReal) {
-    data.liveAdsTracking = data.liveAdsTracking.map((row) => ({ ...row, roas: 0 }));
+    data.liveAdsTracking = data.liveAdsTracking.map((row) => ({
+      ...row,
+      roas: 0,
+      trend24h: {
+        ...row.trend24h,
+        roas: row.trend24h.roas.map(() => 0),
+      },
+    }));
   }
 
   if (role === "videoEditor") {

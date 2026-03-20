@@ -8,6 +8,11 @@ export const mockWarRoomData: WarRoomData = {
     investment: 1_920_000,
     revenue: 5_580_000,
     utmifySyncAt: "Agora mesmo",
+    trafficSources: [
+      { source: "Facebook Ads", spend: 980_000 },
+      { source: "Google/YouTube", spend: 620_000 },
+      { source: "Native + Afiliados", spend: 320_000 },
+    ],
   },
   squads: {
     facebook: {
@@ -41,6 +46,19 @@ export const mockWarRoomData: WarRoomData = {
       ic: 3_102,
       lp: 9_741,
       roas: 2.7,
+      frequency: 2.6,
+      uniqueCtr: 2.9,
+      aov: 347,
+      upsellConversion: 18.4,
+      ltv: 1_980,
+      cpa: 124,
+      trend24h: {
+        hookRate: [30.8, 31.2, 31.6, 32.1, 31.8, 31.4, 31.0, 31.8],
+        holdRate: [33.5, 34.2, 34.9, 34.5, 34.1, 33.8, 33.4, 33.3],
+        roas: [2.3, 2.4, 2.5, 2.7, 2.8, 2.8, 2.7, 2.7],
+      },
+      frequencyTrend3d: [2.2, 2.4, 2.6],
+      uniqueCtrTrend3d: [3.1, 3.0, 2.9],
     },
     {
       id: "FB-118",
@@ -53,6 +71,19 @@ export const mockWarRoomData: WarRoomData = {
       ic: 890,
       lp: 3_460,
       roas: 1.9,
+      frequency: 3.9,
+      uniqueCtr: 1.1,
+      aov: 286,
+      upsellConversion: 9.2,
+      ltv: 1_280,
+      cpa: 192,
+      trend24h: {
+        hookRate: [21.5, 20.8, 19.9, 19.5, 18.9, 18.5, 18.2, 17.9],
+        holdRate: [23.1, 22.4, 21.2, 20.4, 19.5, 18.7, 18.0, 17.7],
+        roas: [2.2, 2.1, 2.0, 2.0, 1.9, 1.9, 1.9, 1.9],
+      },
+      frequencyTrend3d: [3.2, 3.5, 3.9],
+      uniqueCtrTrend3d: [1.5, 1.3, 1.1],
     },
     {
       id: "YT-034",
@@ -65,6 +96,19 @@ export const mockWarRoomData: WarRoomData = {
       ic: 1_204,
       lp: 6_020,
       roas: 2.1,
+      frequency: 2.1,
+      uniqueCtr: 1.8,
+      aov: 318,
+      upsellConversion: 14.9,
+      ltv: 1_720,
+      cpa: 161,
+      trend24h: {
+        hookRate: [25.3, 25.8, 25.0, 24.9, 24.7, 24.6, 24.5, 24.5],
+        holdRate: [20.9, 20.4, 19.8, 19.6, 19.4, 19.2, 18.9, 18.4],
+        roas: [2.3, 2.2, 2.2, 2.2, 2.1, 2.1, 2.1, 2.1],
+      },
+      frequencyTrend3d: [1.8, 1.9, 2.1],
+      uniqueCtrTrend3d: [2.1, 1.9, 1.8],
     },
     {
       id: "GG-211",
@@ -77,6 +121,19 @@ export const mockWarRoomData: WarRoomData = {
       ic: 1_833,
       lp: 5_892,
       roas: 3.2,
+      frequency: 1.7,
+      uniqueCtr: 3.7,
+      aov: 401,
+      upsellConversion: 22.3,
+      ltv: 2_360,
+      cpa: 138,
+      trend24h: {
+        hookRate: [33.2, 34.0, 34.5, 35.0, 35.4, 35.1, 35.0, 35.4],
+        holdRate: [49.5, 50.4, 51.0, 51.9, 52.5, 52.1, 51.8, 53.0],
+        roas: [2.6, 2.7, 2.8, 2.9, 3.0, 3.1, 3.1, 3.2],
+      },
+      frequencyTrend3d: [1.5, 1.6, 1.7],
+      uniqueCtrTrend3d: [3.9, 3.8, 3.7],
     },
   ],
   creativeFactory: {
@@ -172,6 +229,16 @@ export const mockWarRoomData: WarRoomData = {
     profitMargin: 38.0,
     approvalRate: 87.2,
     ltv: 1_930,
+  },
+  contingency: {
+    domains: [
+      { name: "checkout-principal.com", status: "ok", score: 92, lastCheck: "12:03" },
+      { name: "reserva-warroom.com", status: "warning", score: 68, lastCheck: "12:03" },
+    ],
+    adAccounts: [
+      { name: "BM Escala Latam", status: "ok", score: 88, lastCheck: "12:02" },
+      { name: "Google Ads Conta 02", status: "blocked", score: 34, lastCheck: "12:04" },
+    ],
   },
   activityLog: [
     {

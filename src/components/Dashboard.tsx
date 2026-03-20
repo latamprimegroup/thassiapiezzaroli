@@ -22,13 +22,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ActionableInsights } from "@/components/war-room/actionable-insights";
+import { ContingencyMonitor } from "@/components/war-room/contingency-monitor";
 import { CreativeFactoryBoard } from "@/components/war-room/creative-factory-board";
 import { DailyBriefing } from "@/components/war-room/daily-briefing";
 import { HealthCheck } from "@/components/war-room/health-check";
 import { LiveAdsTable } from "@/components/war-room/live-ads-table";
 import { rolePermissions, type SectionId, type UserRole } from "@/lib/auth/rbac";
 import type { DemoUser } from "@/lib/auth/users";
-import { computeKpis, safeDivide, toFiniteNumber } from "@/lib/metrics/kpis";
+import { computeKpis, computeMer, isFatigueImminent, safeDivide, toFiniteNumber } from "@/lib/metrics/kpis";
 import type { WarRoomData } from "@/lib/war-room/types";
 
 type Section = {
@@ -118,13 +119,19 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
     const winners = rows.filter((row) => row.roas > 2.5).length;
     const goldHooks = rows.filter((row) => computeKpis(row).hookRate > 30).length;
     const retentionBottleneck = rows.filter((row) => computeKpis(row).holdRate < 20).length;
-    return { winners, goldHooks, retentionBottleneck };
+    const fatigue = rows.filter((row) => isFatigueImminent(row)).length;
+    return { winners, goldHooks, retentionBottleneck, fatigue };
   }, [viewData.liveAdsTracking]);
 
   const macroRoas = useMemo(
     () => safeDivide(viewData.globalOverview.revenue, viewData.globalOverview.investment),
     [viewData.globalOverview.investment, viewData.globalOverview.revenue],
   );
+  const totalTrafficSpend = useMemo(() => {
+    const sourceTotal = viewData.globalOverview.trafficSources.reduce((sum, current) => sum + current.spend, 0);
+    return sourceTotal > 0 ? sourceTotal : viewData.globalOverview.investment;
+  }, [viewData.globalOverview.investment, viewData.globalOverview.trafficSources]);
+  const mer = useMemo(() => computeMer(viewData.globalOverview.revenue, totalTrafficSpend), [totalTrafficSpend, viewData.globalOverview.revenue]);
 
   const updatedAtDate = new Date(viewData.updatedAt);
   const safeUpdatedAtDate = Number.isNaN(updatedAtDate.getTime()) ? new Date() : updatedAtDate;
@@ -285,6 +292,7 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
               <p>{intelligence.goldHooks} criativos com badge Gancho de Ouro.</p>
               <p>{intelligence.retentionBottleneck} gargalos de retencao identificados.</p>
               <p>{intelligence.winners} anuncios com WINNER DETECTED.</p>
+              <p>{intelligence.fatigue} em possivel fadiga iminente.</p>
             </div>
           </div>
         </aside>
@@ -398,6 +406,22 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
                     </CardContent>
                   </Card>
                 )}
+                {canShowRoas && (
+                  <Card className="border-emerald-300/30 bg-gradient-to-br from-emerald-600/20 to-slate-900">
+                    <CardHeader className="pb-2">
+                      <CardDescription className="flex items-center gap-2 text-emerald-100">
+                        <TrendingUp className="h-4 w-4 text-emerald-300" /> MER / ROAS Real Ecossistema
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-2xl font-semibold text-emerald-100">{mer.toFixed(2)}</p>
+                      <p className="mt-1 text-xs text-emerald-200/80">
+                        Receita bruta {formatCurrency(viewData.globalOverview.revenue)} vs gasto consolidado{" "}
+                        {formatCurrency(totalTrafficSpend)}
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
                 <Card className="bg-gradient-to-br from-slate-800 to-slate-900">
                   <CardHeader className="pb-2">
                     <CardDescription className="flex items-center gap-2">
@@ -410,6 +434,19 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
                   </CardContent>
                 </Card>
               </div>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Gasto consolidado por fonte de trafego</CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                  {viewData.globalOverview.trafficSources.map((source) => (
+                    <div key={source.source} className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm">
+                      <p className="text-slate-300">{source.source}</p>
+                      <p className="font-semibold text-white">{formatCurrency(source.spend)}</p>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
 
               <div className="grid gap-4 xl:grid-cols-2">
                 <Card>
@@ -539,12 +576,14 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
                 hideRoasReal={!canShowRoas}
                 emphasizeRetention={retentionSpotlight}
                 simplified={permissions.simplifiedPerformanceView}
+                showDeepDive
               />
 
               <div className="grid gap-4 xl:grid-cols-2">
-                <ActionableInsights rows={viewData.liveAdsTracking} role={sessionState.role} />
+                <ActionableInsights rows={viewData.liveAdsTracking} role={sessionState.role} contingency={viewData.contingency} />
                 <HealthCheck baselineDropRate={viewData.oldSchema?.tech?.pageLoadDropOff ?? 18} />
               </div>
+              <ContingencyMonitor contingency={viewData.contingency} />
             </section>
           )}
 
@@ -606,6 +645,7 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
                 hideRoasReal={!canShowRoas}
                 emphasizeRetention={retentionSpotlight}
                 simplified={permissions.simplifiedPerformanceView}
+                showDeepDive
               />
               <DailyBriefing
                 items={viewData.dailyBriefing}
@@ -673,6 +713,7 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
                 hideRoasReal={!canShowRoas}
                 emphasizeRetention={retentionSpotlight}
                 simplified={permissions.simplifiedPerformanceView}
+                showDeepDive
               />
               <DailyBriefing
                 items={viewData.dailyBriefing}

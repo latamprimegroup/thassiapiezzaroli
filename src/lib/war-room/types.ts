@@ -14,6 +14,10 @@ export type WarRoomData = {
     investment: number;
     revenue: number;
     utmifySyncAt: string;
+    trafficSources: Array<{
+      source: string;
+      spend: number;
+    }>;
   };
 
   squads: Record<
@@ -39,6 +43,19 @@ export type WarRoomData = {
     ic: number;
     lp: number;
     roas: number;
+    frequency: number;
+    uniqueCtr: number;
+    aov: number;
+    upsellConversion: number;
+    ltv: number;
+    cpa: number;
+    trend24h: {
+      hookRate: number[];
+      holdRate: number[];
+      roas: number[];
+    };
+    frequencyTrend3d: number[];
+    uniqueCtrTrend3d: number[];
   }>;
 
   creativeFactory: {
@@ -71,6 +88,20 @@ export type WarRoomData = {
     profitMargin: number;
     approvalRate: number;
     ltv: number;
+  };
+  contingency: {
+    domains: Array<{
+      name: string;
+      status: "ok" | "warning" | "blocked";
+      score: number;
+      lastCheck: string;
+    }>;
+    adAccounts: Array<{
+      name: string;
+      status: "ok" | "warning" | "blocked";
+      score: number;
+      lastCheck: string;
+    }>;
   };
   activityLog: Array<{
     id: string;

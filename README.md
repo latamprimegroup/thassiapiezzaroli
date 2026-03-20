@@ -74,6 +74,21 @@ Tambem foi adicionado o **Log de Atividades**, com trilha de acoes no formato:
 - Componente **Recomendacoes da IA** para acao imediata.
 - **Health Check** em tempo real com latencia API + indice de Page Drop.
 
+## Modo 9D (Enterprise DR)
+
+- **MER (Marketing Efficiency Ratio)**:
+  - card de ROAS real do ecossistema usando receita bruta vs gasto consolidado por fonte.
+- **Indice de Saturacao de Criativo**:
+  - badge `FADIGA IMINENTE` quando frequencia sobe e CTR unico cai por 3 dias.
+- **Funnel Deep-Dive**:
+  - colunas por criativo para `AOV`, `Upsell %`, `LTV` e `CPA`.
+  - priorizacao automatica com badge `PRIORIDADE LTV` (mesmo com CPA ate 10% acima da base).
+- **Painel de Contingencia**:
+  - monitor para dominios e contas com estados `ok | warning | blocked`.
+  - alerta visual e sonoro imediato ao detectar risco critico.
+- **Sparklines 24h**:
+  - tendencia embutida na tabela para Hook, Hold e ROAS.
+
 ## Fontes de dados reais
 
 O projeto aceita 4 fontes via `WAR_ROOM_SOURCE`:

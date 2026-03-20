@@ -3,13 +3,14 @@
 import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { computeKpis } from "@/lib/metrics/kpis";
+import { computeKpis, isFatigueImminent, isLtvPriority } from "@/lib/metrics/kpis";
 import type { UserRole } from "@/lib/auth/rbac";
 import type { WarRoomData } from "@/lib/war-room/types";
 
 type ActionableInsightsProps = {
   rows: WarRoomData["liveAdsTracking"];
   role: UserRole;
+  contingency: WarRoomData["contingency"];
 };
 
 type Insight = {
@@ -28,7 +29,7 @@ function toneVariant(tone: Insight["tone"]) {
   return "success" as const;
 }
 
-export function ActionableInsights({ rows, role }: ActionableInsightsProps) {
+export function ActionableInsights({ rows, role, contingency }: ActionableInsightsProps) {
   const insights = useMemo(() => {
     const result: Insight[] = [];
     const analyzed = rows.map((row) => ({ row, kpi: computeKpis(row) }));
@@ -78,6 +79,40 @@ export function ActionableInsights({ rows, role }: ActionableInsightsProps) {
       });
     }
 
+    const minCpa = analyzed.reduce((min, current) => (current.row.cpa < min ? current.row.cpa : min), Number.POSITIVE_INFINITY);
+    const ltvOrdered = analyzed.map((item) => item.row.ltv).sort((a, b) => a - b);
+    const ltvThreshold = ltvOrdered.length > 0 ? ltvOrdered[Math.floor(ltvOrdered.length * 0.7)] : 0;
+    const ltvPriority = analyzed.find(({ row }) => isLtvPriority(row, minCpa, ltvThreshold));
+    if (ltvPriority) {
+      result.push({
+        id: "ltv-priority",
+        tone: "success",
+        text: `Prioridade de funil: ${ltvPriority.row.id} traz LTV ${ltvPriority.row.ltv.toLocaleString(
+          "pt-BR",
+        )} com CPA toleravel. Escalar mesmo com CPA ate 10% acima da base.`,
+      });
+    }
+
+    const fatigue = analyzed.find(({ row }) => isFatigueImminent(row));
+    if (fatigue) {
+      result.push({
+        id: "fatigue-imminent",
+        tone: "warning",
+        text: `Fadiga iminente: ${fatigue.row.id} com frequencia subindo e CTR unico caindo por 3 dias. Rotacionar criativo imediatamente.`,
+      });
+    }
+
+    const blockedEntity = [...contingency.domains, ...contingency.adAccounts].find(
+      (entity) => entity.status === "blocked" || entity.score < 50,
+    );
+    if (blockedEntity) {
+      result.push({
+        id: "contingency-critical",
+        tone: "critical",
+        text: `Contingencia: ${blockedEntity.name} em estado critico (score ${blockedEntity.score}). Acionar plano de backup agora.`,
+      });
+    }
+
     if (role === "copywriter" || role === "videoEditor") {
       const worstRetention = analyzed.reduce(
         (prev, current) => (current.kpi.holdRate < prev.kpi.holdRate ? current : prev),
@@ -103,7 +138,7 @@ export function ActionableInsights({ rows, role }: ActionableInsightsProps) {
     }
 
     return result.slice(0, 4);
-  }, [role, rows]);
+  }, [contingency.adAccounts, contingency.domains, role, rows]);
 
   return (
     <Card>
