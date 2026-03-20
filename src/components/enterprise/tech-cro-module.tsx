@@ -15,15 +15,16 @@ export function TechCroModule() {
   const tech = data.enterprise.techCro;
   const intelligence = computeIntelligenceEngine(data);
   const apiStatus = data.integrations.apiStatus;
+  const fortress = data.integrations.fortress;
   const audioGuardRef = useRef<string>("");
 
   useEffect(() => {
-    const shouldAlert = tech.lcpSeconds > 1.5 || intelligence.gatewayHealth.alert;
+    const shouldAlert = tech.lcpSeconds > 1.5 || intelligence.gatewayHealth.alert || fortress.siren.active;
     if (!shouldAlert) {
       audioGuardRef.current = "";
       return;
     }
-    const guardKey = `${tech.lcpSeconds.toFixed(2)}-${intelligence.gatewayHealth.currentApproval.toFixed(2)}`;
+    const guardKey = `${tech.lcpSeconds.toFixed(2)}-${intelligence.gatewayHealth.currentApproval.toFixed(2)}-${fortress.siren.active ? "1" : "0"}`;
     if (audioGuardRef.current === guardKey) {
       return;
     }
@@ -46,7 +47,7 @@ export function TechCroModule() {
     oscillator.onended = () => {
       void context.close();
     };
-  }, [intelligence.gatewayHealth.alert, intelligence.gatewayHealth.currentApproval, tech.lcpSeconds]);
+  }, [fortress.siren.active, intelligence.gatewayHealth.alert, intelligence.gatewayHealth.currentApproval, tech.lcpSeconds]);
 
   function renderProviderStatus(
     label: string,
@@ -105,6 +106,37 @@ export function TechCroModule() {
             apiStatus.yampi.lastSync,
             apiStatus.yampi.errorMessage,
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">THE VAULT (Infra + Pixel Sync)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm">
+          <p>
+            Vault:{" "}
+            <span className={fortress.vault.overallStatus === "blocked" ? "text-[#EA4335]" : fortress.vault.overallStatus === "warning" ? "text-[#FF9900]" : "text-[#10B981]"}>
+              {fortress.vault.overallStatus.toUpperCase()}
+            </span>{" "}
+            | Pixel Sync:{" "}
+            <span className={fortress.pixelSync.status === "unhealthy" ? "text-[#EA4335]" : fortress.pixelSync.status === "healthy" ? "text-[#10B981]" : "text-[#FF9900]"}>
+              {fortress.pixelSync.status.toUpperCase()}
+            </span>
+          </p>
+          <p className="text-xs text-slate-300">
+            Reais: {fortress.pixelSync.realPurchases} vs Meta: {fortress.pixelSync.metaReportedPurchases} (
+            {fortress.pixelSync.discrepancyPct.toFixed(2)}%)
+          </p>
+          {fortress.pixelSync.status === "unhealthy" && <Badge variant="danger">ERRO DE CAPI/PIXEL: discrepancia acima de 20%</Badge>}
+          {fortress.vault.domains.map((domain) => (
+            <div key={domain.domain} className="rounded-md border border-white/10 bg-white/5 p-2 text-xs">
+              <p className="text-slate-200">{domain.domain}</p>
+              <p className="text-slate-400">
+                Safe Browsing: {domain.safeBrowsingStatus} | Debugger: {domain.facebookDebuggerStatus} | Check: {domain.checkedAt}
+              </p>
+            </div>
+          ))}
         </CardContent>
       </Card>
 

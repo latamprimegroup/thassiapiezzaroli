@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { GaugeChart } from "@/components/ui/gauge-chart";
@@ -23,6 +24,9 @@ export function CeoFinanceModule({ canViewSensitiveFinancials }: CeoFinanceModul
   const warningCount = contingencyItems.filter((item) => item.status === "warning").length;
   const appmaxApproval = data.integrations.gateway.appmaxCardApprovalRate;
   const merCross = data.integrations.merCross;
+  const fortress = data.integrations.fortress;
+  const [simAdSpend, setSimAdSpend] = useState(fortress.scaleSimulator.defaultAdSpend);
+  const [simCpaGrowthPct, setSimCpaGrowthPct] = useState(15);
 
   const cohortMax = Math.max(f.ltvCohorts.d30, f.ltvCohorts.d60, f.ltvCohorts.d90, 1);
   const cohorts = [
@@ -30,6 +34,20 @@ export function CeoFinanceModule({ canViewSensitiveFinancials }: CeoFinanceModul
     { label: "60d", value: f.ltvCohorts.d60 },
     { label: "90d", value: f.ltvCohorts.d90 },
   ];
+  const simulation = useMemo(() => {
+    const baselineCpa = Math.max(1, fortress.scaleSimulator.defaultCpa);
+    const effectiveCpa = baselineCpa * (1 + simCpaGrowthPct / 100);
+    const projectedPurchases = Math.max(1, Math.round(simAdSpend / effectiveCpa));
+    const baselineAvgTicket = Math.max(1, data.integrations.gateway.consolidatedGrossRevenue / Math.max(1, fortress.pixelSync.realPurchases));
+    const projectedGross = projectedPurchases * baselineAvgTicket;
+    const gatewayFeeRate = f.grossRevenue > 0 ? f.gatewayFees / f.grossRevenue : 0.036;
+    const gatewayFees = projectedGross * gatewayFeeRate;
+    const taxes = projectedGross * (data.integrations.gateway.taxRatePct / 100);
+    const projectedNet = projectedGross - gatewayFees - taxes - simAdSpend - data.integrations.gateway.fixedCosts;
+    const roiPct = projectedGross > 0 ? (projectedNet / projectedGross) * 100 : 0;
+    const deltaVsCurrent = projectedNet - f.netProfit;
+    return { effectiveCpa, projectedPurchases, projectedGross, projectedNet, roiPct, deltaVsCurrent };
+  }, [data.integrations.gateway.consolidatedGrossRevenue, data.integrations.gateway.fixedCosts, data.integrations.gateway.taxRatePct, f.gatewayFees, f.grossRevenue, f.netProfit, fortress.pixelSync.realPurchases, fortress.scaleSimulator.defaultCpa, simAdSpend, simCpaGrowthPct]);
 
   return (
     <section className="war-fade-in space-y-4">
@@ -159,6 +177,145 @@ export function CeoFinanceModule({ canViewSensitiveFinancials }: CeoFinanceModul
           ) : (
             <Badge variant="success">Processamento de pagamentos em faixa estavel</Badge>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">THE VAULT: Domain & Pixel Health</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          <p>
+            Status do Cofre:{" "}
+            <span className={fortress.vault.overallStatus === "blocked" ? "text-[#EA4335]" : fortress.vault.overallStatus === "warning" ? "text-[#FF9900]" : "text-[#10B981]"}>
+              {fortress.vault.overallStatus.toUpperCase()}
+            </span>{" "}
+            | Ultimo check: {fortress.vault.lastCheckAt} | Intervalo: {fortress.vault.intervalMinutes} min
+          </p>
+          <div className="grid gap-2 md:grid-cols-2">
+            {fortress.vault.domains.map((domain) => (
+              <div key={domain.domain} className="rounded-md border border-white/10 bg-white/5 p-2">
+                <p className="font-medium text-slate-100">{domain.domain}</p>
+                <p className="text-xs text-slate-300">
+                  Safe Browsing: {domain.safeBrowsingStatus} | FB Debugger: {domain.facebookDebuggerStatus}
+                </p>
+                <p className="text-xs text-slate-400">{domain.note}</p>
+              </div>
+            ))}
+          </div>
+          <div className="rounded-md border border-white/10 bg-white/5 p-2">
+            <p className="text-slate-200">
+              Pixel Sync:{" "}
+              <span className={fortress.pixelSync.status === "unhealthy" ? "text-[#EA4335]" : fortress.pixelSync.status === "healthy" ? "text-[#10B981]" : "text-[#FF9900]"}>
+                {fortress.pixelSync.status.toUpperCase()}
+              </span>
+            </p>
+            <p className="text-xs text-slate-300">
+              Vendas Reais: {fortress.pixelSync.realPurchases} | Meta Reportadas: {fortress.pixelSync.metaReportedPurchases} | Divergencia:{" "}
+              {fortress.pixelSync.discrepancyPct.toFixed(2)}%
+            </p>
+            <p className="text-xs text-slate-400">{fortress.pixelSync.note}</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">LTV & Back-end Explorer</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          <div className="grid gap-2 md:grid-cols-4">
+            <div className="rounded-md border border-white/10 bg-white/5 p-2">
+              <p className="text-xs text-slate-400">LTV 7d</p>
+              <p className="text-lg font-semibold text-slate-100">{currency(fortress.backEndLtv.ltvTracker.d7)}</p>
+            </div>
+            <div className="rounded-md border border-white/10 bg-white/5 p-2">
+              <p className="text-xs text-slate-400">LTV 30d</p>
+              <p className="text-lg font-semibold text-slate-100">{currency(fortress.backEndLtv.ltvTracker.d30)}</p>
+            </div>
+            <div className="rounded-md border border-white/10 bg-white/5 p-2">
+              <p className="text-xs text-slate-400">LTV 90d</p>
+              <p className="text-lg font-semibold text-[#10B981]">{currency(fortress.backEndLtv.ltvTracker.d90)}</p>
+            </div>
+            <div className="rounded-md border border-white/10 bg-white/5 p-2">
+              <p className="text-xs text-slate-400">Share CRM</p>
+              <p className="text-lg font-semibold text-[#FF9900]">{fortress.backEndLtv.revenueBySource.crmSharePct.toFixed(2)}%</p>
+            </div>
+          </div>
+          <div className="rounded-md border border-white/10 bg-white/5 p-2">
+            <p className="mb-1 text-slate-300">Revenue by Source</p>
+            <p className="text-xs text-slate-300">
+              Pago: {currency(fortress.backEndLtv.revenueBySource.paidTraffic)} | E-mail: {currency(fortress.backEndLtv.revenueBySource.crmEmail)} | SMS:{" "}
+              {currency(fortress.backEndLtv.revenueBySource.crmSms)} | WhatsApp: {currency(fortress.backEndLtv.revenueBySource.crmWhatsapp)}
+            </p>
+          </div>
+          <div className="space-y-1">
+            {fortress.backEndLtv.upsellFlowMap.map((item) => (
+              <div key={item.step}>
+                <div className="mb-1 flex items-center justify-between text-xs">
+                  <span>{item.step}</span>
+                  <span>
+                    {item.takeRate.toFixed(2)}% | {currency(item.estimatedRevenue)}
+                  </span>
+                </div>
+                <div className="h-2 rounded-full bg-slate-800">
+                  <div className={`h-2 rounded-full ${item.status === "scale" ? "bg-[#10B981]" : "bg-[#FF9900]"}`} style={{ width: `${Math.min(100, item.takeRate)}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Scale Simulator (What-If)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="space-y-1">
+              <span className="text-xs text-slate-400">AdSpend pretendido (R$)</span>
+              <input
+                type="number"
+                value={Math.round(simAdSpend)}
+                min={1000}
+                onChange={(event) => setSimAdSpend(Math.max(1000, Number(event.target.value) || 1000))}
+                className="w-full rounded border border-white/15 bg-[#050505] px-2 py-1 text-slate-100"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs text-slate-400">Stress de CPA (%)</span>
+              <input
+                type="number"
+                value={simCpaGrowthPct}
+                min={-30}
+                max={80}
+                onChange={(event) => setSimCpaGrowthPct(Number(event.target.value) || 0)}
+                className="w-full rounded border border-white/15 bg-[#050505] px-2 py-1 text-slate-100"
+              />
+            </label>
+          </div>
+          <div className="grid gap-2 md:grid-cols-4">
+            <div className="rounded-md border border-white/10 bg-white/5 p-2">
+              <p className="text-xs text-slate-400">CPA Simulado</p>
+              <p className="font-semibold text-slate-100">{currency(simulation.effectiveCpa)}</p>
+            </div>
+            <div className="rounded-md border border-white/10 bg-white/5 p-2">
+              <p className="text-xs text-slate-400">Compras Projetadas</p>
+              <p className="font-semibold text-slate-100">{simulation.projectedPurchases.toLocaleString("pt-BR")}</p>
+            </div>
+            <div className="rounded-md border border-white/10 bg-white/5 p-2">
+              <p className="text-xs text-slate-400">Lucro Liquido Projetado</p>
+              <p className={`font-semibold ${simulation.projectedNet >= 0 ? "text-[#10B981]" : "text-[#EA4335]"}`}>{currency(simulation.projectedNet)}</p>
+            </div>
+            <div className="rounded-md border border-white/10 bg-white/5 p-2">
+              <p className="text-xs text-slate-400">ROI Projetado</p>
+              <p className={`font-semibold ${simulation.roiPct >= 0 ? "text-[#10B981]" : "text-[#EA4335]"}`}>{simulation.roiPct.toFixed(2)}%</p>
+            </div>
+          </div>
+          <p className={simulation.deltaVsCurrent >= 0 ? "text-[#10B981]" : "text-[#EA4335]"}>
+            Delta vs lucro atual: {currency(simulation.deltaVsCurrent)}
+          </p>
         </CardContent>
       </Card>
 

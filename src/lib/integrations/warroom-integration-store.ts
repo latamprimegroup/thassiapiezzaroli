@@ -14,17 +14,27 @@ type IntegrationState = {
   utmify: {
     spendTotal: number;
     creatives: Record<string, { source: TrafficSourceKey; profit: number; roas: number; clickToPurchaseCpa: number }>;
+    metaReportedPurchases: number;
+    paidTrafficRevenue: number;
+    ltv7d: number;
+    ltv30d: number;
+    ltv90d: number;
   };
   appmax: {
     gross: number;
     net: number;
     cardApprovalRate: number;
     previousDayApprovalRate: number;
+    purchaseCount: number;
+    crmEmailRevenue: number;
+    crmSmsRevenue: number;
+    crmWhatsappRevenue: number;
     recoveryAgents: RecoveryAgent[];
   };
   kiwify: {
     gross: number;
     net: number;
+    purchaseCount: number;
     upsellTakeRates: {
       upsell1: number;
       upsell2: number;
@@ -60,17 +70,27 @@ function createInitialState(): IntegrationState {
     utmify: {
       spendTotal: 0,
       creatives: {},
+      metaReportedPurchases: 0,
+      paidTrafficRevenue: 0,
+      ltv7d: 0,
+      ltv30d: 0,
+      ltv90d: 0,
     },
     appmax: {
       gross: 0,
       net: 0,
       cardApprovalRate: 0,
       previousDayApprovalRate: 0,
+      purchaseCount: 0,
+      crmEmailRevenue: 0,
+      crmSmsRevenue: 0,
+      crmWhatsappRevenue: 0,
       recoveryAgents: [],
     },
     kiwify: {
       gross: 0,
       net: 0,
+      purchaseCount: 0,
       upsellTakeRates: {
         upsell1: 0,
         upsell2: 0,
@@ -116,6 +136,13 @@ export function ingestIntegrationEvent(event: UnifiedProviderEvent) {
 
   if (provider === "utmify") {
     state.utmify.spendTotal = event.spend > 0 ? event.spend : state.utmify.spendTotal;
+    state.utmify.metaReportedPurchases =
+      event.meta_reported_purchase_count > 0 ? event.meta_reported_purchase_count : state.utmify.metaReportedPurchases;
+    state.utmify.paidTrafficRevenue =
+      event.paid_traffic_revenue > 0 ? event.paid_traffic_revenue : state.utmify.paidTrafficRevenue;
+    state.utmify.ltv7d = event.ltv_7d > 0 ? event.ltv_7d : state.utmify.ltv7d;
+    state.utmify.ltv30d = event.ltv_30d > 0 ? event.ltv_30d : state.utmify.ltv30d;
+    state.utmify.ltv90d = event.ltv_90d > 0 ? event.ltv_90d : state.utmify.ltv90d;
     for (const creative of event.creatives) {
       if (!creative.creativeId || creative.creativeId === "N/A") {
         continue;
@@ -149,6 +176,11 @@ export function ingestIntegrationEvent(event: UnifiedProviderEvent) {
       event.appmax_previous_day_approval_rate > 0
         ? event.appmax_previous_day_approval_rate
         : state.appmax.previousDayApprovalRate;
+    state.appmax.purchaseCount = event.real_purchase_count > 0 ? event.real_purchase_count : state.appmax.purchaseCount;
+    state.appmax.crmEmailRevenue = event.crm_email_revenue > 0 ? event.crm_email_revenue : state.appmax.crmEmailRevenue;
+    state.appmax.crmSmsRevenue = event.crm_sms_revenue > 0 ? event.crm_sms_revenue : state.appmax.crmSmsRevenue;
+    state.appmax.crmWhatsappRevenue =
+      event.crm_whatsapp_revenue > 0 ? event.crm_whatsapp_revenue : state.appmax.crmWhatsappRevenue;
     state.appmax.recoveryAgents = event.recovery_agents.length > 0 ? event.recovery_agents : state.appmax.recoveryAgents;
     state.apiStatus.appmax = {
       status: "online",
@@ -161,6 +193,7 @@ export function ingestIntegrationEvent(event: UnifiedProviderEvent) {
   if (provider === "kiwify") {
     state.kiwify.gross = event.valor_bruto > 0 ? event.valor_bruto : state.kiwify.gross;
     state.kiwify.net = event.valor_liquido > 0 ? event.valor_liquido : state.kiwify.net;
+    state.kiwify.purchaseCount = event.real_purchase_count > 0 ? event.real_purchase_count : state.kiwify.purchaseCount;
     state.kiwify.upsellTakeRates = {
       upsell1: event.upsell_take_rates.upsell1 || state.kiwify.upsellTakeRates.upsell1,
       upsell2: event.upsell_take_rates.upsell2 || state.kiwify.upsellTakeRates.upsell2,
@@ -201,6 +234,76 @@ export function mergeWarRoomWithIntegrations(base: WarRoomData): WarRoomData {
   const fallbackSpend = next.globalOverview.trafficSources.reduce((acc, source) => acc + source.spend, 0);
   const spendTotal = state.utmify.spendTotal > 0 ? state.utmify.spendTotal : fallbackSpend;
   const merValue = safeDivide(consolidatedNet || next.integrations.gateway.consolidatedNetRevenue, spendTotal || 1);
+  const avgTicket = safeDivide(
+    next.liveAdsTracking.reduce((acc, row) => acc + row.aov, 0),
+    next.liveAdsTracking.length || 1,
+  );
+  const realPurchases = Math.max(
+    0,
+    Math.round(
+      state.appmax.purchaseCount + state.kiwify.purchaseCount > 0
+        ? state.appmax.purchaseCount + state.kiwify.purchaseCount
+        : safeDivide(consolidatedGross || next.integrations.gateway.consolidatedGrossRevenue, avgTicket || 1),
+    ),
+  );
+  const metaReportedPurchases = Math.max(
+    0,
+    Math.round(
+      state.utmify.metaReportedPurchases > 0
+        ? state.utmify.metaReportedPurchases
+        : Number(process.env.WAR_ROOM_META_REPORTED_PURCHASES ?? realPurchases * 0.88) || 0,
+    ),
+  );
+  const discrepancyPct = realPurchases > 0 ? Math.abs(realPurchases - metaReportedPurchases) / realPurchases * 100 : 0;
+  const pixelStatus = realPurchases === 0 ? "no_data" : discrepancyPct > 20 ? "unhealthy" : "healthy";
+  const paidTrafficRevenue = state.utmify.paidTrafficRevenue > 0 ? state.utmify.paidTrafficRevenue : consolidatedNet * 0.86;
+  const crmEmailRevenue = state.appmax.crmEmailRevenue > 0 ? state.appmax.crmEmailRevenue : consolidatedNet * 0.05;
+  const crmSmsRevenue = state.appmax.crmSmsRevenue > 0 ? state.appmax.crmSmsRevenue : consolidatedNet * 0.03;
+  const crmWhatsappRevenue = state.appmax.crmWhatsappRevenue > 0 ? state.appmax.crmWhatsappRevenue : consolidatedNet * 0.04;
+  const crmTotal = crmEmailRevenue + crmSmsRevenue + crmWhatsappRevenue;
+  const revenueBySourceTotal = paidTrafficRevenue + crmTotal;
+  const ltvD7 = state.utmify.ltv7d > 0 ? state.utmify.ltv7d : Math.max(0, next.finance.ltv24h * 1.35);
+  const ltvD30 = state.utmify.ltv30d > 0 ? state.utmify.ltv30d : Math.max(ltvD7, next.enterprise.ceoFinance.ltvCohorts.d30);
+  const ltvD90 = state.utmify.ltv90d > 0 ? state.utmify.ltv90d : Math.max(ltvD30, next.enterprise.ceoFinance.ltvCohorts.d90);
+  const upsellFlowMap = [
+    {
+      step: "Order Bump",
+      takeRate: Math.max(0, state.kiwify.upsellTakeRates.upsell1 * 0.92),
+      estimatedRevenue: Math.round(consolidatedNet * 0.08),
+      status: state.kiwify.upsellTakeRates.upsell1 >= 20 ? ("scale" as const) : ("attention" as const),
+    },
+    {
+      step: "Upsell 1",
+      takeRate: state.kiwify.upsellTakeRates.upsell1,
+      estimatedRevenue: Math.round(consolidatedNet * 0.14),
+      status: state.kiwify.upsellTakeRates.upsell1 >= 20 ? ("scale" as const) : ("attention" as const),
+    },
+    {
+      step: "Upsell 2",
+      takeRate: state.kiwify.upsellTakeRates.upsell2,
+      estimatedRevenue: Math.round(consolidatedNet * 0.09),
+      status: state.kiwify.upsellTakeRates.upsell2 >= 12 ? ("scale" as const) : ("attention" as const),
+    },
+    {
+      step: "Upsell 3",
+      takeRate: state.kiwify.upsellTakeRates.upsell3,
+      estimatedRevenue: Math.round(consolidatedNet * 0.05),
+      status: state.kiwify.upsellTakeRates.upsell3 >= 8 ? ("scale" as const) : ("attention" as const),
+    },
+  ];
+  const defaultCpa = safeDivide(
+    next.liveAdsTracking.reduce((acc, row) => acc + row.cpa, 0),
+    next.liveAdsTracking.length || 1,
+  );
+  const projectedPurchases = Math.max(1, Math.round(safeDivide(spendTotal || next.globalOverview.investment, defaultCpa || 1)));
+  const simulatedTaxes = (consolidatedGross * (state.config.taxRatePct > 0 ? state.config.taxRatePct : next.integrations.gateway.taxRatePct)) / 100;
+  const simulatedNetProfit =
+    consolidatedGross -
+    next.enterprise.ceoFinance.gatewayFees -
+    simulatedTaxes -
+    (spendTotal || next.globalOverview.investment) -
+    (state.config.fixedCosts > 0 ? state.config.fixedCosts : next.integrations.gateway.fixedCosts);
+  const simulatedRoiPct = safeDivide(simulatedNetProfit, consolidatedGross || 1) * 100;
 
   const leaderboard = Object.entries(state.utmify.creatives)
     .map(([creativeId, value]) => ({
@@ -266,6 +369,56 @@ export function mergeWarRoomWithIntegrations(base: WarRoomData): WarRoomData {
           : merValue > 4.0
             ? "MER acima de 4.0x. Sugerir +20% de budget ao gestor."
             : "MER entre 2.5x e 4.0x. Operar escala com monitoramento horario.",
+    },
+    fortress: {
+      vault: next.integrations.fortress.vault,
+      pixelSync: {
+        realPurchases,
+        metaReportedPurchases,
+        discrepancyPct,
+        status: pixelStatus,
+        lastCheckAt: nowLabel(),
+        note:
+          pixelStatus === "unhealthy"
+            ? "Divergencia > 20% entre vendas reais e Meta. Revisar CAPI/Pixel imediatamente."
+            : pixelStatus === "no_data"
+              ? "Sem dados suficientes para comparar Pixel vs vendas reais."
+              : "Sincronia CAPI/Pixel em faixa saudavel.",
+      },
+      backEndLtv: {
+        upsellFlowMap,
+        revenueBySource: {
+          paidTraffic: paidTrafficRevenue,
+          crmEmail: crmEmailRevenue,
+          crmSms: crmSmsRevenue,
+          crmWhatsapp: crmWhatsappRevenue,
+          crmTotal,
+          total: revenueBySourceTotal,
+          crmSharePct: safeDivide(crmTotal, revenueBySourceTotal || 1) * 100,
+        },
+        ltvTracker: {
+          d7: ltvD7,
+          d30: ltvD30,
+          d90: ltvD90,
+        },
+        cohort90d: [
+          { cohortLabel: "Atual", projectedRevenue: Math.round(revenueBySourceTotal * 0.34), source: "paid" },
+          { cohortLabel: "Atual", projectedRevenue: Math.round(crmTotal * 0.34), source: "crm" },
+          { cohortLabel: "D-30", projectedRevenue: Math.round(revenueBySourceTotal * 0.31), source: "paid" },
+          { cohortLabel: "D-30", projectedRevenue: Math.round(crmTotal * 0.31), source: "crm" },
+          { cohortLabel: "D-60", projectedRevenue: Math.round(revenueBySourceTotal * 0.27), source: "paid" },
+          { cohortLabel: "D-60", projectedRevenue: Math.round(crmTotal * 0.27), source: "crm" },
+        ],
+      },
+      scaleSimulator: {
+        defaultAdSpend: spendTotal || next.globalOverview.investment,
+        defaultCpa,
+        projectedPurchases,
+        projectedNetProfit: simulatedNetProfit,
+        roiPct: simulatedRoiPct,
+      },
+      executiveBriefing: next.integrations.fortress.executiveBriefing,
+      siren: next.integrations.fortress.siren,
     },
   };
 
@@ -352,6 +505,10 @@ export function mergeWarRoomWithIntegrations(base: WarRoomData): WarRoomData {
   next.enterprise.ceoFinance.taxProvision = taxes;
   next.enterprise.ceoFinance.adSpend = adSpend;
   next.enterprise.ceoFinance.netProfit = realNetProfit;
+  next.enterprise.ceoFinance.ltvCohorts.d30 = ltvD30;
+  next.enterprise.ceoFinance.ltvCohorts.d60 = Math.round((ltvD30 + ltvD90) / 2);
+  next.enterprise.ceoFinance.ltvCohorts.d90 = ltvD90;
+  next.finance.ltv = ltvD90;
   next.finance.netRevenue = realNetProfit;
 
   const approvalDropThreshold = next.integrations.gateway.appmaxPreviousDayApprovalRate * 0.9;
@@ -361,6 +518,11 @@ export function mergeWarRoomWithIntegrations(base: WarRoomData): WarRoomData {
   ) {
     next.integrations.apiStatus.appmax.status = "error";
     next.integrations.apiStatus.appmax.errorMessage = "Queda >10% vs media D-1 (possivel shadowban/processador).";
+  }
+
+  if (next.integrations.fortress.pixelSync.status === "unhealthy") {
+    next.integrations.apiStatus.utmify.status = "error";
+    next.integrations.apiStatus.utmify.errorMessage = "Divergencia de Pixel/CAPI acima de 20%.";
   }
 
   return next;

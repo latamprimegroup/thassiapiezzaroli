@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import { Binary, BrainCircuit, ClipboardList, Clapperboard, Lock, MessageSquare, SatelliteDish, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -67,6 +67,32 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
   const hoursSinceUpdate = Math.max(0, (Date.now() - safeUpdatedAtDate.getTime()) / (1000 * 60 * 60));
   const syncBadgeClass =
     hoursSinceUpdate <= 12 ? "text-[#34A853]" : hoursSinceUpdate <= 24 ? "text-[#FF9900]" : "text-[#EA4335]";
+  const siren = viewData.integrations.fortress.siren;
+  const sirenReasons = useMemo(() => siren.reasons.join(" | "), [siren.reasons]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      void (async () => {
+        const response = await fetch("/api/war-room", { cache: "no-store" }).catch(() => null);
+        if (!response || !response.ok) {
+          return;
+        }
+        const payload = (await response.json().catch(() => null)) as
+          | {
+              data: WarRoomData;
+              session: { userId: string; role: UserRole };
+            }
+          | null;
+        if (!payload) {
+          return;
+        }
+        setViewData(payload.data);
+        setActivityLog(payload.data.activityLog);
+        setSessionState(payload.session);
+      })();
+    }, 60_000);
+    return () => clearInterval(interval);
+  }, []);
 
   function addActivity(actorRole: string, actorName: string, action: string, entity: string, reason: string) {
     const entry = {
@@ -162,7 +188,7 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
 
   return (
     <WarRoomContext.Provider value={contextValue}>
-      <div className="min-h-screen bg-[#050505] p-3 sm:p-4 md:p-6">
+      <div className={`min-h-screen bg-[#050505] p-3 sm:p-4 md:p-6 ${siren.active ? "war-siren-active" : ""}`}>
         <div className="mx-auto grid max-w-[1700px] gap-5 xl:grid-cols-[320px_minmax(0,1fr)]">
           <aside className="rounded-2xl border border-white/10 bg-slate-900/85 p-4 backdrop-blur">
             <div className="mb-5 rounded-xl border border-[#FF9900]/40 bg-[#FF9900]/10 p-3">
@@ -206,7 +232,7 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
             </div>
           </aside>
 
-          <main className="rounded-2xl border border-white/10 bg-slate-950/70 p-4 md:p-6">
+          <main className={`rounded-2xl border p-4 md:p-6 ${siren.active ? "border-rose-400/60 bg-rose-950/20" : "border-white/10 bg-slate-950/70"}`}>
             <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-xs uppercase tracking-[0.18em] text-slate-400">ERP de 9 digitos</p>
@@ -215,6 +241,7 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
                   <ActiveRoleIcon className="h-3.5 w-3.5" />
                   Perfil ativo: {permissions.label}
                 </div>
+                <p className="mt-2 text-[11px] text-slate-500">Auto-refresh de dados estrategicos: 60s (sem F5)</p>
               </div>
               <div className="flex flex-wrap gap-2">
                 {sessionState.role === "ceo" && (
@@ -247,6 +274,15 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
               </div>
             </header>
 
+            {siren.active && (
+              <Card className="mb-4 border-rose-300/70 bg-rose-500/15">
+                <CardContent className="p-3 text-sm text-rose-100">
+                  <p className="font-semibold">SIREN SYSTEM ATIVO</p>
+                  <p>{sirenReasons || "Risco critico detectado no ecossistema."}</p>
+                </CardContent>
+              </Card>
+            )}
+
             {viewData.integrations.merCross.status === "critical" && (
               <Card className="mb-4 border-rose-300/40 bg-rose-500/10">
                 <CardContent className="p-3 text-sm text-rose-100">
@@ -254,6 +290,17 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
                 </CardContent>
               </Card>
             )}
+
+            <Card className="mb-4 border-[#FF9900]/40 bg-[#050505]">
+              <CardHeader>
+                <CardTitle className="text-base">CEO Daily Briefing (IA)</CardTitle>
+                <CardDescription>{viewData.integrations.fortress.executiveBriefing.generatedAt}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                <p>{viewData.integrations.fortress.executiveBriefing.summary}</p>
+                <p className="text-[#FFB347]">Acao sugerida: {viewData.integrations.fortress.executiveBriefing.suggestedAction}</p>
+              </CardContent>
+            </Card>
 
             {ceoMode && sessionState.role === "ceo" && (
               <Card className="mb-4 border-[#FF9900]/40 bg-[#050505]">

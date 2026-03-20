@@ -583,6 +583,88 @@ export const mockWarRoomData: WarRoomData = {
       trend12h: [2.5, 2.6, 2.7, 2.6, 2.8, 2.7, 2.9, 3.0, 2.9, 3.1, 3.0, 2.94],
       recommendation: "MER acima de 2.5x. Manter controle de escala com monitoramento horario.",
     },
+    fortress: {
+      vault: {
+        lastCheckAt: "12:00",
+        intervalMinutes: 30,
+        overallStatus: "warning",
+        domains: [
+          {
+            domain: "checkout-principal.com",
+            safeBrowsingStatus: "safe",
+            facebookDebuggerStatus: "ok",
+            blacklistHits: 0,
+            status: "ok",
+            note: "Dominio principal sem risco de blacklist no ultimo check.",
+            checkedAt: "12:00",
+          },
+          {
+            domain: "reserva-warroom.com",
+            safeBrowsingStatus: "unknown",
+            facebookDebuggerStatus: "warning",
+            blacklistHits: 0,
+            status: "warning",
+            note: "Facebook Debugger com inconsistencias de scrape. Revisar DNS e OG tags.",
+            checkedAt: "12:00",
+          },
+        ],
+      },
+      pixelSync: {
+        realPurchases: 1230,
+        metaReportedPurchases: 1018,
+        discrepancyPct: 17.24,
+        status: "healthy",
+        lastCheckAt: "12:01",
+        note: "Sincronia CAPI dentro da faixa operacional.",
+      },
+      backEndLtv: {
+        upsellFlowMap: [
+          { step: "Order Bump", takeRate: 26.4, estimatedRevenue: 196_000, status: "scale" },
+          { step: "Upsell 1", takeRate: 27.4, estimatedRevenue: 422_000, status: "scale" },
+          { step: "Upsell 2", takeRate: 16.9, estimatedRevenue: 247_000, status: "attention" },
+          { step: "Upsell 3", takeRate: 8.7, estimatedRevenue: 96_000, status: "attention" },
+        ],
+        revenueBySource: {
+          paidTraffic: 4_030_000,
+          crmEmail: 310_000,
+          crmSms: 142_000,
+          crmWhatsapp: 198_000,
+          crmTotal: 650_000,
+          total: 4_680_000,
+          crmSharePct: 13.89,
+        },
+        ltvTracker: {
+          d7: 618,
+          d30: 920,
+          d90: 1_930,
+        },
+        cohort90d: [
+          { cohortLabel: "Mar/26", projectedRevenue: 1_140_000, source: "paid" },
+          { cohortLabel: "Mar/26", projectedRevenue: 238_000, source: "crm" },
+          { cohortLabel: "Fev/26", projectedRevenue: 1_020_000, source: "paid" },
+          { cohortLabel: "Fev/26", projectedRevenue: 210_000, source: "crm" },
+        ],
+      },
+      scaleSimulator: {
+        defaultAdSpend: 1_920_000,
+        defaultCpa: 148,
+        projectedPurchases: 12_972,
+        projectedNetProfit: 2_985_000,
+        roiPct: 55.33,
+      },
+      executiveBriefing: {
+        generatedAt: "18:00",
+        summary:
+          "Hoje o ID 1450 sustentou escala com MER em 2.94x, enquanto o fluxo de checkout manteve abandono controlado.",
+        suggestedAction:
+          "Aumentar budget apenas em ativos com CPA < 105 e priorizar correcao do dominio reserva-warroom.com no debugger.",
+      },
+      siren: {
+        active: false,
+        reasons: [],
+        severity: "normal",
+      },
+    },
   },
   contingency: {
     domains: [

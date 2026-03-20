@@ -716,6 +716,212 @@ export function normalizeWarRoomData(
           fallback.integrations.merCross.recommendation,
         ),
       },
+      fortress: {
+        vault: {
+          lastCheckAt: toString(
+            toObject(toObject(integrationsInput.fortress).vault).lastCheckAt,
+            fallback.integrations.fortress.vault.lastCheckAt,
+          ),
+          intervalMinutes: toNumber(
+            toObject(toObject(integrationsInput.fortress).vault).intervalMinutes,
+            fallback.integrations.fortress.vault.intervalMinutes,
+          ),
+          overallStatus: (() => {
+            const value = toObject(toObject(integrationsInput.fortress).vault).overallStatus;
+            return value === "ok" || value === "warning" || value === "blocked"
+              ? value
+              : fallback.integrations.fortress.vault.overallStatus;
+          })(),
+          domains: (
+            Array.isArray(toObject(toObject(integrationsInput.fortress).vault).domains)
+              ? (toObject(toObject(integrationsInput.fortress).vault).domains as unknown[])
+              : fallback.integrations.fortress.vault.domains
+          ).map((item, index) => {
+            const row = toObject(item);
+            const fallbackItem =
+              fallback.integrations.fortress.vault.domains[index % fallback.integrations.fortress.vault.domains.length];
+            const safeBrowsingStatus = row.safeBrowsingStatus;
+            const facebookDebuggerStatus = row.facebookDebuggerStatus;
+            return {
+              domain: toString(row.domain, fallbackItem.domain),
+              safeBrowsingStatus:
+                safeBrowsingStatus === "safe" || safeBrowsingStatus === "unsafe" || safeBrowsingStatus === "unknown"
+                  ? safeBrowsingStatus
+                  : fallbackItem.safeBrowsingStatus,
+              facebookDebuggerStatus:
+                facebookDebuggerStatus === "ok" ||
+                facebookDebuggerStatus === "warning" ||
+                facebookDebuggerStatus === "down" ||
+                facebookDebuggerStatus === "unknown"
+                  ? facebookDebuggerStatus
+                  : fallbackItem.facebookDebuggerStatus,
+              blacklistHits: toNumber(row.blacklistHits, fallbackItem.blacklistHits),
+              status: toStatus(row.status, fallbackItem.status),
+              note: toString(row.note, fallbackItem.note),
+              checkedAt: toString(row.checkedAt, fallbackItem.checkedAt),
+            };
+          }),
+        },
+        pixelSync: {
+          realPurchases: toNumber(
+            toObject(toObject(integrationsInput.fortress).pixelSync).realPurchases,
+            fallback.integrations.fortress.pixelSync.realPurchases,
+          ),
+          metaReportedPurchases: toNumber(
+            toObject(toObject(integrationsInput.fortress).pixelSync).metaReportedPurchases,
+            fallback.integrations.fortress.pixelSync.metaReportedPurchases,
+          ),
+          discrepancyPct: toNumber(
+            toObject(toObject(integrationsInput.fortress).pixelSync).discrepancyPct,
+            fallback.integrations.fortress.pixelSync.discrepancyPct,
+          ),
+          status: (() => {
+            const value = toObject(toObject(integrationsInput.fortress).pixelSync).status;
+            return value === "healthy" || value === "unhealthy" || value === "no_data"
+              ? value
+              : fallback.integrations.fortress.pixelSync.status;
+          })(),
+          lastCheckAt: toString(
+            toObject(toObject(integrationsInput.fortress).pixelSync).lastCheckAt,
+            fallback.integrations.fortress.pixelSync.lastCheckAt,
+          ),
+          note: toString(
+            toObject(toObject(integrationsInput.fortress).pixelSync).note,
+            fallback.integrations.fortress.pixelSync.note,
+          ),
+        },
+        backEndLtv: {
+          upsellFlowMap: (
+            Array.isArray(toObject(toObject(integrationsInput.fortress).backEndLtv).upsellFlowMap)
+              ? (toObject(toObject(integrationsInput.fortress).backEndLtv).upsellFlowMap as unknown[])
+              : fallback.integrations.fortress.backEndLtv.upsellFlowMap
+          ).map((item, index) => {
+            const row = toObject(item);
+            const fallbackItem =
+              fallback.integrations.fortress.backEndLtv.upsellFlowMap[
+                index % fallback.integrations.fortress.backEndLtv.upsellFlowMap.length
+              ];
+            const status = row.status;
+            return {
+              step: toString(row.step, fallbackItem.step),
+              takeRate: toNumber(row.takeRate, fallbackItem.takeRate),
+              estimatedRevenue: toNumber(row.estimatedRevenue, fallbackItem.estimatedRevenue),
+              status: status === "scale" || status === "attention" ? status : fallbackItem.status,
+            };
+          }),
+          revenueBySource: {
+            paidTraffic: toNumber(
+              toObject(toObject(toObject(integrationsInput.fortress).backEndLtv).revenueBySource).paidTraffic,
+              fallback.integrations.fortress.backEndLtv.revenueBySource.paidTraffic,
+            ),
+            crmEmail: toNumber(
+              toObject(toObject(toObject(integrationsInput.fortress).backEndLtv).revenueBySource).crmEmail,
+              fallback.integrations.fortress.backEndLtv.revenueBySource.crmEmail,
+            ),
+            crmSms: toNumber(
+              toObject(toObject(toObject(integrationsInput.fortress).backEndLtv).revenueBySource).crmSms,
+              fallback.integrations.fortress.backEndLtv.revenueBySource.crmSms,
+            ),
+            crmWhatsapp: toNumber(
+              toObject(toObject(toObject(integrationsInput.fortress).backEndLtv).revenueBySource).crmWhatsapp,
+              fallback.integrations.fortress.backEndLtv.revenueBySource.crmWhatsapp,
+            ),
+            crmTotal: toNumber(
+              toObject(toObject(toObject(integrationsInput.fortress).backEndLtv).revenueBySource).crmTotal,
+              fallback.integrations.fortress.backEndLtv.revenueBySource.crmTotal,
+            ),
+            total: toNumber(
+              toObject(toObject(toObject(integrationsInput.fortress).backEndLtv).revenueBySource).total,
+              fallback.integrations.fortress.backEndLtv.revenueBySource.total,
+            ),
+            crmSharePct: toNumber(
+              toObject(toObject(toObject(integrationsInput.fortress).backEndLtv).revenueBySource).crmSharePct,
+              fallback.integrations.fortress.backEndLtv.revenueBySource.crmSharePct,
+            ),
+          },
+          ltvTracker: {
+            d7: toNumber(
+              toObject(toObject(toObject(integrationsInput.fortress).backEndLtv).ltvTracker).d7,
+              fallback.integrations.fortress.backEndLtv.ltvTracker.d7,
+            ),
+            d30: toNumber(
+              toObject(toObject(toObject(integrationsInput.fortress).backEndLtv).ltvTracker).d30,
+              fallback.integrations.fortress.backEndLtv.ltvTracker.d30,
+            ),
+            d90: toNumber(
+              toObject(toObject(toObject(integrationsInput.fortress).backEndLtv).ltvTracker).d90,
+              fallback.integrations.fortress.backEndLtv.ltvTracker.d90,
+            ),
+          },
+          cohort90d: (
+            Array.isArray(toObject(toObject(integrationsInput.fortress).backEndLtv).cohort90d)
+              ? (toObject(toObject(integrationsInput.fortress).backEndLtv).cohort90d as unknown[])
+              : fallback.integrations.fortress.backEndLtv.cohort90d
+          ).map((item, index) => {
+            const row = toObject(item);
+            const fallbackItem =
+              fallback.integrations.fortress.backEndLtv.cohort90d[
+                index % fallback.integrations.fortress.backEndLtv.cohort90d.length
+              ];
+            const source = row.source;
+            return {
+              cohortLabel: toString(row.cohortLabel, fallbackItem.cohortLabel),
+              projectedRevenue: toNumber(row.projectedRevenue, fallbackItem.projectedRevenue),
+              source: source === "paid" || source === "crm" ? source : fallbackItem.source,
+            };
+          }),
+        },
+        scaleSimulator: {
+          defaultAdSpend: toNumber(
+            toObject(toObject(integrationsInput.fortress).scaleSimulator).defaultAdSpend,
+            fallback.integrations.fortress.scaleSimulator.defaultAdSpend,
+          ),
+          defaultCpa: toNumber(
+            toObject(toObject(integrationsInput.fortress).scaleSimulator).defaultCpa,
+            fallback.integrations.fortress.scaleSimulator.defaultCpa,
+          ),
+          projectedPurchases: toNumber(
+            toObject(toObject(integrationsInput.fortress).scaleSimulator).projectedPurchases,
+            fallback.integrations.fortress.scaleSimulator.projectedPurchases,
+          ),
+          projectedNetProfit: toNumber(
+            toObject(toObject(integrationsInput.fortress).scaleSimulator).projectedNetProfit,
+            fallback.integrations.fortress.scaleSimulator.projectedNetProfit,
+          ),
+          roiPct: toNumber(
+            toObject(toObject(integrationsInput.fortress).scaleSimulator).roiPct,
+            fallback.integrations.fortress.scaleSimulator.roiPct,
+          ),
+        },
+        executiveBriefing: {
+          generatedAt: toString(
+            toObject(toObject(integrationsInput.fortress).executiveBriefing).generatedAt,
+            fallback.integrations.fortress.executiveBriefing.generatedAt,
+          ),
+          summary: toString(
+            toObject(toObject(integrationsInput.fortress).executiveBriefing).summary,
+            fallback.integrations.fortress.executiveBriefing.summary,
+          ),
+          suggestedAction: toString(
+            toObject(toObject(integrationsInput.fortress).executiveBriefing).suggestedAction,
+            fallback.integrations.fortress.executiveBriefing.suggestedAction,
+          ),
+        },
+        siren: {
+          active:
+            typeof toObject(toObject(integrationsInput.fortress).siren).active === "boolean"
+              ? Boolean(toObject(toObject(integrationsInput.fortress).siren).active)
+              : fallback.integrations.fortress.siren.active,
+          reasons: toStringArray(
+            toObject(toObject(integrationsInput.fortress).siren).reasons,
+            fallback.integrations.fortress.siren.reasons,
+          ),
+          severity: (() => {
+            const value = toObject(toObject(integrationsInput.fortress).siren).severity;
+            return value === "normal" || value === "critical" ? value : fallback.integrations.fortress.siren.severity;
+          })(),
+        },
+      },
     },
     contingency: {
       domains: (domainsInput as unknown[]).map((item, index) => {

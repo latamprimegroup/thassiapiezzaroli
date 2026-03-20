@@ -24,6 +24,15 @@ export type UnifiedProviderEvent = {
   valor_bruto: number;
   valor_liquido: number;
   spend: number;
+  real_purchase_count: number;
+  meta_reported_purchase_count: number;
+  paid_traffic_revenue: number;
+  crm_email_revenue: number;
+  crm_sms_revenue: number;
+  crm_whatsapp_revenue: number;
+  ltv_7d: number;
+  ltv_30d: number;
+  ltv_90d: number;
   cart_abandonment_rate: number;
   card_approval_rate: number;
   appmax_previous_day_approval_rate: number;
@@ -93,6 +102,15 @@ function buildBaseEvent(provider: ProviderName): UnifiedProviderEvent {
     valor_bruto: 0,
     valor_liquido: 0,
     spend: 0,
+    real_purchase_count: 0,
+    meta_reported_purchase_count: 0,
+    paid_traffic_revenue: 0,
+    crm_email_revenue: 0,
+    crm_sms_revenue: 0,
+    crm_whatsapp_revenue: 0,
+    ltv_7d: 0,
+    ltv_30d: 0,
+    ltv_90d: 0,
     cart_abandonment_rate: 0,
     card_approval_rate: 0,
     appmax_previous_day_approval_rate: 0,
@@ -119,6 +137,14 @@ const utmifyAdapter: GatewayAdapter = {
     base.spend = toNumber(root.spend_total ?? root.spend ?? root.total_spend, 0);
     base.valor_bruto = toNumber(root.revenue_total ?? root.revenue ?? root.valor_bruto, 0);
     base.valor_liquido = toNumber(root.net_revenue ?? root.valor_liquido ?? root.profit_total, 0);
+    base.meta_reported_purchase_count = toNumber(
+      root.meta_reported_purchase_count ?? root.meta_purchase_events ?? root.pixel_purchases,
+      0,
+    );
+    base.paid_traffic_revenue = toNumber(root.paid_traffic_revenue ?? root.revenue_paid ?? root.net_revenue_paid, 0);
+    base.ltv_7d = toNumber(root.ltv_7d ?? root.customer_ltv_7d, 0);
+    base.ltv_30d = toNumber(root.ltv_30d ?? root.customer_ltv_30d, 0);
+    base.ltv_90d = toNumber(root.ltv_90d ?? root.customer_ltv_90d, 0);
     base.creatives = creativesInput.map((item) => {
       const row = asObject(item);
       return {
@@ -144,6 +170,10 @@ const appmaxAdapter: GatewayAdapter = {
     const root = asObject(payload.appmax ?? payload);
     base.valor_bruto = toNumber(root.total_value ?? root.amount ?? root.valor_bruto, 0);
     base.valor_liquido = toNumber(root.net_value ?? root.net_amount ?? root.valor_liquido, 0);
+    base.real_purchase_count = toNumber(root.purchase_count ?? root.sales_count ?? root.total_orders, 0);
+    base.crm_email_revenue = toNumber(root.crm_email_revenue ?? root.email_revenue, 0);
+    base.crm_sms_revenue = toNumber(root.crm_sms_revenue ?? root.sms_revenue, 0);
+    base.crm_whatsapp_revenue = toNumber(root.crm_whatsapp_revenue ?? root.whatsapp_revenue, 0);
     base.card_approval_rate = toPercent(root.card_approval_rate ?? root.approval_card ?? root.approval_rate_card, 0);
     base.appmax_previous_day_approval_rate = toPercent(
       root.previous_day_approval_rate ?? root.approval_rate_yesterday ?? root.approval_card_d1,
@@ -176,6 +206,7 @@ const kiwifyAdapter: GatewayAdapter = {
 
     base.valor_bruto = toNumber(root.amount ?? root.gross_amount ?? root.valor_bruto, 0);
     base.valor_liquido = toNumber(root.net_amount ?? root.valor_liquido ?? root.net_revenue, 0);
+    base.real_purchase_count = toNumber(root.purchase_count ?? root.orders_count ?? root.total_orders, 0);
     base.upsell_take_rates = {
       upsell1: toPercent(upsell.upsell1 ?? root.upsell1_take_rate, 0),
       upsell2: toPercent(upsell.upsell2 ?? root.upsell2_take_rate, 0),

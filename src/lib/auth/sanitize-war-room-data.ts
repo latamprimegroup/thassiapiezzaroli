@@ -21,6 +21,23 @@ export function sanitizeWarRoomDataForRole(input: WarRoomData, role: UserRole): 
     data.enterprise.ceoFinance.mer = 0;
     data.integrations.gateway.consolidatedGrossRevenue = 0;
     data.integrations.gateway.consolidatedNetRevenue = 0;
+    data.integrations.fortress.backEndLtv.revenueBySource = {
+      paidTraffic: 0,
+      crmEmail: 0,
+      crmSms: 0,
+      crmWhatsapp: 0,
+      crmTotal: 0,
+      total: 0,
+      crmSharePct: 0,
+    };
+    data.integrations.fortress.backEndLtv.cohort90d = data.integrations.fortress.backEndLtv.cohort90d.map((item) => ({
+      ...item,
+      projectedRevenue: 0,
+    }));
+    data.integrations.fortress.scaleSimulator.projectedNetProfit = 0;
+    data.integrations.fortress.scaleSimulator.roiPct = 0;
+    data.integrations.fortress.executiveBriefing.summary = "Resumo executivo oculto para este perfil.";
+    data.integrations.fortress.executiveBriefing.suggestedAction = "Sem permissao para dados financeiros sensiveis.";
     data.integrations.attribution.realRoiLeaderboard = data.integrations.attribution.realRoiLeaderboard.map((item) => ({
       ...item,
       realProfit: 0,

@@ -9,6 +9,8 @@ export type WarRoomDataSource = "mock" | "api" | "sheet" | "database" | "fallbac
 export type DemandDepartment = "copyResearch" | "trafficMedia" | "editorsCreative" | "techCro";
 export type DemandStatus = "backlog" | "doing" | "review" | "done";
 export type FinancialImpact = "low" | "medium" | "high" | "critical";
+export type VaultStatus = "ok" | "warning" | "blocked";
+export type PixelSyncStatus = "healthy" | "unhealthy" | "no_data";
 
 export type SquadSyncKpiSnapshot = {
   hookRate: number;
@@ -229,6 +231,74 @@ export type WarRoomData = {
       status: "critical" | "stable" | "elite";
       trend12h: number[];
       recommendation: string;
+    };
+    fortress: {
+      vault: {
+        lastCheckAt: string;
+        intervalMinutes: number;
+        overallStatus: VaultStatus;
+        domains: Array<{
+          domain: string;
+          safeBrowsingStatus: "safe" | "unsafe" | "unknown";
+          facebookDebuggerStatus: "ok" | "warning" | "down" | "unknown";
+          blacklistHits: number;
+          status: VaultStatus;
+          note: string;
+          checkedAt: string;
+        }>;
+      };
+      pixelSync: {
+        realPurchases: number;
+        metaReportedPurchases: number;
+        discrepancyPct: number;
+        status: PixelSyncStatus;
+        lastCheckAt: string;
+        note: string;
+      };
+      backEndLtv: {
+        upsellFlowMap: Array<{
+          step: string;
+          takeRate: number;
+          estimatedRevenue: number;
+          status: "scale" | "attention";
+        }>;
+        revenueBySource: {
+          paidTraffic: number;
+          crmEmail: number;
+          crmSms: number;
+          crmWhatsapp: number;
+          crmTotal: number;
+          total: number;
+          crmSharePct: number;
+        };
+        ltvTracker: {
+          d7: number;
+          d30: number;
+          d90: number;
+        };
+        cohort90d: Array<{
+          cohortLabel: string;
+          projectedRevenue: number;
+          source: "paid" | "crm";
+        }>;
+      };
+      scaleSimulator: {
+        defaultAdSpend: number;
+        defaultCpa: number;
+        projectedPurchases: number;
+        projectedNetProfit: number;
+        roiPct: number;
+      };
+      executiveBriefing: {
+        generatedAt: string;
+        summary: string;
+        suggestedAction: string;
+      };
+      siren: {
+        active: boolean;
+        reasons: string[];
+        severity: "normal" | "critical";
+      };
     };
   };
   contingency: {
