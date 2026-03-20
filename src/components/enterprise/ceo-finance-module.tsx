@@ -226,7 +226,8 @@ export function CeoFinanceModule({ canViewSensitiveFinancials }: CeoFinanceModul
               <div key={domain.domain} className="rounded-md border border-white/10 bg-white/5 p-2">
                 <p className="font-medium text-slate-100">{domain.domain}</p>
                 <p className="text-xs text-slate-300">
-                  Safe Browsing: {domain.safeBrowsingStatus} | FB Debugger: {domain.facebookDebuggerStatus}
+                  Safe Browsing: {domain.safeBrowsingStatus} | FB Debugger: {domain.facebookDebuggerStatus} | Cloudflare:{" "}
+                  {domain.cloudflareStatus}
                 </p>
                 <p className="text-xs text-slate-400">{domain.note}</p>
               </div>
@@ -278,6 +279,17 @@ export function CeoFinanceModule({ canViewSensitiveFinancials }: CeoFinanceModul
               {currency(fortress.backEndLtv.revenueBySource.crmSms)} | WhatsApp: {currency(fortress.backEndLtv.revenueBySource.crmWhatsapp)}
             </p>
           </div>
+          <div className="rounded-md border border-white/10 bg-white/5 p-2">
+            <p className="mb-1 text-slate-300">AI Predictive LTV (7d -&gt; 90d)</p>
+            <p className="text-xs text-slate-300">
+              Baseline 7d: {currency(fortress.backEndLtv.predictiveModel.baselineFromD7)} | Predicao 90d:{" "}
+              {currency(fortress.backEndLtv.predictiveModel.predictedLtv90d)} | Confianca:{" "}
+              {fortress.backEndLtv.predictiveModel.confidencePct.toFixed(1)}%
+            </p>
+            <p className="text-xs text-slate-400">
+              Drivers: {fortress.backEndLtv.predictiveModel.drivers.join(" | ")}
+            </p>
+          </div>
           <div className="space-y-1">
             {fortress.backEndLtv.upsellFlowMap.map((item) => (
               <div key={item.step}>
@@ -293,6 +305,26 @@ export function CeoFinanceModule({ canViewSensitiveFinancials }: CeoFinanceModul
               </div>
             ))}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Attribution Drift Guard (Nomenclatura)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm">
+          {data.integrations.attribution.namingDriftAlerts.length === 0 ? (
+            <Badge variant="success">Sem divergencias de nomenclatura detectadas</Badge>
+          ) : (
+            data.integrations.attribution.namingDriftAlerts.slice(0, 6).map((alert) => (
+              <div key={`${alert.creativeId}-${alert.reason}`} className="rounded border border-white/10 bg-white/5 p-2">
+                <p className={alert.severity === "critical" ? "text-[#EA4335]" : "text-[#FF9900]"}>
+                  {alert.creativeId} - {alert.reason}
+                </p>
+                {alert.suggestedDnaName ? <p className="font-mono text-xs text-slate-300">Sugestao: {alert.suggestedDnaName}</p> : null}
+              </div>
+            ))
+          )}
         </CardContent>
       </Card>
 

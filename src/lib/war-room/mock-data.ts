@@ -505,6 +505,15 @@ export const mockWarRoomData: WarRoomData = {
         { creativeId: "FB-101", source: "meta", realProfit: 284_000, realRoas: 3.14 },
         { creativeId: "TT-077", source: "native", realProfit: 177_000, realRoas: 2.42 },
       ],
+      namingDriftAlerts: [
+        {
+          creativeId: "FB-10I",
+          severity: "warning",
+          reason: "Possivel typo no ID de criativo importado (I vs 1).",
+          suggestedRegistryId: "ID1450",
+          suggestedDnaName: "LP9D_BRECHA_INSULINA_VSL_H04_ID1450",
+        },
+      ],
       validatedAssets: [
         {
           assetId: "1450",
@@ -593,6 +602,7 @@ export const mockWarRoomData: WarRoomData = {
             domain: "checkout-principal.com",
             safeBrowsingStatus: "safe",
             facebookDebuggerStatus: "ok",
+            cloudflareStatus: "up",
             blacklistHits: 0,
             status: "ok",
             note: "Dominio principal sem risco de blacklist no ultimo check.",
@@ -602,6 +612,7 @@ export const mockWarRoomData: WarRoomData = {
             domain: "reserva-warroom.com",
             safeBrowsingStatus: "unknown",
             facebookDebuggerStatus: "warning",
+            cloudflareStatus: "degraded",
             blacklistHits: 0,
             status: "warning",
             note: "Facebook Debugger com inconsistencias de scrape. Revisar DNS e OG tags.",
@@ -637,6 +648,12 @@ export const mockWarRoomData: WarRoomData = {
           d7: 618,
           d30: 920,
           d90: 1_930,
+        },
+        predictiveModel: {
+          predictedLtv90d: 2_040,
+          baselineFromD7: 1_390,
+          confidencePct: 78,
+          drivers: ["Aprovacao Appmax estavel", "Take-rate de upsell acima de 15%", "Share CRM crescente"],
         },
         cohort90d: [
           { cohortLabel: "Mar/26", projectedRevenue: 1_140_000, source: "paid" },

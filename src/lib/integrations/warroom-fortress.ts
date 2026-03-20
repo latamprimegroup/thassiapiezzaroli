@@ -1,16 +1,20 @@
 import type { VaultStatus, WarRoomData } from "@/lib/war-room/types";
+import { WAR_ROOM_OPS_CONSTANTS } from "@/lib/config/war-room-ops.constants";
 
 type SafeBrowsingStatus = "safe" | "unsafe" | "unknown";
 type FacebookDebuggerStatus = "ok" | "warning" | "down" | "unknown";
+type CloudflareStatus = "up" | "degraded" | "down" | "unknown";
 
 type VaultDomainSnapshot = WarRoomData["integrations"]["fortress"]["vault"]["domains"][number];
 
 type VaultRuntimeState = {
   lastRunAtMs: number;
   domains: VaultDomainSnapshot[];
+  lastVaultHash: string;
+  lastSirenActive: boolean;
 };
 
-const CHECK_INTERVAL_MS = 30 * 60 * 1000;
+const CHECK_INTERVAL_MS = WAR_ROOM_OPS_CONSTANTS.vault.checkIntervalMinutes * 60 * 1000;
 
 declare global {
   var __warRoomVaultRuntimeState: VaultRuntimeState | undefined;
@@ -23,12 +27,19 @@ function nowLabel() {
 function toVaultStatus(
   safeBrowsingStatus: SafeBrowsingStatus,
   facebookDebuggerStatus: FacebookDebuggerStatus,
+  cloudflareStatus: CloudflareStatus,
   fallback: VaultStatus,
 ): VaultStatus {
-  if (safeBrowsingStatus === "unsafe" || facebookDebuggerStatus === "down") {
+  if (safeBrowsingStatus === "unsafe" || facebookDebuggerStatus === "down" || cloudflareStatus === "down") {
     return "blocked";
   }
-  if (safeBrowsingStatus === "unknown" || facebookDebuggerStatus === "warning" || facebookDebuggerStatus === "unknown") {
+  if (
+    safeBrowsingStatus === "unknown" ||
+    facebookDebuggerStatus === "warning" ||
+    facebookDebuggerStatus === "unknown" ||
+    cloudflareStatus === "degraded" ||
+    cloudflareStatus === "unknown"
+  ) {
     return fallback === "blocked" ? "warning" : fallback;
   }
   return "ok";
@@ -85,11 +96,58 @@ async function checkFacebookDebugger(domain: string): Promise<FacebookDebuggerSt
   }
 }
 
+async function checkCloudflareDomain(domain: string): Promise<CloudflareStatus> {
+  try {
+    const response = await fetch(
+      `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(domain)}&type=A`,
+      {
+        headers: { Accept: "application/dns-json" },
+        cache: "no-store",
+      },
+    );
+    if (!response.ok) {
+      return "down";
+    }
+    const payload = (await response.json().catch(() => ({}))) as { Status?: number; Answer?: unknown[] };
+    if (payload.Status !== 0) {
+      return "degraded";
+    }
+    return Array.isArray(payload.Answer) && payload.Answer.length > 0 ? "up" : "degraded";
+  } catch {
+    return "unknown";
+  }
+}
+
 function getRuntimeState(): VaultRuntimeState {
   if (!globalThis.__warRoomVaultRuntimeState) {
-    globalThis.__warRoomVaultRuntimeState = { lastRunAtMs: 0, domains: [] };
+    globalThis.__warRoomVaultRuntimeState = {
+      lastRunAtMs: 0,
+      domains: [],
+      lastVaultHash: "",
+      lastSirenActive: false,
+    };
   }
   return globalThis.__warRoomVaultRuntimeState;
+}
+
+function computeVaultHash(domains: VaultDomainSnapshot[]) {
+  return JSON.stringify(domains.map((domain) => [domain.domain, domain.status, domain.cloudflareStatus, domain.safeBrowsingStatus]));
+}
+
+async function sendPushAlert(message: string) {
+  const webhook = process.env.WAR_ROOM_PUSH_ALERT_WEBHOOK;
+  if (!webhook) {
+    return;
+  }
+  await fetch(webhook, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      message,
+      source: "war-room-vault",
+      at: new Date().toISOString(),
+    }),
+  }).catch(() => undefined);
 }
 
 async function runDomainChecks(base: WarRoomData): Promise<VaultDomainSnapshot[]> {
@@ -97,7 +155,10 @@ async function runDomainChecks(base: WarRoomData): Promise<VaultDomainSnapshot[]
     .split(",")
     .map((value) => value.trim())
     .filter((value) => value.length > 0);
-  const domains = configuredDomains.length > 0 ? configuredDomains : base.contingency.domains.map((domain) => domain.name);
+  const domains = (configuredDomains.length > 0 ? configuredDomains : base.contingency.domains.map((domain) => domain.name)).slice(
+    0,
+    WAR_ROOM_OPS_CONSTANTS.vault.maxDomainsPerCycle,
+  );
   const fallbackByDomain = new Map(base.contingency.domains.map((domain) => [domain.name, domain]));
   const checkedAt = nowLabel();
 
@@ -106,7 +167,8 @@ async function runDomainChecks(base: WarRoomData): Promise<VaultDomainSnapshot[]
       const fallback = fallbackByDomain.get(domain);
       const safeBrowsingStatus = await checkSafeBrowsing(domain);
       const facebookDebuggerStatus = await checkFacebookDebugger(domain);
-      const status = toVaultStatus(safeBrowsingStatus, facebookDebuggerStatus, fallback?.status ?? "warning");
+      const cloudflareStatus = await checkCloudflareDomain(domain);
+      const status = toVaultStatus(safeBrowsingStatus, facebookDebuggerStatus, cloudflareStatus, fallback?.status ?? "warning");
       const note =
         status === "blocked"
           ? "Dominio em risco. Ativar contingencia imediatamente."
@@ -117,6 +179,7 @@ async function runDomainChecks(base: WarRoomData): Promise<VaultDomainSnapshot[]
         domain,
         safeBrowsingStatus,
         facebookDebuggerStatus,
+        cloudflareStatus,
         blacklistHits: safeBrowsingStatus === "unsafe" ? 1 : 0,
         status,
         note,
@@ -164,6 +227,11 @@ export async function applyFortressLayer(input: WarRoomData): Promise<WarRoomDat
   }
 
   if (runtimeState.domains.length > 0) {
+    const vaultHash = computeVaultHash(runtimeState.domains);
+    if (runtimeState.lastVaultHash && runtimeState.lastVaultHash !== vaultHash) {
+      await sendPushAlert("Vault status alterado: mudanca de saude de dominio detectada.");
+    }
+    runtimeState.lastVaultHash = vaultHash;
     next.integrations.fortress.vault.domains = runtimeState.domains;
     next.integrations.fortress.vault.lastCheckAt = nowLabel();
     const blocked = runtimeState.domains.some((domain) => domain.status === "blocked");
@@ -179,14 +247,32 @@ export async function applyFortressLayer(input: WarRoomData): Promise<WarRoomDat
   }
 
   const sirenReasons: string[] = [];
-  if (next.integrations.merCross.value > 0 && next.integrations.merCross.value < 2.0) {
-    sirenReasons.push(`MER Global ${next.integrations.merCross.value.toFixed(2)}x abaixo de 2.0x`);
+  if (
+    next.integrations.merCross.value > 0 &&
+    next.integrations.merCross.value < WAR_ROOM_OPS_CONSTANTS.thresholds.mer.sirenCritical
+  ) {
+    sirenReasons.push(
+      `MER Global ${next.integrations.merCross.value.toFixed(2)}x abaixo de ${WAR_ROOM_OPS_CONSTANTS.thresholds.mer.sirenCritical.toFixed(1)}x`,
+    );
   }
   if (next.integrations.fortress.vault.overallStatus === "blocked") {
     sirenReasons.push("Dominio em status BLOCKED no Cofre de Contingencia");
   }
   if (next.integrations.fortress.pixelSync.status === "unhealthy") {
-    sirenReasons.push("Erro de CAPI/Pixel com divergencia acima de 20%");
+    sirenReasons.push(
+      `Erro de CAPI/Pixel com divergencia acima de ${WAR_ROOM_OPS_CONSTANTS.thresholds.pixel.maxDiscrepancyPct}%`,
+    );
+  }
+  const approvalDropThreshold =
+    next.integrations.gateway.appmaxPreviousDayApprovalRate *
+    (1 - WAR_ROOM_OPS_CONSTANTS.thresholds.appmax.approvalDropAlertPct / 100);
+  if (
+    next.integrations.gateway.appmaxPreviousDayApprovalRate > 0 &&
+    next.integrations.gateway.appmaxCardApprovalRate < approvalDropThreshold
+  ) {
+    sirenReasons.push(
+      `Aprovacao Appmax caiu mais de ${WAR_ROOM_OPS_CONSTANTS.thresholds.appmax.approvalDropAlertPct}% vs D-1`,
+    );
   }
 
   next.integrations.fortress.siren = {
@@ -194,6 +280,14 @@ export async function applyFortressLayer(input: WarRoomData): Promise<WarRoomDat
     reasons: sirenReasons,
     severity: sirenReasons.length > 0 ? "critical" : "normal",
   };
+  if (next.integrations.fortress.siren.active !== runtimeState.lastSirenActive) {
+    await sendPushAlert(
+      next.integrations.fortress.siren.active
+        ? `SIREN ON: ${next.integrations.fortress.siren.reasons.join(" | ")}`
+        : "SIREN OFF: sistema voltou para estado normal.",
+    );
+    runtimeState.lastSirenActive = next.integrations.fortress.siren.active;
+  }
 
   next.integrations.fortress.executiveBriefing = buildExecutiveBriefing(next);
   return next;

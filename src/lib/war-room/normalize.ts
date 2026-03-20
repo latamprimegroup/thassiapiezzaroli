@@ -638,6 +638,24 @@ export function normalizeWarRoomData(
             realRoas: toNumber(row.realRoas, fallbackItem.realRoas),
           };
         }),
+        namingDriftAlerts: (Array.isArray(toObject(integrationsInput.attribution).namingDriftAlerts)
+          ? (toObject(integrationsInput.attribution).namingDriftAlerts as unknown[])
+          : fallback.integrations.attribution.namingDriftAlerts
+        ).map((item, index) => {
+          const row = toObject(item);
+          const fallbackItem =
+            fallback.integrations.attribution.namingDriftAlerts[
+              index % fallback.integrations.attribution.namingDriftAlerts.length
+            ];
+          const severity = row.severity;
+          return {
+            creativeId: toString(row.creativeId, fallbackItem.creativeId),
+            severity: severity === "warning" || severity === "critical" ? severity : fallbackItem.severity,
+            reason: toString(row.reason, fallbackItem.reason),
+            suggestedRegistryId: toString(row.suggestedRegistryId, fallbackItem.suggestedRegistryId),
+            suggestedDnaName: toString(row.suggestedDnaName, fallbackItem.suggestedDnaName),
+          };
+        }),
         validatedAssets: (Array.isArray(toObject(integrationsInput.attribution).validatedAssets)
           ? (toObject(integrationsInput.attribution).validatedAssets as unknown[])
           : fallback.integrations.attribution.validatedAssets
@@ -742,6 +760,7 @@ export function normalizeWarRoomData(
               fallback.integrations.fortress.vault.domains[index % fallback.integrations.fortress.vault.domains.length];
             const safeBrowsingStatus = row.safeBrowsingStatus;
             const facebookDebuggerStatus = row.facebookDebuggerStatus;
+            const cloudflareStatus = row.cloudflareStatus;
             return {
               domain: toString(row.domain, fallbackItem.domain),
               safeBrowsingStatus:
@@ -755,6 +774,13 @@ export function normalizeWarRoomData(
                 facebookDebuggerStatus === "unknown"
                   ? facebookDebuggerStatus
                   : fallbackItem.facebookDebuggerStatus,
+              cloudflareStatus:
+                cloudflareStatus === "up" ||
+                cloudflareStatus === "degraded" ||
+                cloudflareStatus === "down" ||
+                cloudflareStatus === "unknown"
+                  ? cloudflareStatus
+                  : fallbackItem.cloudflareStatus,
               blacklistHits: toNumber(row.blacklistHits, fallbackItem.blacklistHits),
               status: toStatus(row.status, fallbackItem.status),
               note: toString(row.note, fallbackItem.note),
@@ -851,6 +877,24 @@ export function normalizeWarRoomData(
             d90: toNumber(
               toObject(toObject(toObject(integrationsInput.fortress).backEndLtv).ltvTracker).d90,
               fallback.integrations.fortress.backEndLtv.ltvTracker.d90,
+            ),
+          },
+          predictiveModel: {
+            predictedLtv90d: toNumber(
+              toObject(toObject(toObject(integrationsInput.fortress).backEndLtv).predictiveModel).predictedLtv90d,
+              fallback.integrations.fortress.backEndLtv.predictiveModel.predictedLtv90d,
+            ),
+            baselineFromD7: toNumber(
+              toObject(toObject(toObject(integrationsInput.fortress).backEndLtv).predictiveModel).baselineFromD7,
+              fallback.integrations.fortress.backEndLtv.predictiveModel.baselineFromD7,
+            ),
+            confidencePct: toNumber(
+              toObject(toObject(toObject(integrationsInput.fortress).backEndLtv).predictiveModel).confidencePct,
+              fallback.integrations.fortress.backEndLtv.predictiveModel.confidencePct,
+            ),
+            drivers: toStringArray(
+              toObject(toObject(toObject(integrationsInput.fortress).backEndLtv).predictiveModel).drivers,
+              fallback.integrations.fortress.backEndLtv.predictiveModel.drivers,
             ),
           },
           cohort90d: (

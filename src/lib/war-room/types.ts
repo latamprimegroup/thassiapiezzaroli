@@ -202,6 +202,13 @@ export type WarRoomData = {
         realProfit: number;
         realRoas: number;
       }>;
+      namingDriftAlerts: Array<{
+        creativeId: string;
+        severity: "warning" | "critical";
+        reason: string;
+        suggestedRegistryId: string;
+        suggestedDnaName: string;
+      }>;
       validatedAssets: Array<{
         assetId: string;
         inputCpa: number;
@@ -242,6 +249,7 @@ export type WarRoomData = {
           domain: string;
           safeBrowsingStatus: "safe" | "unsafe" | "unknown";
           facebookDebuggerStatus: "ok" | "warning" | "down" | "unknown";
+          cloudflareStatus: "up" | "degraded" | "down" | "unknown";
           blacklistHits: number;
           status: VaultStatus;
           note: string;
@@ -276,6 +284,12 @@ export type WarRoomData = {
           d7: number;
           d30: number;
           d90: number;
+        };
+        predictiveModel: {
+          predictedLtv90d: number;
+          baselineFromD7: number;
+          confidencePct: number;
+          drivers: string[];
         };
         cohort90d: Array<{
           cohortLabel: string;

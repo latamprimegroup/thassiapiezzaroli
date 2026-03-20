@@ -1,4 +1,5 @@
 import { safeDivide } from "@/lib/metrics/kpis";
+import { WAR_ROOM_OPS_CONSTANTS } from "@/lib/config/war-room-ops.constants";
 import type { TrafficSourceKey, WarRoomData } from "@/lib/war-room/types";
 import type { ProviderName, RecoveryAgent, UnifiedProviderEvent } from "./warroom-adapters";
 
@@ -57,6 +58,67 @@ function nowLabel() {
 
 function toTrend(history: number[], value: number) {
   return [...history, Number.isFinite(value) ? value : 0].slice(-12);
+}
+
+function levenshteinDistance(a: string, b: string) {
+  if (a === b) {
+    return 0;
+  }
+  if (a.length === 0) {
+    return b.length;
+  }
+  if (b.length === 0) {
+    return a.length;
+  }
+  const matrix = Array.from({ length: a.length + 1 }, () => new Array<number>(b.length + 1).fill(0));
+  for (let i = 0; i <= a.length; i += 1) {
+    matrix[i][0] = i;
+  }
+  for (let j = 0; j <= b.length; j += 1) {
+    matrix[0][j] = j;
+  }
+  for (let i = 1; i <= a.length; i += 1) {
+    for (let j = 1; j <= b.length; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(matrix[i - 1][j] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j - 1] + cost);
+    }
+  }
+  return matrix[a.length][b.length];
+}
+
+function buildNamingDriftAlerts(next: WarRoomData) {
+  const registry = next.enterprise.copyResearch.namingRegistry;
+  const alerts: WarRoomData["integrations"]["attribution"]["namingDriftAlerts"] = [];
+  for (const row of next.liveAdsTracking) {
+    const exact = registry.find((item) => item.linkedCreativeId === row.id);
+    if (exact) {
+      continue;
+    }
+    const closest = registry
+      .map((item) => ({
+        item,
+        distance: levenshteinDistance(item.linkedCreativeId.toUpperCase(), row.id.toUpperCase()),
+      }))
+      .sort((a, b) => a.distance - b.distance)[0];
+    if (closest && closest.distance <= WAR_ROOM_OPS_CONSTANTS.naming.maxLevenshteinDistance) {
+      alerts.push({
+        creativeId: row.id,
+        severity: "warning",
+        reason: `Possivel erro de digitacao no ID do criativo (distancia ${closest.distance}).`,
+        suggestedRegistryId: closest.item.uniqueId,
+        suggestedDnaName: closest.item.dnaName,
+      });
+      continue;
+    }
+    alerts.push({
+      creativeId: row.id,
+      severity: "critical",
+      reason: "Criativo sem mapeamento no Naming Registry.",
+      suggestedRegistryId: "",
+      suggestedDnaName: "",
+    });
+  }
+  return alerts.slice(0, 20);
 }
 
 function createInitialState(): IntegrationState {
@@ -255,16 +317,47 @@ export function mergeWarRoomWithIntegrations(base: WarRoomData): WarRoomData {
     ),
   );
   const discrepancyPct = realPurchases > 0 ? Math.abs(realPurchases - metaReportedPurchases) / realPurchases * 100 : 0;
-  const pixelStatus = realPurchases === 0 ? "no_data" : discrepancyPct > 20 ? "unhealthy" : "healthy";
+  const pixelStatus =
+    realPurchases === 0
+      ? "no_data"
+      : discrepancyPct > WAR_ROOM_OPS_CONSTANTS.thresholds.pixel.maxDiscrepancyPct
+        ? "unhealthy"
+        : "healthy";
   const paidTrafficRevenue = state.utmify.paidTrafficRevenue > 0 ? state.utmify.paidTrafficRevenue : consolidatedNet * 0.86;
   const crmEmailRevenue = state.appmax.crmEmailRevenue > 0 ? state.appmax.crmEmailRevenue : consolidatedNet * 0.05;
   const crmSmsRevenue = state.appmax.crmSmsRevenue > 0 ? state.appmax.crmSmsRevenue : consolidatedNet * 0.03;
   const crmWhatsappRevenue = state.appmax.crmWhatsappRevenue > 0 ? state.appmax.crmWhatsappRevenue : consolidatedNet * 0.04;
   const crmTotal = crmEmailRevenue + crmSmsRevenue + crmWhatsappRevenue;
   const revenueBySourceTotal = paidTrafficRevenue + crmTotal;
+  const crmSharePct = safeDivide(crmTotal, revenueBySourceTotal || 1) * 100;
   const ltvD7 = state.utmify.ltv7d > 0 ? state.utmify.ltv7d : Math.max(0, next.finance.ltv24h * 1.35);
   const ltvD30 = state.utmify.ltv30d > 0 ? state.utmify.ltv30d : Math.max(ltvD7, next.enterprise.ceoFinance.ltvCohorts.d30);
   const ltvD90 = state.utmify.ltv90d > 0 ? state.utmify.ltv90d : Math.max(ltvD30, next.enterprise.ceoFinance.ltvCohorts.d90);
+  const averageUpsellTakeRate =
+    (state.kiwify.upsellTakeRates.upsell1 + state.kiwify.upsellTakeRates.upsell2 + state.kiwify.upsellTakeRates.upsell3) /
+    3;
+  const modelWeights = WAR_ROOM_OPS_CONSTANTS.predictiveLtv.weights;
+  const qualityScore =
+    safeDivide(state.appmax.cardApprovalRate, 100) * modelWeights.appmaxApproval +
+    safeDivide(averageUpsellTakeRate, 100) * modelWeights.upsellTakeRate +
+    safeDivide(crmSharePct, 100) * modelWeights.crmShare +
+    (pixelStatus === "unhealthy" ? modelWeights.pixelHealthPenalty : 0) +
+    (state.yampi.cartAbandonmentRate > 60 ? modelWeights.abandonmentPenalty : 0);
+  const ltvBaselineFromD7 = ltvD7 * WAR_ROOM_OPS_CONSTANTS.predictiveLtv.baseGrowthFromD7;
+  const predictedLtv90d = Math.max(0, ltvBaselineFromD7 * (1 + qualityScore));
+  const confidencePct = Math.max(
+    WAR_ROOM_OPS_CONSTANTS.predictiveLtv.confidence.min,
+    Math.min(
+      WAR_ROOM_OPS_CONSTANTS.predictiveLtv.confidence.max,
+      55 + safeDivide(state.appmax.cardApprovalRate, 100) * 25 + safeDivide(averageUpsellTakeRate, 100) * 20,
+    ),
+  );
+  const predictiveDrivers = [
+    `Aprovacao Appmax ${state.appmax.cardApprovalRate.toFixed(2)}%`,
+    `Upsell medio ${averageUpsellTakeRate.toFixed(2)}%`,
+    `Share CRM ${crmSharePct.toFixed(2)}%`,
+    pixelStatus === "unhealthy" ? "Penalidade por divergencia CAPI/Pixel" : "Pixel em faixa saudavel",
+  ];
   const upsellFlowMap = [
     {
       step: "Order Bump",
@@ -319,6 +412,7 @@ export function mergeWarRoomWithIntegrations(base: WarRoomData): WarRoomData {
     apiStatus: state.apiStatus,
     attribution: {
       realRoiLeaderboard: leaderboard.length > 0 ? leaderboard : next.integrations.attribution.realRoiLeaderboard,
+      namingDriftAlerts: buildNamingDriftAlerts(next),
       validatedAssets:
         next.integrations.attribution.validatedAssets.length > 0
           ? next.integrations.attribution.validatedAssets.map((asset) => {
@@ -361,14 +455,19 @@ export function mergeWarRoomWithIntegrations(base: WarRoomData): WarRoomData {
     merCross: {
       value: merValue,
       totalSpend: spendTotal,
-      status: merValue < 2.5 ? "critical" : merValue > 4.0 ? "elite" : "stable",
+      status:
+        merValue < WAR_ROOM_OPS_CONSTANTS.thresholds.mer.operationalCritical
+          ? "critical"
+          : merValue > WAR_ROOM_OPS_CONSTANTS.thresholds.mer.scale
+            ? "elite"
+            : "stable",
       trend12h: state.merTrend12h.length > 1 ? state.merTrend12h : next.integrations.merCross.trend12h,
       recommendation:
-        merValue < 2.5
-          ? "CRITICAL: MER abaixo de 2.5x. Travar escala imediatamente."
-          : merValue > 4.0
-            ? "MER acima de 4.0x. Sugerir +20% de budget ao gestor."
-            : "MER entre 2.5x e 4.0x. Operar escala com monitoramento horario.",
+        merValue < WAR_ROOM_OPS_CONSTANTS.thresholds.mer.operationalCritical
+          ? "CRITICAL: MER abaixo do limiar operacional. Travar escala imediatamente."
+          : merValue > WAR_ROOM_OPS_CONSTANTS.thresholds.mer.scale
+            ? "MER acima da zona de escala. Sugerir +20% de budget ao gestor."
+            : "MER em zona operacional. Operar escala com monitoramento horario.",
     },
     fortress: {
       vault: next.integrations.fortress.vault,
@@ -380,7 +479,7 @@ export function mergeWarRoomWithIntegrations(base: WarRoomData): WarRoomData {
         lastCheckAt: nowLabel(),
         note:
           pixelStatus === "unhealthy"
-            ? "Divergencia > 20% entre vendas reais e Meta. Revisar CAPI/Pixel imediatamente."
+            ? `Divergencia > ${WAR_ROOM_OPS_CONSTANTS.thresholds.pixel.maxDiscrepancyPct}% entre vendas reais e Meta. Revisar CAPI/Pixel imediatamente.`
             : pixelStatus === "no_data"
               ? "Sem dados suficientes para comparar Pixel vs vendas reais."
               : "Sincronia CAPI/Pixel em faixa saudavel.",
@@ -394,12 +493,18 @@ export function mergeWarRoomWithIntegrations(base: WarRoomData): WarRoomData {
           crmWhatsapp: crmWhatsappRevenue,
           crmTotal,
           total: revenueBySourceTotal,
-          crmSharePct: safeDivide(crmTotal, revenueBySourceTotal || 1) * 100,
+          crmSharePct,
         },
         ltvTracker: {
           d7: ltvD7,
           d30: ltvD30,
           d90: ltvD90,
+        },
+        predictiveModel: {
+          predictedLtv90d,
+          baselineFromD7: ltvBaselineFromD7,
+          confidencePct,
+          drivers: predictiveDrivers,
         },
         cohort90d: [
           { cohortLabel: "Atual", projectedRevenue: Math.round(revenueBySourceTotal * 0.34), source: "paid" },
@@ -511,18 +616,20 @@ export function mergeWarRoomWithIntegrations(base: WarRoomData): WarRoomData {
   next.finance.ltv = ltvD90;
   next.finance.netRevenue = realNetProfit;
 
-  const approvalDropThreshold = next.integrations.gateway.appmaxPreviousDayApprovalRate * 0.9;
+  const approvalDropThreshold =
+    next.integrations.gateway.appmaxPreviousDayApprovalRate *
+    (1 - WAR_ROOM_OPS_CONSTANTS.thresholds.appmax.approvalDropAlertPct / 100);
   if (
     next.integrations.gateway.appmaxPreviousDayApprovalRate > 0 &&
     next.integrations.gateway.appmaxCardApprovalRate < approvalDropThreshold
   ) {
     next.integrations.apiStatus.appmax.status = "error";
-    next.integrations.apiStatus.appmax.errorMessage = "Queda >10% vs media D-1 (possivel shadowban/processador).";
+    next.integrations.apiStatus.appmax.errorMessage = `Queda >${WAR_ROOM_OPS_CONSTANTS.thresholds.appmax.approvalDropAlertPct}% vs media D-1 (possivel shadowban/processador).`;
   }
 
   if (next.integrations.fortress.pixelSync.status === "unhealthy") {
     next.integrations.apiStatus.utmify.status = "error";
-    next.integrations.apiStatus.utmify.errorMessage = "Divergencia de Pixel/CAPI acima de 20%.";
+    next.integrations.apiStatus.utmify.errorMessage = `Divergencia de Pixel/CAPI acima de ${WAR_ROOM_OPS_CONSTANTS.thresholds.pixel.maxDiscrepancyPct}%.`;
   }
 
   return next;

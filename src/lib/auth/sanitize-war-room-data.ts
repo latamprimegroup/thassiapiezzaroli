@@ -34,6 +34,10 @@ export function sanitizeWarRoomDataForRole(input: WarRoomData, role: UserRole): 
       ...item,
       projectedRevenue: 0,
     }));
+    data.integrations.fortress.backEndLtv.predictiveModel.predictedLtv90d = 0;
+    data.integrations.fortress.backEndLtv.predictiveModel.baselineFromD7 = 0;
+    data.integrations.fortress.backEndLtv.predictiveModel.confidencePct = 0;
+    data.integrations.fortress.backEndLtv.predictiveModel.drivers = ["Sem permissao para modelo preditivo."];
     data.integrations.fortress.scaleSimulator.projectedNetProfit = 0;
     data.integrations.fortress.scaleSimulator.roiPct = 0;
     data.integrations.fortress.executiveBriefing.summary = "Resumo executivo oculto para este perfil.";
