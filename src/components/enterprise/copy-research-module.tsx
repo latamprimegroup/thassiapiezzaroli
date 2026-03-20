@@ -1,9 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useWarRoom } from "@/context/war-room-context";
+import {
+  computeBigIdeaHealthScore,
+  computeSaturationStatus,
+  estimateVslLeadMinutes,
+  type BigIdeaEmotion,
+  type LeadType,
+} from "@/lib/copy/big-idea-vault";
+import { safeDivide } from "@/lib/metrics/kpis";
+import type { WarRoomData } from "@/lib/war-room/types";
 
 function shelfLifeColor(saturation: number) {
   if (saturation >= 70) return "text-[#EA4335]";
@@ -11,10 +21,322 @@ function shelfLifeColor(saturation: number) {
   return "text-[#34A853]";
 }
 
+type DemandTask = WarRoomData["commandCenter"]["tasks"][number];
+
+type BigIdeaVaultRecord = {
+  id: string;
+  title: string;
+  hook: string;
+  leadType: LeadType;
+  primaryEmotion: BigIdeaEmotion;
+  uniqueMechanismProblem: string;
+  uniqueMechanismSolution: string;
+  nomenclature: string;
+  intellectualNovelty: string;
+  proofSocialUrl: string;
+  proofScientificUrl: string;
+  proofHistoricalUrl: string;
+  swipeReferenceUrl: string;
+  whatToSteal: string;
+  whatToBeat: string;
+  linkedCreativeId: string;
+  runningDays: number;
+  cpaStart: number;
+  cpaCurrent: number;
+  roasCurrent: number;
+  approvedByHead: boolean;
+  archived: boolean;
+  saturationPct: number;
+};
+
+type SwipeRecord = {
+  id: string;
+  market: "BR" | "US";
+  url: string;
+  mechanism: string;
+  whyItWorks: string;
+  howWeDifferentiate: string;
+};
+
+function sanitizeForId(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+}
+
+function buildInitialBigIdeas(data: WarRoomData): BigIdeaVaultRecord[] {
+  return data.enterprise.copyResearch.bigIdeaVault.map((idea, index) => {
+    const linked = data.liveAdsTracking[index % data.liveAdsTracking.length];
+    return {
+      id: idea.id,
+      title: idea.title,
+      hook: `Como ${idea.title.toLowerCase()} pode virar lucro previsivel sem depender de promessas genericas.`,
+      leadType: "segredo",
+      primaryEmotion: "esperanca",
+      uniqueMechanismProblem: data.enterprise.copyResearch.uniqueMechanismProblem,
+      uniqueMechanismSolution: data.enterprise.copyResearch.uniqueMechanismSolution,
+      nomenclature: "Protocolo de Escala Assimetrica",
+      intellectualNovelty:
+        "A novidade intelectual e tratar criativos como ativos de shelf-life com gatilho de saturacao e reposicao sistemica, em vez de pecas isoladas.",
+      proofSocialUrl: "https://example.com/prova-social",
+      proofScientificUrl: "https://example.com/prova-cientifica",
+      proofHistoricalUrl: "https://example.com/prova-historica",
+      swipeReferenceUrl: "https://example.com/swipe-vsl",
+      whatToSteal: "Estrutura de lead com contraste forte nos primeiros 45 segundos.",
+      whatToBeat: "Adicionar mecanismo mais tangivel e prova operacional em tempo real.",
+      linkedCreativeId: linked?.id ?? "N/A",
+      runningDays: 5 + index * 4,
+      cpaStart: Math.max(80, (linked?.cpa ?? 120) * 0.82),
+      cpaCurrent: linked?.cpa ?? 120,
+      roasCurrent: linked?.roas ?? 1.8,
+      approvedByHead: false,
+      archived: false,
+      saturationPct: idea.saturation,
+    };
+  });
+}
+
+function statusLabel(status: "fresh" | "fatiguing" | "saturated") {
+  if (status === "fresh") return "Fresh";
+  if (status === "fatiguing") return "Fatiguing";
+  return "Saturated";
+}
+
 export function CopyResearchModule() {
   const { data, addActivity } = useWarRoom();
   const copyModule = data.enterprise.copyResearch;
   const [script, setScript] = useState(copyModule.scriptEditor);
+  const [ideas, setIdeas] = useState<BigIdeaVaultRecord[]>(() => buildInitialBigIdeas(data));
+  const [selectedIdeaId, setSelectedIdeaId] = useState<string>(() => buildInitialBigIdeas(data)[0]?.id ?? "");
+  const [compareAId, setCompareAId] = useState<string>(() => buildInitialBigIdeas(data)[0]?.id ?? "");
+  const [compareBId, setCompareBId] = useState<string>(() => buildInitialBigIdeas(data)[1]?.id ?? buildInitialBigIdeas(data)[0]?.id ?? "");
+  const [swipes, setSwipes] = useState<SwipeRecord[]>([
+    {
+      id: "SWIPE-001",
+      market: "US",
+      url: "https://example.com/swipe-usa",
+      mechanism: "Nomeia o mecanismo com linguagem de descoberta proprietaria.",
+      whyItWorks: "Combina medo + esperanca com prova factual na abertura.",
+      howWeDifferentiate: "Inserir benchmark de lucro real e recorte por squad para aumentar credibilidade.",
+    },
+  ]);
+  const [newSwipe, setNewSwipe] = useState({
+    market: "BR" as "BR" | "US",
+    url: "",
+    mechanism: "",
+    whyItWorks: "",
+    howWeDifferentiate: "",
+  });
+
+  const selectedIdea = ideas.find((idea) => idea.id === selectedIdeaId) ?? ideas[0];
+
+  function patchSelectedIdea(updater: (idea: BigIdeaVaultRecord) => BigIdeaVaultRecord) {
+    if (!selectedIdea) {
+      return;
+    }
+    setIdeas((prev) => prev.map((idea) => (idea.id === selectedIdea.id ? updater(idea) : idea)));
+  }
+
+  const ideasWithSaturation = useMemo(
+    () =>
+      ideas.map((idea) => {
+        const status = computeSaturationStatus({
+          cpaStart: idea.cpaStart,
+          cpaCurrent: idea.cpaCurrent,
+          roasCurrent: idea.roasCurrent,
+          runningDays: idea.runningDays,
+        });
+        return {
+          ...idea,
+          shelfStatus: status,
+          cpaLiftPct: safeDivide(idea.cpaCurrent - idea.cpaStart, idea.cpaStart || 1) * 100,
+        };
+      }),
+    [ideas],
+  );
+
+  const score = selectedIdea
+    ? computeBigIdeaHealthScore({
+        hook: selectedIdea.hook,
+        uniqueMechanism: selectedIdea.uniqueMechanismSolution,
+        intellectualNovelty: selectedIdea.intellectualNovelty,
+        nomenclature: selectedIdea.nomenclature,
+        proofSocialUrl: selectedIdea.proofSocialUrl,
+        proofScientificUrl: selectedIdea.proofScientificUrl,
+        proofHistoricalUrl: selectedIdea.proofHistoricalUrl,
+        swipeReferenceUrl: selectedIdea.swipeReferenceUrl,
+        whatToSteal: selectedIdea.whatToSteal,
+        whatToBeat: selectedIdea.whatToBeat,
+      })
+    : 0;
+  const hasMechanismDepth = (selectedIdea?.uniqueMechanismSolution.trim().length ?? 0) >= 300;
+  const hasCounterIntuitive = (selectedIdea?.intellectualNovelty.trim().length ?? 0) >= 120;
+  const hasIrrefutableProof =
+    (selectedIdea?.proofSocialUrl.trim().length ?? 0) > 0 &&
+    (selectedIdea?.proofScientificUrl.trim().length ?? 0) > 0 &&
+    (selectedIdea?.proofHistoricalUrl.trim().length ?? 0) > 0;
+  const canDispatch = score >= 70 && hasMechanismDepth;
+
+  const words = script.trim().length > 0 ? script.trim().split(/\s+/).length : 0;
+  const estimatedMinutes = estimateVslLeadMinutes(words);
+
+  async function createSquadTasksForApprovedIdea(idea: BigIdeaVaultRecord) {
+    const marker = `[BIG IDEA ${idea.id}]`;
+    const response = await fetch("/api/command-center/tasks", { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error("Nao foi possivel carregar tarefas do Command Center.");
+    }
+    const payload = (await response.json()) as { tasks?: DemandTask[] };
+    const currentTasks = Array.isArray(payload.tasks) ? payload.tasks : [];
+    const hasWorkflow = currentTasks.some((task) => task.title.includes(marker));
+    if (hasWorkflow) {
+      return;
+    }
+
+    const nowIso = new Date().toISOString();
+    const dueIso = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString();
+    const base = `BIG-${sanitizeForId(idea.id)}-${Date.now()}`;
+    const impact = idea.roasCurrent < 1.5 ? "critical" : "high";
+    const editTask: DemandTask = {
+      id: `${base}-EDT`,
+      department: "editorsCreative",
+      title: `${marker} Briefing de Producao`,
+      description: `Produzir assets para "${idea.title}" | Gancho: ${idea.hook} | Emocao: ${idea.primaryEmotion}.`,
+      squadHead: "Head Edicao - Nati",
+      assignee: "Editor A",
+      status: "backlog",
+      impact,
+      createdAt: nowIso,
+      lastMovedAt: nowIso,
+      dueAt: dueIso,
+      dependencyIds: [],
+      doneApproval: {
+        required: true,
+        approved: false,
+        approvedBy: "",
+        approvedRole: "",
+        approvedAt: "",
+        note: "",
+      },
+      decisionLog: [
+        {
+          at: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+          author: "Head Copy",
+          note: `Big Idea aprovada no Vault: ${idea.id}.`,
+        },
+      ],
+    };
+    const mediaTask: DemandTask = {
+      id: `${base}-MID`,
+      department: "trafficMedia",
+      title: `${marker} Plano de Teste de Criativos`,
+      description: `Criar plano de testes para ${idea.linkedCreativeId} com novo mecanismo (${idea.nomenclature}).`,
+      squadHead: "Head Midia - Caio",
+      assignee: "Media Buyer A",
+      status: "backlog",
+      impact,
+      createdAt: nowIso,
+      lastMovedAt: nowIso,
+      dueAt: dueIso,
+      dependencyIds: [editTask.id],
+      doneApproval: {
+        required: false,
+        approved: false,
+        approvedBy: "",
+        approvedRole: "",
+        approvedAt: "",
+        note: "",
+      },
+      decisionLog: [
+        {
+          at: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+          author: "Head Copy",
+          note: `Plano de midia gerado automaticamente para Big Idea ${idea.id}.`,
+        },
+      ],
+    };
+
+    const save = await fetch("/api/command-center/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tasks: [editTask, mediaTask, ...currentTasks] }),
+    });
+    if (!save.ok) {
+      throw new Error("Falha ao persistir tarefas espelho do Vault.");
+    }
+  }
+
+  async function approveIdeaAndDispatch() {
+    if (!selectedIdea || !canDispatch) {
+      return;
+    }
+    patchSelectedIdea((idea) => ({ ...idea, approvedByHead: true }));
+    addActivity("Head Copy", "Head Copy", "aprovou Big Idea", selectedIdea.id, `score ${score}/100`);
+    try {
+      await createSquadTasksForApprovedIdea(selectedIdea);
+      addActivity("Sistema", "War Room OS", "gerou tarefas por aprovacao de Big Idea", selectedIdea.id, "edicao + midia");
+    } catch (error) {
+      addActivity(
+        "Sistema",
+        "War Room OS",
+        "falhou ao gerar tarefas da Big Idea",
+        selectedIdea.id,
+        error instanceof Error ? error.message : "erro desconhecido",
+      );
+    }
+  }
+
+  function exportBriefingPdf() {
+    if (!selectedIdea) {
+      return;
+    }
+    const w = window.open("", "_blank", "noopener,noreferrer,width=900,height=700");
+    if (!w) {
+      return;
+    }
+    w.document.write(`
+      <html>
+        <head><title>Briefing ${selectedIdea.id}</title></head>
+        <body style="font-family: Arial, sans-serif; padding: 20px;">
+          <h1>Briefing de Edicao - ${selectedIdea.title}</h1>
+          <p><strong>The Hook:</strong> ${selectedIdea.hook}</p>
+          <p><strong>Mecanismo Unico:</strong> ${selectedIdea.uniqueMechanismSolution}</p>
+          <p><strong>Novidade Intelectual:</strong> ${selectedIdea.intellectualNovelty}</p>
+          <p><strong>Emocao-Alvo:</strong> ${selectedIdea.primaryEmotion}</p>
+          <p><strong>Provas:</strong></p>
+          <ul>
+            <li>${selectedIdea.proofSocialUrl}</li>
+            <li>${selectedIdea.proofScientificUrl}</li>
+            <li>${selectedIdea.proofHistoricalUrl}</li>
+          </ul>
+          <p><strong>Lead (Markdown):</strong></p>
+          <pre style="white-space: pre-wrap;">${script.replaceAll("<", "&lt;")}</pre>
+        </body>
+      </html>
+    `);
+    w.document.close();
+    w.focus();
+    w.print();
+  }
+
+  function addSwipe() {
+    if (!newSwipe.url.trim() || !newSwipe.mechanism.trim()) {
+      return;
+    }
+    const entry: SwipeRecord = {
+      id: `SWIPE-${Date.now()}`,
+      market: newSwipe.market,
+      url: newSwipe.url.trim(),
+      mechanism: newSwipe.mechanism.trim(),
+      whyItWorks: newSwipe.whyItWorks.trim(),
+      howWeDifferentiate: newSwipe.howWeDifferentiate.trim(),
+    };
+    setSwipes((prev) => [entry, ...prev]);
+    setNewSwipe({ market: "BR", url: "", mechanism: "", whyItWorks: "", howWeDifferentiate: "" });
+    addActivity("Pesquisa", "Research Squad", "adicionou swipe competitivo", entry.id, entry.market);
+  }
+
+  const compareA = ideas.find((idea) => idea.id === compareAId) ?? ideas[0];
+  const compareB = ideas.find((idea) => idea.id === compareBId) ?? ideas[1] ?? ideas[0];
+  const winnerByCpa = compareA && compareB ? (compareA.cpaCurrent <= compareB.cpaCurrent ? compareA : compareB) : null;
 
   return (
     <section className="war-fade-in space-y-4">
@@ -36,17 +358,385 @@ export function CopyResearchModule() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Big Idea Vault</CardTitle>
+          <CardTitle className="text-base">The Big Idea Vault (Padrao Agora Inc.)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid gap-2 md:grid-cols-2">
+            {ideasWithSaturation.map((idea) => (
+              <div key={idea.id} className="rounded-md border border-white/10 bg-white/5 p-3 text-sm">
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <p className="font-medium text-slate-100">{idea.title}</p>
+                  <Badge
+                    variant={
+                      idea.shelfStatus === "fresh" ? "success" : idea.shelfStatus === "fatiguing" ? "warning" : "danger"
+                    }
+                  >
+                    {statusLabel(idea.shelfStatus)}
+                  </Badge>
+                </div>
+                <p className={`text-xs ${shelfLifeColor(idea.saturationPct)}`}>
+                  Saturacao: {idea.saturationPct}% | Rodagem: {idea.runningDays}d | CPA +{idea.cpaLiftPct.toFixed(1)}%
+                </p>
+                <p className="text-xs text-slate-400">
+                  ROAS {idea.roasCurrent.toFixed(2)} | ID vinculado: {idea.linkedCreativeId}
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Button type="button" className="h-6 px-2 text-[11px]" onClick={() => setSelectedIdeaId(idea.id)}>
+                    Abrir dossie
+                  </Button>
+                  {idea.shelfStatus === "fatiguing" && (
+                    <Button
+                      type="button"
+                      className="h-6 px-2 text-[11px]"
+                      onClick={() =>
+                        addActivity("Head Copy", "Head Copy", "notificou refatoracao de lead", idea.id, "CPA +20% em 7 dias")
+                      }
+                    >
+                      Notificar Head
+                    </Button>
+                  )}
+                  {idea.shelfStatus === "saturated" && !idea.archived && (
+                    <Button
+                      type="button"
+                      className="h-6 px-2 text-[11px]"
+                      onClick={() => {
+                        setIdeas((prev) => prev.map((item) => (item.id === idea.id ? { ...item, archived: true } : item)));
+                        addActivity("Head Copy", "Head Copy", "arquivou Big Idea saturada", idea.id, "ROAS < 1.5");
+                      }}
+                    >
+                      Arquivar ideia
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {selectedIdea && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Ficha de Desconstrucao 9D - {selectedIdea.id}</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="space-y-1 text-xs text-slate-300">
+                <span>Headline Provisoria (Big Idea)</span>
+                <input
+                  value={selectedIdea.title}
+                  onChange={(event) => patchSelectedIdea((idea) => ({ ...idea, title: event.target.value }))}
+                  className="w-full rounded border border-white/10 bg-slate-900/70 px-2 py-1.5 text-sm"
+                />
+              </label>
+              <label className="space-y-1 text-xs text-slate-300">
+                <span>The Hook</span>
+                <input
+                  value={selectedIdea.hook}
+                  onChange={(event) => patchSelectedIdea((idea) => ({ ...idea, hook: event.target.value }))}
+                  className="w-full rounded border border-white/10 bg-slate-900/70 px-2 py-1.5 text-sm"
+                />
+              </label>
+            </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              <label className="space-y-1 text-xs text-slate-300">
+                <span>Lead Type</span>
+                <select
+                  value={selectedIdea.leadType}
+                  onChange={(event) => patchSelectedIdea((idea) => ({ ...idea, leadType: event.target.value as LeadType }))}
+                  className="w-full rounded border border-white/10 bg-slate-900/70 px-2 py-1.5 text-sm"
+                >
+                  <option value="direta">Direta</option>
+                  <option value="indireta">Indireta</option>
+                  <option value="segredo">Segredo</option>
+                  <option value="proclamacao">Proclamacao</option>
+                  <option value="historia">Historia</option>
+                </select>
+              </label>
+              <label className="space-y-1 text-xs text-slate-300">
+                <span>Primary Emotion</span>
+                <select
+                  value={selectedIdea.primaryEmotion}
+                  onChange={(event) =>
+                    patchSelectedIdea((idea) => ({ ...idea, primaryEmotion: event.target.value as BigIdeaEmotion }))
+                  }
+                  className="w-full rounded border border-white/10 bg-slate-900/70 px-2 py-1.5 text-sm"
+                >
+                  <option value="medo">Medo</option>
+                  <option value="ganancia">Ganancia</option>
+                  <option value="revolta">Revolta</option>
+                  <option value="esperanca">Esperanca</option>
+                </select>
+              </label>
+              <label className="space-y-1 text-xs text-slate-300">
+                <span>Nomenclatura Propria</span>
+                <input
+                  value={selectedIdea.nomenclature}
+                  onChange={(event) => patchSelectedIdea((idea) => ({ ...idea, nomenclature: event.target.value }))}
+                  className="w-full rounded border border-white/10 bg-slate-900/70 px-2 py-1.5 text-sm"
+                />
+              </label>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="space-y-1 text-xs text-slate-300">
+                <span>Mecanismo do Problema</span>
+                <textarea
+                  value={selectedIdea.uniqueMechanismProblem}
+                  onChange={(event) =>
+                    patchSelectedIdea((idea) => ({ ...idea, uniqueMechanismProblem: event.target.value }))
+                  }
+                  className="min-h-28 w-full rounded border border-white/10 bg-slate-900/70 p-2 text-sm"
+                />
+              </label>
+              <label className="space-y-1 text-xs text-slate-300">
+                <span>Mecanismo da Solucao (min 300 caracteres)</span>
+                <textarea
+                  value={selectedIdea.uniqueMechanismSolution}
+                  onChange={(event) =>
+                    patchSelectedIdea((idea) => ({ ...idea, uniqueMechanismSolution: event.target.value }))
+                  }
+                  className="min-h-28 w-full rounded border border-white/10 bg-slate-900/70 p-2 text-sm"
+                />
+                <p className={hasMechanismDepth ? "text-[#10B981]" : "text-[#EA4335]"}>
+                  {selectedIdea.uniqueMechanismSolution.length} caracteres
+                </p>
+              </label>
+            </div>
+            <label className="space-y-1 text-xs text-slate-300">
+              <span>Intellectual Novelty</span>
+              <textarea
+                value={selectedIdea.intellectualNovelty}
+                onChange={(event) => patchSelectedIdea((idea) => ({ ...idea, intellectualNovelty: event.target.value }))}
+                className="min-h-24 w-full rounded border border-white/10 bg-slate-900/70 p-2 text-sm"
+              />
+            </label>
+            <div className="grid gap-3 md:grid-cols-3">
+              <label className="space-y-1 text-xs text-slate-300">
+                <span>Prova Social (URL)</span>
+                <input
+                  value={selectedIdea.proofSocialUrl}
+                  onChange={(event) => patchSelectedIdea((idea) => ({ ...idea, proofSocialUrl: event.target.value }))}
+                  className="w-full rounded border border-white/10 bg-slate-900/70 px-2 py-1.5 text-sm"
+                />
+              </label>
+              <label className="space-y-1 text-xs text-slate-300">
+                <span>Prova Cientifica (URL)</span>
+                <input
+                  value={selectedIdea.proofScientificUrl}
+                  onChange={(event) =>
+                    patchSelectedIdea((idea) => ({ ...idea, proofScientificUrl: event.target.value }))
+                  }
+                  className="w-full rounded border border-white/10 bg-slate-900/70 px-2 py-1.5 text-sm"
+                />
+              </label>
+              <label className="space-y-1 text-xs text-slate-300">
+                <span>Prova Historica (URL)</span>
+                <input
+                  value={selectedIdea.proofHistoricalUrl}
+                  onChange={(event) =>
+                    patchSelectedIdea((idea) => ({ ...idea, proofHistoricalUrl: event.target.value }))
+                  }
+                  className="w-full rounded border border-white/10 bg-slate-900/70 px-2 py-1.5 text-sm"
+                />
+              </label>
+            </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              <label className="space-y-1 text-xs text-slate-300">
+                <span>Swipe de Referencia (URL)</span>
+                <input
+                  value={selectedIdea.swipeReferenceUrl}
+                  onChange={(event) =>
+                    patchSelectedIdea((idea) => ({ ...idea, swipeReferenceUrl: event.target.value }))
+                  }
+                  className="w-full rounded border border-white/10 bg-slate-900/70 px-2 py-1.5 text-sm"
+                />
+              </label>
+              <label className="space-y-1 text-xs text-slate-300">
+                <span>O que vamos roubar?</span>
+                <input
+                  value={selectedIdea.whatToSteal}
+                  onChange={(event) => patchSelectedIdea((idea) => ({ ...idea, whatToSteal: event.target.value }))}
+                  className="w-full rounded border border-white/10 bg-slate-900/70 px-2 py-1.5 text-sm"
+                />
+              </label>
+              <label className="space-y-1 text-xs text-slate-300">
+                <span>O que vamos superar?</span>
+                <input
+                  value={selectedIdea.whatToBeat}
+                  onChange={(event) => patchSelectedIdea((idea) => ({ ...idea, whatToBeat: event.target.value }))}
+                  className="w-full rounded border border-white/10 bg-slate-900/70 px-2 py-1.5 text-sm"
+                />
+              </label>
+            </div>
+
+            <div className="rounded border border-white/10 bg-white/5 p-3 text-xs">
+              <p className="mb-1 text-slate-200">Copy Health Score: {score}/100</p>
+              <div className="h-2 rounded bg-slate-800">
+                <div
+                  className={`h-2 rounded ${score >= 70 ? "bg-[#10B981]" : "bg-[#EA4335]"}`}
+                  style={{ width: `${Math.min(100, score)}%` }}
+                />
+              </div>
+              <p className="mt-2 text-slate-400">
+                Regra de bloqueio: Mecanismo Unico &lt; 300 caracteres ou score &lt; 70 impede envio ao squad.
+              </p>
+              <div className="mt-2 grid gap-1">
+                <p className={hasMechanismDepth ? "text-[#10B981]" : "text-[#EA4335]"}>( ) Tem Mecanismo Unico</p>
+                <p className={hasCounterIntuitive ? "text-[#10B981]" : "text-[#EA4335]"}>( ) E contra-intuitivo</p>
+                <p className={hasIrrefutableProof ? "text-[#10B981]" : "text-[#EA4335]"}>( ) A prova e irrefutavel</p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                className="h-8 px-3 text-xs"
+                onClick={() =>
+                  addActivity(
+                    "Copywriter",
+                    "Equipe Copy",
+                    "enviou draft para revisao do head",
+                    selectedIdea.id,
+                    `checklist ${hasMechanismDepth && hasCounterIntuitive && hasIrrefutableProof ? "ok" : "incompleto"}`,
+                  )
+                }
+              >
+                Enviar para Revisao do Head
+              </Button>
+              <Button type="button" className="h-8 px-3 text-xs" onClick={approveIdeaAndDispatch} disabled={!canDispatch}>
+                Aprovar Big Idea e enviar para Squads
+              </Button>
+              <Button type="button" className="h-8 px-3 text-xs" onClick={exportBriefingPdf}>
+                Exportar Briefing para PDF
+              </Button>
+              {selectedIdea.approvedByHead && <Badge variant="success">Aprovada pelo Head</Badge>}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Dashboard de Comparacao de Angulos</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          {copyModule.bigIdeaVault.map((idea) => (
-            <div key={idea.id} className="rounded-md border border-white/10 bg-white/5 p-2 text-sm">
-              <p className="font-medium text-slate-100">{idea.title}</p>
-              <p className={`text-xs ${shelfLifeColor(idea.saturation)}`}>
-                Saturacao: {idea.saturation}% | Shelf-life ate {idea.expiresAt}
+          <div className="grid gap-2 md:grid-cols-2">
+            <select
+              value={compareA?.id ?? ""}
+              onChange={(event) => setCompareAId(event.target.value)}
+              className="rounded border border-white/10 bg-slate-900/70 px-2 py-1.5 text-sm"
+            >
+              {ideas.map((idea) => (
+                <option key={idea.id} value={idea.id}>
+                  {idea.id} - {idea.title}
+                </option>
+              ))}
+            </select>
+            <select
+              value={compareB?.id ?? ""}
+              onChange={(event) => setCompareBId(event.target.value)}
+              className="rounded border border-white/10 bg-slate-900/70 px-2 py-1.5 text-sm"
+            >
+              {ideas.map((idea) => (
+                <option key={idea.id} value={idea.id}>
+                  {idea.id} - {idea.title}
+                </option>
+              ))}
+            </select>
+          </div>
+          {compareA && compareB && (
+            <div className="rounded-md border border-white/10 bg-white/5 p-3 text-xs">
+              <p>
+                {compareA.id}: CPA {compareA.cpaCurrent.toFixed(2)} | ROAS {compareA.roasCurrent.toFixed(2)}
+              </p>
+              <p>
+                {compareB.id}: CPA {compareB.cpaCurrent.toFixed(2)} | ROAS {compareB.roasCurrent.toFixed(2)}
+              </p>
+              <p className="mt-1 text-[#10B981]">
+                Menor CPA historico: {winnerByCpa?.id ?? "--"} ({winnerByCpa?.cpaCurrent.toFixed(2) ?? "--"})
               </p>
             </div>
-          ))}
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Biblioteca de Swipes (Inteligencia Competitiva)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid gap-2 md:grid-cols-5">
+            <select
+              value={newSwipe.market}
+              onChange={(event) => setNewSwipe((prev) => ({ ...prev, market: event.target.value as "BR" | "US" }))}
+              className="rounded border border-white/10 bg-slate-900/70 px-2 py-1.5 text-sm"
+            >
+              <option value="BR">BR</option>
+              <option value="US">US</option>
+            </select>
+            <input
+              value={newSwipe.url}
+              onChange={(event) => setNewSwipe((prev) => ({ ...prev, url: event.target.value }))}
+              placeholder="URL do anuncio/VSL"
+              className="rounded border border-white/10 bg-slate-900/70 px-2 py-1.5 text-sm md:col-span-2"
+            />
+            <input
+              value={newSwipe.mechanism}
+              onChange={(event) => setNewSwipe((prev) => ({ ...prev, mechanism: event.target.value }))}
+              placeholder="Qual o mecanismo deles?"
+              className="rounded border border-white/10 bg-slate-900/70 px-2 py-1.5 text-sm md:col-span-2"
+            />
+            <input
+              value={newSwipe.whyItWorks}
+              onChange={(event) => setNewSwipe((prev) => ({ ...prev, whyItWorks: event.target.value }))}
+              placeholder="Por que esta funcionando?"
+              className="rounded border border-white/10 bg-slate-900/70 px-2 py-1.5 text-sm md:col-span-3"
+            />
+            <input
+              value={newSwipe.howWeDifferentiate}
+              onChange={(event) => setNewSwipe((prev) => ({ ...prev, howWeDifferentiate: event.target.value }))}
+              placeholder="Como podemos ser diferentes?"
+              className="rounded border border-white/10 bg-slate-900/70 px-2 py-1.5 text-sm md:col-span-2"
+            />
+          </div>
+          <Button type="button" className="h-8 px-3 text-xs" onClick={addSwipe}>
+            Adicionar Swipe
+          </Button>
+          <div className="space-y-2">
+            {swipes.map((swipe) => (
+              <div key={swipe.id} className="rounded-md border border-white/10 bg-white/5 p-2 text-xs">
+                <p className="text-slate-100">
+                  {swipe.market} | {swipe.url}
+                </p>
+                <p className="text-slate-300">Mecanismo: {swipe.mechanism}</p>
+                <p className="text-slate-400">Por que funciona: {swipe.whyItWorks}</p>
+                <p className="text-[#FFB347]">Como superar: {swipe.howWeDifferentiate}</p>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Writer Focus Mode (Markdown)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <textarea
+            value={script}
+            onChange={(event) => setScript(event.target.value)}
+            className="min-h-48 w-full rounded-md border border-white/10 bg-slate-900/70 p-3 font-mono text-sm"
+          />
+          <div className="flex flex-wrap gap-2 text-xs text-slate-400">
+            <span>Palavras: {words}</span>
+            <span>Tempo estimado de lead: {estimatedMinutes.toFixed(1)} min</span>
+          </div>
+          <button
+            onClick={() => addActivity("Copywriter", "Equipe Copy", "atualizou roteiro VSL", "Writer Focus Mode", "rascunho markdown")}
+            className="rounded border border-[#FF9900]/40 bg-[#FF9900]/20 px-3 py-1 text-xs text-[#FFD39A]"
+          >
+            Salvar rascunho
+          </button>
+          <Badge variant="warning">Dossie Secreto ativo</Badge>
         </CardContent>
       </Card>
 
@@ -63,26 +753,6 @@ export function CopyResearchModule() {
               <p className="text-[#FF9900]">Insight do Suporte: {avatar.supportInsight}</p>
             </div>
           ))}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Script Editor (Lead, Body, Offer)</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <textarea
-            value={script}
-            onChange={(event) => setScript(event.target.value)}
-            className="min-h-40 w-full rounded-md border border-white/10 bg-slate-900/70 p-3 text-sm"
-          />
-          <button
-            onClick={() => addActivity("Copywriter", "Equipe Copy", "atualizou roteiro VSL", "Script Editor", "novo angulo de oferta")}
-            className="rounded border border-[#FF9900]/40 bg-[#FF9900]/20 px-3 py-1 text-xs text-[#FFD39A]"
-          >
-            Salvar rascunho
-          </button>
-          <Badge variant="warning">Modulo Brain ativo</Badge>
         </CardContent>
       </Card>
     </section>
