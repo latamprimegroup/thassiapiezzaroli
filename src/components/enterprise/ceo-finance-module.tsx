@@ -2,6 +2,7 @@
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { GaugeChart } from "@/components/ui/gauge-chart";
 import { Sparkline } from "@/components/ui/sparkline";
 import { useWarRoom } from "@/context/war-room-context";
 import { computeIntelligenceEngine, ELITE_BENCHMARKS } from "@/lib/metrics/intelligence-engine";
@@ -99,6 +100,7 @@ export function CeoFinanceModule({ canViewSensitiveFinancials }: CeoFinanceModul
             </div>
             <p className="text-xs text-slate-400">{merCross.recommendation}</p>
           </div>
+          <GaugeChart value={merCross.value} min={0} max={5} label="Gauge MER Global" />
         </CardContent>
       </Card>
 
@@ -148,6 +150,10 @@ export function CeoFinanceModule({ canViewSensitiveFinancials }: CeoFinanceModul
         <CardContent className="space-y-2 text-sm">
           <p>Aprovacao cartao Appmax: {percent(appmaxApproval)}</p>
           <p>Faturamento liquido consolidado: {currency(data.integrations.gateway.consolidatedNetRevenue)}</p>
+          <p className="text-slate-400">
+            Lucro real = Receita Bruta - Gateway - Impostos ({data.integrations.gateway.taxRatePct.toFixed(2)}%) - AdSpend -
+            Custos Fixos ({currency(data.integrations.gateway.fixedCosts)})
+          </p>
           {appmaxApproval > 0 && appmaxApproval < 80 ? (
             <Badge variant="danger">ALERTA FINANCEIRO: aprovacao de cartao abaixo de 80%</Badge>
           ) : (

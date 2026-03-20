@@ -199,12 +199,24 @@ export type WarRoomData = {
         realProfit: number;
         realRoas: number;
       }>;
+      validatedAssets: Array<{
+        assetId: string;
+        inputCpa: number;
+        effectiveCpa: number;
+        status: "scale" | "stabilize" | "pause";
+        trackingSource: "facebookApi" | "utmifyClickToPurchase";
+        note: string;
+        salesVolumeShare: number;
+      }>;
     };
     gateway: {
       consolidatedGrossRevenue: number;
       consolidatedNetRevenue: number;
       appmaxCardApprovalRate: number;
+      appmaxPreviousDayApprovalRate: number;
       yampiCartAbandonmentRate: number;
+      fixedCosts: number;
+      taxRatePct: number;
       kiwifyUpsellTakeRates: {
         upsell1: number;
         upsell2: number;

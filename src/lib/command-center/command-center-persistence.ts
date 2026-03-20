@@ -51,7 +51,7 @@ export async function approveTaskForDone(params: {
   const updated: DemandTask = {
     ...target,
     doneApproval: {
-      required: target.department === "editorsCreative" ? true : target.doneApproval.required,
+      required: target.department === "editorsCreative" ? true : (target.doneApproval?.required ?? false),
       approved: true,
       approvedBy: params.approverName,
       approvedRole: params.approverRole,

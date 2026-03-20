@@ -51,6 +51,7 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
   const [sessionState, setSessionState] = useState(session);
   const [activityLog, setActivityLog] = useState(data.activityLog);
   const [isSwitchingUser, setIsSwitchingUser] = useState(false);
+  const [ceoMode, setCeoMode] = useState(false);
 
   const initialSection = rolePermissions[session.role].allowedSections[0];
   const [activeSection, setActiveSection] = useState<SectionId>(initialSection);
@@ -216,6 +217,16 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
+                {sessionState.role === "ceo" && (
+                  <button
+                    onClick={() => setCeoMode((prev) => !prev)}
+                    className={`rounded border px-2 py-1 text-xs ${
+                      ceoMode ? "border-[#10B981]/50 bg-[#10B981]/20 text-[#C9FFE9]" : "border-white/20 bg-white/5 text-slate-300"
+                    }`}
+                  >
+                    {ceoMode ? "Modo Completo" : "Modo CEO"}
+                  </button>
+                )}
                 {users.map((user) => {
                   const selected = user.id === sessionState.userId;
                   return (
@@ -240,6 +251,35 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
               <Card className="mb-4 border-rose-300/40 bg-rose-500/10">
                 <CardContent className="p-3 text-sm text-rose-100">
                   CRITICAL: MER global em {viewData.integrations.merCross.value.toFixed(2)}x. Escala travada para todos os setores.
+                </CardContent>
+              </Card>
+            )}
+
+            {ceoMode && sessionState.role === "ceo" && (
+              <Card className="mb-4 border-[#FF9900]/40 bg-[#050505]">
+                <CardHeader>
+                  <CardTitle className="text-base">Modo CEO (Visao simplificada)</CardTitle>
+                  <CardDescription>Investimento do dia, faturamento bruto e lucro liquido real</CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-3 md:grid-cols-3">
+                  <div className="rounded border border-white/10 bg-white/5 p-3">
+                    <p className="text-xs text-slate-400">Investimento do Dia</p>
+                    <p className="text-2xl font-semibold text-slate-100">
+                      {viewData.globalOverview.investment.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}
+                    </p>
+                  </div>
+                  <div className="rounded border border-white/10 bg-white/5 p-3">
+                    <p className="text-xs text-slate-400">Faturamento Bruto</p>
+                    <p className="text-2xl font-semibold text-slate-100">
+                      {viewData.integrations.gateway.consolidatedGrossRevenue.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}
+                    </p>
+                  </div>
+                  <div className="rounded border border-white/10 bg-white/5 p-3">
+                    <p className="text-xs text-slate-400">Lucro Liquido Real</p>
+                    <p className="text-2xl font-semibold text-[#10B981]">
+                      {viewData.enterprise.ceoFinance.netProfit.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}
+                    </p>
+                  </div>
                 </CardContent>
               </Card>
             )}

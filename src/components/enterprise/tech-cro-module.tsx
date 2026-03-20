@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Sparkline } from "@/components/ui/sparkline";
@@ -14,6 +15,38 @@ export function TechCroModule() {
   const tech = data.enterprise.techCro;
   const intelligence = computeIntelligenceEngine(data);
   const apiStatus = data.integrations.apiStatus;
+  const audioGuardRef = useRef<string>("");
+
+  useEffect(() => {
+    const shouldAlert = tech.lcpSeconds > 1.5 || intelligence.gatewayHealth.alert;
+    if (!shouldAlert) {
+      audioGuardRef.current = "";
+      return;
+    }
+    const guardKey = `${tech.lcpSeconds.toFixed(2)}-${intelligence.gatewayHealth.currentApproval.toFixed(2)}`;
+    if (audioGuardRef.current === guardKey) {
+      return;
+    }
+    audioGuardRef.current = guardKey;
+    const AudioContextImpl =
+      typeof window !== "undefined" ? window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext : undefined;
+    if (!AudioContextImpl) {
+      return;
+    }
+    const context = new AudioContextImpl();
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.type = "square";
+    oscillator.frequency.value = 760;
+    gain.gain.value = 0.02;
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start();
+    oscillator.stop(context.currentTime + 0.18);
+    oscillator.onended = () => {
+      void context.close();
+    };
+  }, [intelligence.gatewayHealth.alert, intelligence.gatewayHealth.currentApproval, tech.lcpSeconds]);
 
   function renderProviderStatus(
     label: string,
@@ -80,10 +113,10 @@ export function TechCroModule() {
           <CardTitle className="text-base">LCP Monitor</CardTitle>
         </CardHeader>
         <CardContent className="text-sm">
-          <p className={tech.lcpSeconds <= 1.2 ? "text-[#34A853]" : "text-[#EA4335]"}>
+          <p className={tech.lcpSeconds <= 1.5 ? "text-[#34A853]" : "text-[#EA4335]"}>
             LCP atual: {tech.lcpSeconds.toFixed(2)}s
           </p>
-          {tech.lcpSeconds > 1.2 && <Badge variant="danger">ALERTA: acima de 1.2s</Badge>}
+          {tech.lcpSeconds > 1.5 && <Badge variant="danger">ALERTA HEAD TECH: LCP acima de 1.5s</Badge>}
         </CardContent>
       </Card>
 
@@ -119,6 +152,11 @@ export function TechCroModule() {
           )}
           {intelligence.metrics.icRate < ELITE_BENCHMARKS.icRate && (
             <Badge variant="danger">Alerta DSS: friccao detectada em checkout</Badge>
+          )}
+          {intelligence.gatewayHealth.alert && (
+            <Badge variant="danger">
+              APPMAX ALERTA: aprovacao caiu {intelligence.gatewayHealth.dropPct.toFixed(2)}% vs dia anterior
+            </Badge>
           )}
         </CardContent>
       </Card>

@@ -15,6 +15,7 @@ export type UtmifyCreativeMetric = {
   spend: number;
   profit: number;
   roas: number;
+  clickToPurchaseCpa: number;
 };
 
 export type UnifiedProviderEvent = {
@@ -25,6 +26,7 @@ export type UnifiedProviderEvent = {
   spend: number;
   cart_abandonment_rate: number;
   card_approval_rate: number;
+  appmax_previous_day_approval_rate: number;
   upsell_take_rates: {
     upsell1: number;
     upsell2: number;
@@ -93,6 +95,7 @@ function buildBaseEvent(provider: ProviderName): UnifiedProviderEvent {
     spend: 0,
     cart_abandonment_rate: 0,
     card_approval_rate: 0,
+    appmax_previous_day_approval_rate: 0,
     upsell_take_rates: {
       upsell1: 0,
       upsell2: 0,
@@ -124,6 +127,7 @@ const utmifyAdapter: GatewayAdapter = {
         spend: toNumber(row.spend ?? row.gasto, 0),
         profit: toNumber(row.profit ?? row.net_profit ?? row.lucro, 0),
         roas: toNumber(row.roas ?? row.roas_real ?? row.roi, 0),
+        clickToPurchaseCpa: toNumber(row.click_to_purchase_cpa ?? row.c2p_cpa ?? row.cpa_utmify, 0),
       };
     });
     return base;
@@ -141,6 +145,10 @@ const appmaxAdapter: GatewayAdapter = {
     base.valor_bruto = toNumber(root.total_value ?? root.amount ?? root.valor_bruto, 0);
     base.valor_liquido = toNumber(root.net_value ?? root.net_amount ?? root.valor_liquido, 0);
     base.card_approval_rate = toPercent(root.card_approval_rate ?? root.approval_card ?? root.approval_rate_card, 0);
+    base.appmax_previous_day_approval_rate = toPercent(
+      root.previous_day_approval_rate ?? root.approval_rate_yesterday ?? root.approval_card_d1,
+      0,
+    );
 
     base.recovery_agents = asArray(root.recovery_agents ?? root.televendas ?? root.recovery).map((item) => {
       const row = asObject(item);

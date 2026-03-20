@@ -21,6 +21,15 @@ type MetricAssessment = {
   action: string;
 };
 
+const VALIDATED_ASSET_INPUT = [
+  { assetId: "1450", cpa: 98 },
+  { assetId: "1400", cpa: 103 },
+  { assetId: "1402", cpa: 95 },
+  { assetId: "1059", cpa: 129 },
+  { assetId: "1076", cpa: 135 },
+  { assetId: "1400 REFEITO", cpa: 107 },
+] as const;
+
 export const ELITE_BENCHMARKS = {
   hookRate: 25,
   holdRate15s: 30,
@@ -37,6 +46,45 @@ function toStatus(value: number, benchmark: number): OrderStatus {
     return "scaling";
   }
   return "failing";
+}
+
+function statusByCpa(cpa: number) {
+  if (cpa < 105) {
+    return "scale" as const;
+  }
+  if (cpa <= 120) {
+    return "stabilize" as const;
+  }
+  return "pause" as const;
+}
+
+function buildValidatedAssets(data: WarRoomData) {
+  const source = data.integrations.attribution.validatedAssets;
+  const merged = VALIDATED_ASSET_INPUT.map((asset) => {
+    const fromSource = source.find((row) => row.assetId === asset.assetId);
+    const isTrackingOverride = asset.assetId === "1400 REFEITO";
+    const effectiveCpa =
+      isTrackingOverride && fromSource?.trackingSource === "utmifyClickToPurchase"
+        ? fromSource.effectiveCpa || asset.cpa
+        : fromSource?.effectiveCpa || asset.cpa;
+    const status = statusByCpa(effectiveCpa);
+    return {
+      assetId: asset.assetId,
+      inputCpa: asset.cpa,
+      effectiveCpa,
+      status,
+      trackingSource: isTrackingOverride ? "utmifyClickToPurchase" : (fromSource?.trackingSource ?? "facebookApi"),
+      note: isTrackingOverride
+        ? "Tracking Error: usar somente Click-to-Purchase da Utmify."
+        : status === "scale"
+          ? "Escala vertical liberada."
+          : status === "stabilize"
+            ? "Ativo em estabilizacao."
+            : "Pausar e refatorar.",
+      salesVolumeShare: fromSource?.salesVolumeShare ?? 10,
+    };
+  });
+  return merged.sort((a, b) => a.effectiveCpa - b.effectiveCpa);
 }
 
 export function inferAngle(campaign: string, adName: string) {
@@ -260,6 +308,7 @@ export function computeIntelligenceEngine(data: WarRoomData) {
   const assessments = assessMetrics(metrics);
   const angles = summarizeAngles(data);
   const angleMovement = deriveAngleMovement(angles);
+  const validatedAssets = buildValidatedAssets(data);
 
   const editorPriorities = data.liveAdsTracking
     .map((row) => ({ row, hookRate: computeKpis(row).hookRate, holdRate: computeKpis(row).holdRate }))
@@ -278,6 +327,20 @@ export function computeIntelligenceEngine(data: WarRoomData) {
       ctrNow: row.uniqueCtr,
       ctrTrend: row.uniqueCtrTrend3d,
     }));
+
+  const redAssets = validatedAssets.filter((asset) => asset.status === "pause");
+  const autoMirrorTriggers = redAssets.map((asset) => ({
+    sourceAssetId: asset.assetId,
+    copyTask: `Análise de Gancho - ${asset.assetId}`,
+    editTask: `Produção de 5 variações de Hook - ${asset.assetId}`,
+    impact: asset.salesVolumeShare >= 18 ? "critical" : "high",
+  }));
+
+  const currentApproval = data.integrations.gateway.appmaxCardApprovalRate;
+  const prevDayApproval = data.integrations.gateway.appmaxPreviousDayApprovalRate;
+  const gatewayApprovalDropPct =
+    prevDayApproval > 0 ? ((prevDayApproval - currentApproval) / prevDayApproval) * 100 : 0;
+  const gatewayHealthAlert = prevDayApproval > 0 && currentApproval < prevDayApproval * 0.9;
 
   const now = new Date();
   const generatedAt = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
@@ -304,6 +367,14 @@ export function computeIntelligenceEngine(data: WarRoomData) {
     },
     editorPriorities,
     audienceFatigue,
+    validatedAssets,
+    autoMirrorTriggers,
+    gatewayHealth: {
+      currentApproval,
+      prevDayApproval,
+      dropPct: gatewayApprovalDropPct,
+      alert: gatewayHealthAlert,
+    },
     angleComparative: angles.sort((a, b) => a.avgCpa - b.avgCpa),
     angleMovement,
     commandOrders: orders,

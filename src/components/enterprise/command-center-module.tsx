@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useWarRoom } from "@/context/war-room-context";
 import { isFatigueImminent } from "@/lib/metrics/kpis";
+import { computeIntelligenceEngine } from "@/lib/metrics/intelligence-engine";
 import type { DemandDepartment, DemandStatus, FinancialImpact, WarRoomData } from "@/lib/war-room/types";
 import type { UserRole } from "@/lib/auth/rbac";
 
@@ -120,6 +121,7 @@ export function CommandCenterModule({ actorName, actorRole }: CommandCenterModul
   );
   const [selectedFatigueCreativeId, setSelectedFatigueCreativeId] = useState(fatigueWinners[0]?.id ?? "");
   const effectiveSelectedFatigueCreativeId = selectedFatigueCreativeId || fatigueWinners[0]?.id || "";
+  const intelligence = useMemo(() => computeIntelligenceEngine(data), [data]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNowMs(Date.now()), 60_000);
@@ -142,6 +144,86 @@ export function CommandCenterModule({ actorName, actorRole }: CommandCenterModul
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (intelligence.autoMirrorTriggers.length === 0) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      commitTasks((prev) => {
+        let changed = false;
+        const next = [...prev];
+        for (const trigger of intelligence.autoMirrorTriggers) {
+          const alreadyOpen = next.some(
+            (task) =>
+              task.status !== "done" &&
+              task.impact === "critical" &&
+              (task.title.includes(trigger.sourceAssetId) || task.description.includes(trigger.sourceAssetId)),
+          );
+          if (alreadyOpen) {
+            continue;
+          }
+          changed = true;
+          const nowIso = new Date().toISOString();
+          const dueIso = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString();
+          const baseId = `AUTO-${trigger.sourceAssetId}-${Date.now()}`;
+          next.unshift(
+            {
+              id: `${baseId}-CPY`,
+              department: "copyResearch",
+              title: trigger.copyTask,
+              description: `Trigger automatico por asset em vermelho: ${trigger.sourceAssetId}.`,
+              squadHead: "Head Copy - Ana",
+              assignee: "Copywriter A",
+              status: "backlog",
+              impact: trigger.impact as FinancialImpact,
+              createdAt: nowIso,
+              lastMovedAt: nowIso,
+              dueAt: dueIso,
+              dependencyIds: [],
+              doneApproval: {
+                required: false,
+                approved: false,
+                approvedBy: "",
+                approvedRole: "",
+                approvedAt: "",
+                note: "",
+              },
+              decisionLog: [{ at: toShortTime(nowIso), author: "Sistema", note: "Task espelho automatica (COPY)." }],
+            },
+            {
+              id: `${baseId}-EDT`,
+              department: "editorsCreative",
+              title: trigger.editTask,
+              description: `Trigger automatico por asset em vermelho: ${trigger.sourceAssetId}.`,
+              squadHead: "Head Edicao - Nati",
+              assignee: "Editor A",
+              status: "backlog",
+              impact: trigger.impact as FinancialImpact,
+              createdAt: nowIso,
+              lastMovedAt: nowIso,
+              dueAt: dueIso,
+              dependencyIds: [`${baseId}-CPY`],
+              doneApproval: {
+                required: true,
+                approved: false,
+                approvedBy: "",
+                approvedRole: "",
+                approvedAt: "",
+                note: "",
+              },
+              decisionLog: [{ at: toShortTime(nowIso), author: "Sistema", note: "Task espelho automatica (EDICAO)." }],
+            },
+          );
+        }
+        if (changed) {
+          addActivity("Sistema", "War Room AI", "gerou tarefas espelho automaticas", "Command Center", "assets em vermelho");
+        }
+        return changed ? next : prev;
+      });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [addActivity, intelligence.autoMirrorTriggers]);
 
   async function persistTasks(nextTasks: DemandTask[]) {
     await fetch("/api/command-center/tasks", {
@@ -168,8 +250,8 @@ export function CommandCenterModule({ actorName, actorRole }: CommandCenterModul
     if (
       status === "done" &&
       current?.department === "editorsCreative" &&
-      current.doneApproval.required &&
-      !current.doneApproval.approved
+      current.doneApproval?.required &&
+      !current.doneApproval?.approved
     ) {
       addActivity("COO", actorName, "bloqueou done sem aprovacao", taskId, "exige aprovacao de Midia/CEO");
       return;
@@ -447,16 +529,16 @@ export function CommandCenterModule({ actorName, actorRole }: CommandCenterModul
           </div>
         </div>
 
-        {task.doneApproval.required && (
+        {task.doneApproval?.required && (
           <div className="mb-2 rounded border border-white/10 bg-black/40 px-1.5 py-1 text-[11px]">
-            {task.doneApproval.approved ? (
+            {task.doneApproval?.approved ? (
               <p className="text-[#10B981]">
-                Gate Done: aprovado por {task.doneApproval.approvedBy || "--"} ({task.doneApproval.approvedRole || "--"})
+                Gate Done: aprovado por {task.doneApproval?.approvedBy || "--"} ({task.doneApproval?.approvedRole || "--"})
               </p>
             ) : (
               <p className="text-[#FF9900]">Gate Done: aguardando aprovacao de Head Midia/CEO</p>
             )}
-            {!task.doneApproval.approved && canApproveDone && (
+            {!task.doneApproval?.approved && canApproveDone && (
               <Button type="button" className="mt-1 h-6 px-2 text-[11px]" onClick={() => void approveTask(task.id)}>
                 Aprovar Qualidade
               </Button>

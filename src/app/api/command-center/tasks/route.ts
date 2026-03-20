@@ -36,8 +36,8 @@ export async function POST(request: Request) {
     (task) =>
       task.department === "editorsCreative" &&
       task.status === "done" &&
-      task.doneApproval.required &&
-      !task.doneApproval.approved,
+      task.doneApproval?.required &&
+      !task.doneApproval?.approved,
   );
   if (invalidDone) {
     return NextResponse.json(

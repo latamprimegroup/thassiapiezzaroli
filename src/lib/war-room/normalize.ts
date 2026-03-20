@@ -638,6 +638,30 @@ export function normalizeWarRoomData(
             realRoas: toNumber(row.realRoas, fallbackItem.realRoas),
           };
         }),
+        validatedAssets: (Array.isArray(toObject(integrationsInput.attribution).validatedAssets)
+          ? (toObject(integrationsInput.attribution).validatedAssets as unknown[])
+          : fallback.integrations.attribution.validatedAssets
+        ).map((item, index) => {
+          const row = toObject(item);
+          const fallbackItem =
+            fallback.integrations.attribution.validatedAssets[
+              index % fallback.integrations.attribution.validatedAssets.length
+            ];
+          const status = row.status;
+          const trackingSource = row.trackingSource;
+          return {
+            assetId: toString(row.assetId, fallbackItem.assetId),
+            inputCpa: toNumber(row.inputCpa, fallbackItem.inputCpa),
+            effectiveCpa: toNumber(row.effectiveCpa, fallbackItem.effectiveCpa),
+            status: status === "scale" || status === "stabilize" || status === "pause" ? status : fallbackItem.status,
+            trackingSource:
+              trackingSource === "facebookApi" || trackingSource === "utmifyClickToPurchase"
+                ? trackingSource
+                : fallbackItem.trackingSource,
+            note: toString(row.note, fallbackItem.note),
+            salesVolumeShare: toNumber(row.salesVolumeShare, fallbackItem.salesVolumeShare),
+          };
+        }),
       },
       gateway: {
         consolidatedGrossRevenue: toNumber(
@@ -652,10 +676,16 @@ export function normalizeWarRoomData(
           toObject(integrationsInput.gateway).appmaxCardApprovalRate,
           fallback.integrations.gateway.appmaxCardApprovalRate,
         ),
+        appmaxPreviousDayApprovalRate: toNumber(
+          toObject(integrationsInput.gateway).appmaxPreviousDayApprovalRate,
+          fallback.integrations.gateway.appmaxPreviousDayApprovalRate,
+        ),
         yampiCartAbandonmentRate: toNumber(
           toObject(integrationsInput.gateway).yampiCartAbandonmentRate,
           fallback.integrations.gateway.yampiCartAbandonmentRate,
         ),
+        fixedCosts: toNumber(toObject(integrationsInput.gateway).fixedCosts, fallback.integrations.gateway.fixedCosts),
+        taxRatePct: toNumber(toObject(integrationsInput.gateway).taxRatePct, fallback.integrations.gateway.taxRatePct),
         kiwifyUpsellTakeRates: {
           upsell1: toNumber(
             toObject(toObject(integrationsInput.gateway).kiwifyUpsellTakeRates).upsell1,

@@ -13,12 +13,13 @@ type IntegrationState = {
   apiStatus: Record<ProviderName, ApiStatus>;
   utmify: {
     spendTotal: number;
-    creatives: Record<string, { source: TrafficSourceKey; profit: number; roas: number }>;
+    creatives: Record<string, { source: TrafficSourceKey; profit: number; roas: number; clickToPurchaseCpa: number }>;
   };
   appmax: {
     gross: number;
     net: number;
     cardApprovalRate: number;
+    previousDayApprovalRate: number;
     recoveryAgents: RecoveryAgent[];
   };
   kiwify: {
@@ -32,6 +33,10 @@ type IntegrationState = {
   };
   yampi: {
     cartAbandonmentRate: number;
+  };
+  config: {
+    fixedCosts: number;
+    taxRatePct: number;
   };
   merTrend12h: number[];
 };
@@ -60,6 +65,7 @@ function createInitialState(): IntegrationState {
       gross: 0,
       net: 0,
       cardApprovalRate: 0,
+      previousDayApprovalRate: 0,
       recoveryAgents: [],
     },
     kiwify: {
@@ -73,6 +79,10 @@ function createInitialState(): IntegrationState {
     },
     yampi: {
       cartAbandonmentRate: 0,
+    },
+    config: {
+      fixedCosts: Number(process.env.WAR_ROOM_FIXED_COSTS ?? 0) || 0,
+      taxRatePct: Number(process.env.WAR_ROOM_TAX_RATE_PCT ?? 0) || 0,
     },
     merTrend12h: [0],
   };
@@ -114,6 +124,7 @@ export function ingestIntegrationEvent(event: UnifiedProviderEvent) {
         source: creative.source,
         profit: creative.profit,
         roas: creative.roas,
+        clickToPurchaseCpa: creative.clickToPurchaseCpa,
       };
     }
     state.apiStatus.utmify = {
@@ -134,6 +145,10 @@ export function ingestIntegrationEvent(event: UnifiedProviderEvent) {
     state.appmax.net = event.valor_liquido > 0 ? event.valor_liquido : state.appmax.net;
     state.appmax.cardApprovalRate =
       event.card_approval_rate > 0 ? event.card_approval_rate : state.appmax.cardApprovalRate;
+    state.appmax.previousDayApprovalRate =
+      event.appmax_previous_day_approval_rate > 0
+        ? event.appmax_previous_day_approval_rate
+        : state.appmax.previousDayApprovalRate;
     state.appmax.recoveryAgents = event.recovery_agents.length > 0 ? event.recovery_agents : state.appmax.recoveryAgents;
     state.apiStatus.appmax = {
       status: "online",
@@ -185,7 +200,7 @@ export function mergeWarRoomWithIntegrations(base: WarRoomData): WarRoomData {
   const consolidatedNet = state.appmax.net + state.kiwify.net;
   const fallbackSpend = next.globalOverview.trafficSources.reduce((acc, source) => acc + source.spend, 0);
   const spendTotal = state.utmify.spendTotal > 0 ? state.utmify.spendTotal : fallbackSpend;
-  const merValue = safeDivide(consolidatedGross || next.globalOverview.revenue, spendTotal || 1);
+  const merValue = safeDivide(consolidatedNet || next.integrations.gateway.consolidatedNetRevenue, spendTotal || 1);
 
   const leaderboard = Object.entries(state.utmify.creatives)
     .map(([creativeId, value]) => ({
@@ -201,6 +216,22 @@ export function mergeWarRoomWithIntegrations(base: WarRoomData): WarRoomData {
     apiStatus: state.apiStatus,
     attribution: {
       realRoiLeaderboard: leaderboard.length > 0 ? leaderboard : next.integrations.attribution.realRoiLeaderboard,
+      validatedAssets:
+        next.integrations.attribution.validatedAssets.length > 0
+          ? next.integrations.attribution.validatedAssets.map((asset) => {
+              if (asset.assetId !== "1400 REFEITO") {
+                return asset;
+              }
+              const utmifyRef = state.utmify.creatives["1400 REFEITO"] ?? state.utmify.creatives["1400"];
+              const effective = utmifyRef?.clickToPurchaseCpa && utmifyRef.clickToPurchaseCpa > 0 ? utmifyRef.clickToPurchaseCpa : asset.effectiveCpa;
+              return {
+                ...asset,
+                effectiveCpa: effective,
+                trackingSource: "utmifyClickToPurchase" as const,
+                note: "Tracking Error: ignorando Facebook API e validando por Click-to-Purchase da Utmify.",
+              };
+            })
+          : next.integrations.attribution.validatedAssets,
     },
     gateway: {
       consolidatedGrossRevenue:
@@ -208,10 +239,16 @@ export function mergeWarRoomWithIntegrations(base: WarRoomData): WarRoomData {
       consolidatedNetRevenue: consolidatedNet > 0 ? consolidatedNet : next.integrations.gateway.consolidatedNetRevenue,
       appmaxCardApprovalRate:
         state.appmax.cardApprovalRate > 0 ? state.appmax.cardApprovalRate : next.integrations.gateway.appmaxCardApprovalRate,
+      appmaxPreviousDayApprovalRate:
+        state.appmax.previousDayApprovalRate > 0
+          ? state.appmax.previousDayApprovalRate
+          : next.integrations.gateway.appmaxPreviousDayApprovalRate,
       yampiCartAbandonmentRate:
         state.yampi.cartAbandonmentRate > 0
           ? state.yampi.cartAbandonmentRate
           : next.integrations.gateway.yampiCartAbandonmentRate,
+      fixedCosts: state.config.fixedCosts > 0 ? state.config.fixedCosts : next.integrations.gateway.fixedCosts,
+      taxRatePct: state.config.taxRatePct > 0 ? state.config.taxRatePct : next.integrations.gateway.taxRatePct,
       kiwifyUpsellTakeRates: {
         upsell1: state.kiwify.upsellTakeRates.upsell1 || next.integrations.gateway.kiwifyUpsellTakeRates.upsell1,
         upsell2: state.kiwify.upsellTakeRates.upsell2 || next.integrations.gateway.kiwifyUpsellTakeRates.upsell2,
@@ -298,6 +335,32 @@ export function mergeWarRoomWithIntegrations(base: WarRoomData): WarRoomData {
       suggestedIncreasePct: next.integrations.merCross.value > 4 ? 20 : 0,
       reason: next.integrations.merCross.recommendation,
     };
+  }
+
+  const taxes = (next.integrations.gateway.consolidatedGrossRevenue * next.integrations.gateway.taxRatePct) / 100;
+  const adSpend = next.integrations.merCross.totalSpend > 0 ? next.integrations.merCross.totalSpend : next.enterprise.ceoFinance.adSpend;
+  const fixedCosts = next.integrations.gateway.fixedCosts;
+  const realNetProfit = Math.max(
+    0,
+    next.integrations.gateway.consolidatedGrossRevenue -
+      next.enterprise.ceoFinance.gatewayFees -
+      taxes -
+      adSpend -
+      fixedCosts,
+  );
+  next.enterprise.ceoFinance.nfseTaxes = taxes;
+  next.enterprise.ceoFinance.taxProvision = taxes;
+  next.enterprise.ceoFinance.adSpend = adSpend;
+  next.enterprise.ceoFinance.netProfit = realNetProfit;
+  next.finance.netRevenue = realNetProfit;
+
+  const approvalDropThreshold = next.integrations.gateway.appmaxPreviousDayApprovalRate * 0.9;
+  if (
+    next.integrations.gateway.appmaxPreviousDayApprovalRate > 0 &&
+    next.integrations.gateway.appmaxCardApprovalRate < approvalDropThreshold
+  ) {
+    next.integrations.apiStatus.appmax.status = "error";
+    next.integrations.apiStatus.appmax.errorMessage = "Queda >10% vs media D-1 (possivel shadowban/processador).";
   }
 
   return next;
