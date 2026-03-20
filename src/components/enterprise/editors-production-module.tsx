@@ -17,6 +17,7 @@ type EditorsProductionModuleProps = {
 export function EditorsProductionModule({ canShowRoas, emphasizeRetention, simplified }: EditorsProductionModuleProps) {
   const { data } = useWarRoom();
   const editors = data.enterprise.editorsProduction;
+  const roiRanking = data.integrations.attribution.realRoiLeaderboard.slice(0, 6);
 
   return (
     <section className="war-fade-in space-y-4">
@@ -37,6 +38,30 @@ export function EditorsProductionModule({ canShowRoas, emphasizeRetention, simpl
                 </span>
               </div>
             ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">ROI Real por Criativo (Utmify)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {roiRanking.length === 0 ? (
+            <p className="text-sm text-slate-400">Aguardando sincronizacao da Utmify para ranking de ROI real.</p>
+          ) : (
+            roiRanking.map((item, index) => (
+              <div key={`${item.creativeId}-${index}`} className="flex items-center justify-between rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm">
+                <span>
+                  #{index + 1} {item.creativeId}
+                </span>
+                {canShowRoas ? (
+                  <span className="text-[#10B981]">ROI real: {item.realRoas.toFixed(2)}x</span>
+                ) : (
+                  <span className="text-slate-400">ROI real: acesso protegido (ranking liberado)</span>
+                )}
+              </div>
+            ))
+          )}
         </CardContent>
       </Card>
 

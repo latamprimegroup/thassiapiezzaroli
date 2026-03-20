@@ -130,6 +130,7 @@ export function normalizeWarRoomData(
   const financeInput = toObject(input.finance);
   const creativeFactoryInput = toObject(input.creativeFactory);
   const squadSyncInput = toObject(input.squadSync);
+  const integrationsInput = toObject(input.integrations);
   const contingencyInput = toObject(input.contingency);
   const enterpriseInput = toObject(input.enterprise);
 
@@ -440,6 +441,163 @@ export function normalizeWarRoomData(
             ? value
             : fallback.squadSync.notifications.whatsappStatus;
         })(),
+      },
+    },
+    integrations: {
+      apiStatus: {
+        utmify: {
+          status: (() => {
+            const value = toObject(integrationsInput.apiStatus).utmify
+              ? toObject(toObject(integrationsInput.apiStatus).utmify).status
+              : "";
+            return value === "online" || value === "syncing" || value === "error"
+              ? value
+              : fallback.integrations.apiStatus.utmify.status;
+          })(),
+          lastSync: toString(
+            toObject(toObject(integrationsInput.apiStatus).utmify).lastSync,
+            fallback.integrations.apiStatus.utmify.lastSync,
+          ),
+          trend12h: toNumberArray(
+            toObject(toObject(integrationsInput.apiStatus).utmify).trend12h,
+            fallback.integrations.apiStatus.utmify.trend12h,
+          ),
+          errorMessage: toString(
+            toObject(toObject(integrationsInput.apiStatus).utmify).errorMessage,
+            fallback.integrations.apiStatus.utmify.errorMessage,
+          ),
+        },
+        appmax: {
+          status: (() => {
+            const value = toObject(integrationsInput.apiStatus).appmax
+              ? toObject(toObject(integrationsInput.apiStatus).appmax).status
+              : "";
+            return value === "online" || value === "syncing" || value === "error"
+              ? value
+              : fallback.integrations.apiStatus.appmax.status;
+          })(),
+          lastSync: toString(
+            toObject(toObject(integrationsInput.apiStatus).appmax).lastSync,
+            fallback.integrations.apiStatus.appmax.lastSync,
+          ),
+          trend12h: toNumberArray(
+            toObject(toObject(integrationsInput.apiStatus).appmax).trend12h,
+            fallback.integrations.apiStatus.appmax.trend12h,
+          ),
+          errorMessage: toString(
+            toObject(toObject(integrationsInput.apiStatus).appmax).errorMessage,
+            fallback.integrations.apiStatus.appmax.errorMessage,
+          ),
+        },
+        kiwify: {
+          status: (() => {
+            const value = toObject(integrationsInput.apiStatus).kiwify
+              ? toObject(toObject(integrationsInput.apiStatus).kiwify).status
+              : "";
+            return value === "online" || value === "syncing" || value === "error"
+              ? value
+              : fallback.integrations.apiStatus.kiwify.status;
+          })(),
+          lastSync: toString(
+            toObject(toObject(integrationsInput.apiStatus).kiwify).lastSync,
+            fallback.integrations.apiStatus.kiwify.lastSync,
+          ),
+          trend12h: toNumberArray(
+            toObject(toObject(integrationsInput.apiStatus).kiwify).trend12h,
+            fallback.integrations.apiStatus.kiwify.trend12h,
+          ),
+          errorMessage: toString(
+            toObject(toObject(integrationsInput.apiStatus).kiwify).errorMessage,
+            fallback.integrations.apiStatus.kiwify.errorMessage,
+          ),
+        },
+        yampi: {
+          status: (() => {
+            const value = toObject(integrationsInput.apiStatus).yampi
+              ? toObject(toObject(integrationsInput.apiStatus).yampi).status
+              : "";
+            return value === "online" || value === "syncing" || value === "error"
+              ? value
+              : fallback.integrations.apiStatus.yampi.status;
+          })(),
+          lastSync: toString(
+            toObject(toObject(integrationsInput.apiStatus).yampi).lastSync,
+            fallback.integrations.apiStatus.yampi.lastSync,
+          ),
+          trend12h: toNumberArray(
+            toObject(toObject(integrationsInput.apiStatus).yampi).trend12h,
+            fallback.integrations.apiStatus.yampi.trend12h,
+          ),
+          errorMessage: toString(
+            toObject(toObject(integrationsInput.apiStatus).yampi).errorMessage,
+            fallback.integrations.apiStatus.yampi.errorMessage,
+          ),
+        },
+      },
+      attribution: {
+        realRoiLeaderboard: (Array.isArray(toObject(integrationsInput.attribution).realRoiLeaderboard)
+          ? toObject(integrationsInput.attribution).realRoiLeaderboard
+          : fallback.integrations.attribution.realRoiLeaderboard
+        ).map((item, index) => {
+          const row = toObject(item);
+          const fallbackItem =
+            fallback.integrations.attribution.realRoiLeaderboard[
+              index % fallback.integrations.attribution.realRoiLeaderboard.length
+            ];
+          return {
+            creativeId: toString(row.creativeId, fallbackItem.creativeId),
+            source: toTrafficSource(row.source, fallbackItem.source),
+            realProfit: toNumber(row.realProfit, fallbackItem.realProfit),
+            realRoas: toNumber(row.realRoas, fallbackItem.realRoas),
+          };
+        }),
+      },
+      gateway: {
+        consolidatedGrossRevenue: toNumber(
+          toObject(integrationsInput.gateway).consolidatedGrossRevenue,
+          fallback.integrations.gateway.consolidatedGrossRevenue,
+        ),
+        consolidatedNetRevenue: toNumber(
+          toObject(integrationsInput.gateway).consolidatedNetRevenue,
+          fallback.integrations.gateway.consolidatedNetRevenue,
+        ),
+        appmaxCardApprovalRate: toNumber(
+          toObject(integrationsInput.gateway).appmaxCardApprovalRate,
+          fallback.integrations.gateway.appmaxCardApprovalRate,
+        ),
+        yampiCartAbandonmentRate: toNumber(
+          toObject(integrationsInput.gateway).yampiCartAbandonmentRate,
+          fallback.integrations.gateway.yampiCartAbandonmentRate,
+        ),
+        kiwifyUpsellTakeRates: {
+          upsell1: toNumber(
+            toObject(toObject(integrationsInput.gateway).kiwifyUpsellTakeRates).upsell1,
+            fallback.integrations.gateway.kiwifyUpsellTakeRates.upsell1,
+          ),
+          upsell2: toNumber(
+            toObject(toObject(integrationsInput.gateway).kiwifyUpsellTakeRates).upsell2,
+            fallback.integrations.gateway.kiwifyUpsellTakeRates.upsell2,
+          ),
+          upsell3: toNumber(
+            toObject(toObject(integrationsInput.gateway).kiwifyUpsellTakeRates).upsell3,
+            fallback.integrations.gateway.kiwifyUpsellTakeRates.upsell3,
+          ),
+        },
+      },
+      merCross: {
+        value: toNumber(toObject(integrationsInput.merCross).value, fallback.integrations.merCross.value),
+        totalSpend: toNumber(toObject(integrationsInput.merCross).totalSpend, fallback.integrations.merCross.totalSpend),
+        status: (() => {
+          const value = toObject(integrationsInput.merCross).status;
+          return value === "critical" || value === "stable" || value === "elite"
+            ? value
+            : fallback.integrations.merCross.status;
+        })(),
+        trend12h: toNumberArray(toObject(integrationsInput.merCross).trend12h, fallback.integrations.merCross.trend12h),
+        recommendation: toString(
+          toObject(integrationsInput.merCross).recommendation,
+          fallback.integrations.merCross.recommendation,
+        ),
       },
     },
     contingency: {

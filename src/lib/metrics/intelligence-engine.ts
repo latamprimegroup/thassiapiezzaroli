@@ -25,7 +25,8 @@ export const ELITE_BENCHMARKS = {
   hookRate: 25,
   holdRate15s: 30,
   icRate: 12,
-  mer: 3,
+  merCritical: 2.5,
+  merScale: 4.0,
 } as const;
 
 function toStatus(value: number, benchmark: number): OrderStatus {
@@ -79,7 +80,7 @@ function evaluateGlobalMetrics(data: WarRoomData) {
     hookRate: daily.hookRate > 0 ? daily.hookRate : computed.hookRate,
     holdRate15s: daily.holdRate15s > 0 ? daily.holdRate15s : computed.holdRate15s,
     icRate: daily.icRate > 0 ? daily.icRate : computed.icRate,
-    mer: computed.mer,
+    mer: data.integrations.merCross.value > 0 ? data.integrations.merCross.value : computed.mer,
   };
 }
 
@@ -111,11 +112,16 @@ function assessMetrics(metrics: ReturnType<typeof evaluateGlobalMetrics>): Recor
     },
     mer: {
       value: metrics.mer,
-      benchmark: ELITE_BENCHMARKS.mer,
-      status: toStatus(metrics.mer, ELITE_BENCHMARKS.mer),
+      benchmark: ELITE_BENCHMARKS.merCritical,
+      status: metrics.mer > ELITE_BENCHMARKS.merScale ? "winner" : toStatus(metrics.mer, ELITE_BENCHMARKS.merCritical),
       sector: "ceoFinance",
       diagnosis: "MER global fora da zona de escala segura.",
-      action: metrics.mer >= ELITE_BENCHMARKS.mer ? "Sugerir aumento de budget em +20%." : "Travar escala ate recuperar MER > 3.0.",
+      action:
+        metrics.mer > ELITE_BENCHMARKS.merScale
+          ? "Sugerir aumento de budget em +20%."
+          : metrics.mer < ELITE_BENCHMARKS.merCritical
+            ? "Travar escala ate recuperar MER >= 2.5."
+            : "Manter escala com monitoramento de risco.",
     },
   };
 }
@@ -212,23 +218,23 @@ export function buildCommandOrdersFromSnapshot(params: {
     });
   }
 
-  if (mer < ELITE_BENCHMARKS.mer) {
+  if (mer < ELITE_BENCHMARKS.merCritical) {
     orders.push({
       id: `CMD-${Date.now()}-MER-LOCK`,
       audience: "ceoFinance",
       status: "failing",
       title: "Escala travada por MER",
-      diagnosis: `MER em ${mer.toFixed(2)}x (meta > ${ELITE_BENCHMARKS.mer.toFixed(1)}x).`,
+      diagnosis: `MER em ${mer.toFixed(2)}x (zona critica < ${ELITE_BENCHMARKS.merCritical.toFixed(1)}x).`,
       action: "Travar escala e priorizar recuperação de eficiência antes de subir budget.",
       createdAt: generatedAt,
     });
-  } else {
+  } else if (mer > ELITE_BENCHMARKS.merScale) {
     orders.push({
       id: `CMD-${Date.now()}-MER-UP`,
       audience: "mediaBuyers",
       status: "winner",
       title: "Escala liberada",
-      diagnosis: `MER em ${mer.toFixed(2)}x acima da meta.`,
+      diagnosis: `MER em ${mer.toFixed(2)}x acima da zona de escala (${ELITE_BENCHMARKS.merScale.toFixed(1)}x).`,
       action: "Sugestão DSS: aumentar budget consolidado em +20% com monitoramento de CPA.",
       createdAt: generatedAt,
     });
@@ -287,12 +293,14 @@ export function computeIntelligenceEngine(data: WarRoomData) {
     metrics,
     assessments,
     scalePolicy: {
-      locked: metrics.mer < ELITE_BENCHMARKS.mer,
-      suggestedBudgetIncreasePct: metrics.mer >= ELITE_BENCHMARKS.mer ? 20 : 0,
+      locked: metrics.mer < ELITE_BENCHMARKS.merCritical,
+      suggestedBudgetIncreasePct: metrics.mer > ELITE_BENCHMARKS.merScale ? 20 : 0,
       reason:
-        metrics.mer >= ELITE_BENCHMARKS.mer
-          ? "MER acima da meta de elite. Escala sugerida em +20%."
-          : "MER abaixo da meta. Escala deve ser travada até recuperar eficiência.",
+        metrics.mer > ELITE_BENCHMARKS.merScale
+          ? "MER acima de 4.0x. Escala sugerida em +20%."
+          : metrics.mer < ELITE_BENCHMARKS.merCritical
+            ? "MER abaixo de 2.5x. Escala deve ser travada."
+            : "MER em zona de operacao controlada (2.5x-4.0x).",
     },
     editorPriorities,
     audienceFatigue,

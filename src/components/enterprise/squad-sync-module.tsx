@@ -297,9 +297,18 @@ export function SquadSyncModule({ canInputDailyFeedback, actorName }: SquadSyncM
             {getBenchmarkBadge(intelligence.metrics.icRate, ELITE_BENCHMARKS.icRate)}
           </div>
           <div className="rounded border border-white/10 bg-black/40 p-3 text-xs">
-            <p className="text-slate-300">MER Global (alvo &gt; {ELITE_BENCHMARKS.mer.toFixed(1)}x)</p>
+            <p className="text-slate-300">
+              MER Global (critical &lt; {ELITE_BENCHMARKS.merCritical.toFixed(1)}x | scale &gt;{" "}
+              {ELITE_BENCHMARKS.merScale.toFixed(1)}x)
+            </p>
             <p className="mt-1 text-lg text-slate-100">{intelligence.metrics.mer.toFixed(2)}x</p>
-            {getBenchmarkBadge(intelligence.metrics.mer, ELITE_BENCHMARKS.mer)}
+            {intelligence.metrics.mer < ELITE_BENCHMARKS.merCritical ? (
+              <Badge variant="danger">CRITICAL</Badge>
+            ) : intelligence.metrics.mer > ELITE_BENCHMARKS.merScale ? (
+              <Badge variant="success">SCALING</Badge>
+            ) : (
+              <Badge variant="sky">STABLE</Badge>
+            )}
             <p className="mt-2 text-[11px] text-slate-400">{intelligence.scalePolicy.reason}</p>
           </div>
         </CardContent>

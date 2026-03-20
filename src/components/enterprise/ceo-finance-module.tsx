@@ -2,6 +2,7 @@
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Sparkline } from "@/components/ui/sparkline";
 import { useWarRoom } from "@/context/war-room-context";
 import { computeIntelligenceEngine, ELITE_BENCHMARKS } from "@/lib/metrics/intelligence-engine";
 
@@ -19,6 +20,8 @@ export function CeoFinanceModule({ canViewSensitiveFinancials }: CeoFinanceModul
   const contingencyItems = [...data.contingency.domains, ...data.contingency.adAccounts, ...data.contingency.fanpages];
   const blockedCount = contingencyItems.filter((item) => item.status === "blocked").length;
   const warningCount = contingencyItems.filter((item) => item.status === "warning").length;
+  const appmaxApproval = data.integrations.gateway.appmaxCardApprovalRate;
+  const merCross = data.integrations.merCross;
 
   const cohortMax = Math.max(f.ltvCohorts.d30, f.ltvCohorts.d60, f.ltvCohorts.d90, 1);
   const cohorts = [
@@ -36,7 +39,10 @@ export function CeoFinanceModule({ canViewSensitiveFinancials }: CeoFinanceModul
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-semibold text-[#34A853]">{f.mer.toFixed(2)}</p>
-            <p className="mt-1 text-xs text-slate-400">Benchmark elite: {ELITE_BENCHMARKS.mer.toFixed(1)}x</p>
+            <p className="mt-1 text-xs text-slate-400">
+              Zona critica &lt; {ELITE_BENCHMARKS.merCritical.toFixed(1)}x | Escala forte &gt;{" "}
+              {ELITE_BENCHMARKS.merScale.toFixed(1)}x
+            </p>
           </CardContent>
         </Card>
         <Card className="bg-[#050505]">
@@ -72,7 +78,9 @@ export function CeoFinanceModule({ canViewSensitiveFinancials }: CeoFinanceModul
         <CardContent className="space-y-2 text-sm">
           <p>{intelligence.scalePolicy.reason}</p>
           {intelligence.scalePolicy.locked ? (
-            <Badge variant="danger">Escala travada: MER abaixo de {ELITE_BENCHMARKS.mer.toFixed(1)}x</Badge>
+            <Badge variant="danger">
+              Escala travada: MER abaixo de {ELITE_BENCHMARKS.merCritical.toFixed(1)}x
+            </Badge>
           ) : (
             <Badge variant="success">Escala liberada: sugestao +{intelligence.scalePolicy.suggestedBudgetIncreasePct}% budget</Badge>
           )}
@@ -81,6 +89,16 @@ export function CeoFinanceModule({ canViewSensitiveFinancials }: CeoFinanceModul
               Alerta cruzado CEO/Tech: IC Rate em {intelligence.assessments.icRate.value.toFixed(2)}%
             </Badge>
           )}
+          <div className="rounded-md border border-white/10 bg-white/5 p-2">
+            <p className="text-xs text-slate-300">MER cross (Kiwify + Appmax / Spend Utmify)</p>
+            <div className="mt-1 flex items-center justify-between">
+              <span className={merCross.status === "critical" ? "text-[#EA4335]" : merCross.status === "elite" ? "text-[#10B981]" : "text-[#FF9900]"}>
+                {merCross.value.toFixed(2)}x
+              </span>
+              <Sparkline values={merCross.trend12h} className="h-7 w-24" strokeClassName="stroke-[#FF9900]" />
+            </div>
+            <p className="text-xs text-slate-400">{merCross.recommendation}</p>
+          </div>
         </CardContent>
       </Card>
 
@@ -120,6 +138,21 @@ export function CeoFinanceModule({ canViewSensitiveFinancials }: CeoFinanceModul
               </p>
             </div>
           ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Saude de Pagamentos (Appmax/Kiwify)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm">
+          <p>Aprovacao cartao Appmax: {percent(appmaxApproval)}</p>
+          <p>Faturamento liquido consolidado: {currency(data.integrations.gateway.consolidatedNetRevenue)}</p>
+          {appmaxApproval > 0 && appmaxApproval < 80 ? (
+            <Badge variant="danger">ALERTA FINANCEIRO: aprovacao de cartao abaixo de 80%</Badge>
+          ) : (
+            <Badge variant="success">Processamento de pagamentos em faixa estavel</Badge>
+          )}
         </CardContent>
       </Card>
 

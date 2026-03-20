@@ -25,6 +25,8 @@ export type SquadSyncCommandOrder = {
   createdAt: string;
 };
 
+export type ProviderSyncStatus = "online" | "syncing" | "error";
+
 export type WarRoomData = {
   source: WarRoomDataSource;
   sourceLabel: string;
@@ -128,6 +130,60 @@ export type WarRoomData = {
       lastMessage: string;
       slackStatus: "idle" | "sent" | "simulated" | "failed";
       whatsappStatus: "idle" | "sent" | "simulated" | "failed";
+    };
+  };
+  integrations: {
+    apiStatus: {
+      utmify: {
+        status: ProviderSyncStatus;
+        lastSync: string;
+        trend12h: number[];
+        errorMessage: string;
+      };
+      appmax: {
+        status: ProviderSyncStatus;
+        lastSync: string;
+        trend12h: number[];
+        errorMessage: string;
+      };
+      kiwify: {
+        status: ProviderSyncStatus;
+        lastSync: string;
+        trend12h: number[];
+        errorMessage: string;
+      };
+      yampi: {
+        status: ProviderSyncStatus;
+        lastSync: string;
+        trend12h: number[];
+        errorMessage: string;
+      };
+    };
+    attribution: {
+      realRoiLeaderboard: Array<{
+        creativeId: string;
+        source: TrafficSourceKey;
+        realProfit: number;
+        realRoas: number;
+      }>;
+    };
+    gateway: {
+      consolidatedGrossRevenue: number;
+      consolidatedNetRevenue: number;
+      appmaxCardApprovalRate: number;
+      yampiCartAbandonmentRate: number;
+      kiwifyUpsellTakeRates: {
+        upsell1: number;
+        upsell2: number;
+        upsell3: number;
+      };
+    };
+    merCross: {
+      value: number;
+      totalSpend: number;
+      status: "critical" | "stable" | "elite";
+      trend12h: number[];
+      recommendation: string;
     };
   };
   contingency: {

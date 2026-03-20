@@ -19,6 +19,12 @@ export function sanitizeWarRoomDataForRole(input: WarRoomData, role: UserRole): 
     data.enterprise.ceoFinance.nfseTaxes = 0;
     data.enterprise.ceoFinance.taxProvision = 0;
     data.enterprise.ceoFinance.mer = 0;
+    data.integrations.gateway.consolidatedGrossRevenue = 0;
+    data.integrations.gateway.consolidatedNetRevenue = 0;
+    data.integrations.attribution.realRoiLeaderboard = data.integrations.attribution.realRoiLeaderboard.map((item) => ({
+      ...item,
+      realProfit: 0,
+    }));
   }
 
   if (!permissions.canViewRoasReal) {
@@ -29,6 +35,10 @@ export function sanitizeWarRoomDataForRole(input: WarRoomData, role: UserRole): 
         ...row.trend24h,
         roas: row.trend24h.roas.map(() => 0),
       },
+    }));
+    data.integrations.attribution.realRoiLeaderboard = data.integrations.attribution.realRoiLeaderboard.map((item) => ({
+      ...item,
+      realRoas: 0,
     }));
   }
 

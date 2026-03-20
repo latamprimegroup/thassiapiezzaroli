@@ -234,6 +234,14 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
               </div>
             </header>
 
+            {viewData.integrations.merCross.status === "critical" && (
+              <Card className="mb-4 border-rose-300/40 bg-rose-500/10">
+                <CardContent className="p-3 text-sm text-rose-100">
+                  CRITICAL: MER global em {viewData.integrations.merCross.value.toFixed(2)}x. Escala travada para todos os setores.
+                </CardContent>
+              </Card>
+            )}
+
             {!isSectionAllowed && (
               <Card className="mb-4 border-rose-300/30 bg-rose-500/10">
                 <CardContent className="p-4 text-sm text-rose-100">

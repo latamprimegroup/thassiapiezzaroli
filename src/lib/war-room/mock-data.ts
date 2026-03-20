@@ -346,6 +346,59 @@ export const mockWarRoomData: WarRoomData = {
       whatsappStatus: "simulated",
     },
   },
+  integrations: {
+    apiStatus: {
+      utmify: {
+        status: "online",
+        lastSync: "11:58",
+        trend12h: [2.6, 2.5, 2.7, 2.8, 2.6, 2.9, 3.0, 2.8, 2.9, 3.1, 3.0, 3.2],
+        errorMessage: "",
+      },
+      appmax: {
+        status: "online",
+        lastSync: "11:57",
+        trend12h: [86, 87, 88, 85, 84, 86, 87, 89, 88, 87, 86, 85],
+        errorMessage: "",
+      },
+      kiwify: {
+        status: "syncing",
+        lastSync: "11:56",
+        trend12h: [18, 18.2, 18.4, 18.1, 18.8, 19, 19.4, 19.1, 19.6, 19.8, 20.1, 20.3],
+        errorMessage: "",
+      },
+      yampi: {
+        status: "online",
+        lastSync: "11:55",
+        trend12h: [58, 57, 59, 60, 58, 57, 56, 55, 57, 58, 59, 58],
+        errorMessage: "",
+      },
+    },
+    attribution: {
+      realRoiLeaderboard: [
+        { creativeId: "GG-211", source: "google", realProfit: 319_000, realRoas: 3.52 },
+        { creativeId: "FB-101", source: "meta", realProfit: 284_000, realRoas: 3.14 },
+        { creativeId: "TT-077", source: "native", realProfit: 177_000, realRoas: 2.42 },
+      ],
+    },
+    gateway: {
+      consolidatedGrossRevenue: 5_640_000,
+      consolidatedNetRevenue: 4_180_000,
+      appmaxCardApprovalRate: 85.2,
+      yampiCartAbandonmentRate: 58.1,
+      kiwifyUpsellTakeRates: {
+        upsell1: 27.4,
+        upsell2: 16.9,
+        upsell3: 8.7,
+      },
+    },
+    merCross: {
+      value: 2.94,
+      totalSpend: 1_920_000,
+      status: "stable",
+      trend12h: [2.5, 2.6, 2.7, 2.6, 2.8, 2.7, 2.9, 3.0, 2.9, 3.1, 3.0, 2.94],
+      recommendation: "MER acima de 2.5x. Manter controle de escala com monitoramento horario.",
+    },
+  },
   contingency: {
     domains: [
       { name: "checkout-principal.com", status: "ok", score: 92, lastCheck: "12:03" },
