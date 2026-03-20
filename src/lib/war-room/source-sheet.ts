@@ -130,6 +130,8 @@ export async function loadWarRoomFromSheets(): Promise<WarRoomData> {
     },
     finance: {
       revenue: pick(financeMetrics, ["revenue", "faturamentoreal", "faturamento"]),
+      netRevenue: pick(financeMetrics, ["netrevenue", "faturamentoliquido", "liquido"]),
+      profitMargin: pick(financeMetrics, ["profitmargin", "margem", "margemlucro"]),
       approvalRate: pick(financeMetrics, ["approvalrate", "taxaaprovacao"]),
       ltv: pick(financeMetrics, ["ltv"]),
     },

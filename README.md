@@ -42,6 +42,25 @@ Abra `http://localhost:3000`.
 - Hold Rate (15s/3s) < 20% => **Gargalo de Retencao**
 - ROAS > 2.5 => **WINNER DETECTED**
 
+## RBAC (Role-Based Access Control)
+
+Perfis simulados no cabecalho com renderizacao por cargo:
+
+- **CEO (Admin)**: visao total, acesso a faturamento liquido, margem de lucro e aprovacao de escala.
+- **Media Buyer**: foco em leilao (CPM/CPC/Frequencia), input de dados brutos e botao **Alertar Squad**.
+- **Copywriter / Creative Director**: foco em retencao e gestao do backlog de scripts/angulos.
+- **Video Editor**: visao simplificada por criativo, acesso ao feedback e upload de novas versoes.
+
+Regras de visibilidade:
+
+- Perfil **Video Editor** nao visualiza cards de **Faturamento** e **ROAS Real**.
+- Perfil **Copywriter** recebe destaque visual nas metricas de retencao.
+- Secoes sem permissao aparecem bloqueadas (rota protegida).
+
+Tambem foi adicionado o **Log de Atividades**, com trilha de acoes no formato:
+
+- `[Gestor X] pausou criativo [Y] por baixo Hook Rate`
+
 ## Fontes de dados reais
 
 O projeto aceita 4 fontes via `WAR_ROOM_SOURCE`:

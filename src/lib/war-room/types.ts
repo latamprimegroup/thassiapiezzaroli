@@ -67,9 +67,20 @@ export type WarRoomData = {
   }>;
 
   finance: {
+    netRevenue: number;
+    profitMargin: number;
     approvalRate: number;
     ltv: number;
   };
+  activityLog: Array<{
+    id: string;
+    actorRole: string;
+    actorName: string;
+    action: string;
+    entity: string;
+    reason: string;
+    timestamp: string;
+  }>;
   oldSchema?: {
     ads?: {
       investmentTotal?: number;
@@ -101,6 +112,8 @@ export type WarRoomData = {
     };
     finance?: {
       revenue?: number;
+      netRevenue?: number;
+      profitMargin?: number;
       approvalRate?: number;
       ltv?: number;
     };

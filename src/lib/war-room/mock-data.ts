@@ -168,7 +168,38 @@ export const mockWarRoomData: WarRoomData = {
     },
   ],
   finance: {
+    netRevenue: 2_120_000,
+    profitMargin: 38.0,
     approvalRate: 87.2,
     ltv: 1_930,
   },
+  activityLog: [
+    {
+      id: "LOG-001",
+      actorRole: "Media Buyer",
+      actorName: "Gestor Caio",
+      action: "pausou criativo",
+      entity: "FB-118",
+      reason: "baixo Hook Rate",
+      timestamp: "11:42",
+    },
+    {
+      id: "LOG-002",
+      actorRole: "Copywriter",
+      actorName: "Ana",
+      action: "subiu versao",
+      entity: "V4 - Dor aguda + prova",
+      reason: "iteracao para elevar Hold Rate",
+      timestamp: "11:48",
+    },
+    {
+      id: "LOG-003",
+      actorRole: "Editor",
+      actorName: "Nati",
+      action: "publicou corte",
+      entity: "YT-034 V3",
+      reason: "feedback de retencao do gestor",
+      timestamp: "11:53",
+    },
+  ],
 };

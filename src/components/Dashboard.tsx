@@ -1,13 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
+  AlertTriangle,
   BadgeDollarSign,
   CircleDollarSign,
   CreditCard,
   Gauge,
   LayoutDashboard,
+  Lock,
   MessageSquareText,
   MonitorPlay,
   Radar,
@@ -22,9 +24,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { CreativeFactoryBoard } from "@/components/war-room/creative-factory-board";
 import { DailyBriefing } from "@/components/war-room/daily-briefing";
 import { LiveAdsTable } from "@/components/war-room/live-ads-table";
+import { rolePermissions, type SectionId, type UserRole } from "@/lib/auth/rbac";
 import type { WarRoomData } from "@/lib/war-room/types";
-
-type SectionId = "overview" | "facebook" | "googleYoutube" | "factory";
 
 type Section = {
   id: SectionId;
@@ -71,7 +72,37 @@ type DashboardProps = {
 };
 
 export default function Dashboard({ data }: DashboardProps) {
+  const [activeRole, setActiveRole] = useState<UserRole>("ceo");
   const [activeSection, setActiveSection] = useState<SectionId>("overview");
+  const [activityLog, setActivityLog] = useState(data.activityLog);
+  const [auctionInput, setAuctionInput] = useState({
+    cpm: "",
+    cpc: "",
+    frequency: "",
+    hookRate: "",
+    holdRate: "",
+  });
+  const [backlogInput, setBacklogInput] = useState("");
+  const [creativeBacklog, setCreativeBacklog] = useState<string[]>(() => {
+    const legacy = data.oldSchema?.copy?.hooksBacklog ?? [];
+    if (legacy.length > 0) {
+      return legacy;
+    }
+    return [
+      "Script V5 com abertura anti-objeção",
+      "Ângulo de urgência com prova visual",
+      "Corte 22s focado em retenção até 15s",
+    ];
+  });
+
+  const permissions = rolePermissions[activeRole];
+  const ActiveRoleIcon = permissions.icon;
+
+  useEffect(() => {
+    if (!permissions.allowedSections.includes(activeSection)) {
+      setActiveSection(permissions.allowedSections[0]);
+    }
+  }, [activeSection, permissions.allowedSections]);
 
   const intelligence = useMemo(() => {
     const rows = data.liveAdsTracking;
@@ -96,6 +127,61 @@ export default function Dashboard({ data }: DashboardProps) {
     year: "numeric",
   });
 
+  function appendActivity(actorRole: string, actorName: string, action: string, entity: string, reason: string) {
+    setActivityLog((prev) => [
+      {
+        id: `LOG-${Date.now()}`,
+        actorRole,
+        actorName,
+        action,
+        entity,
+        reason,
+        timestamp: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+      },
+      ...prev,
+    ]);
+  }
+
+  function handleAlertSquad() {
+    if (!permissions.canAlertSquad) {
+      return;
+    }
+    appendActivity(
+      "Media Buyer",
+      "Gestor da Midia",
+      "alertou squad",
+      activeSection === "googleYoutube" ? "Squad Google/YouTube" : "Squad Facebook",
+      `CPA acima do KPI. Hook ${auctionInput.hookRate || "0"}% | Hold ${auctionInput.holdRate || "0"}%`,
+    );
+  }
+
+  function handleAuctionInput() {
+    if (!permissions.canInputAuctionMetrics) {
+      return;
+    }
+    appendActivity(
+      "Media Buyer",
+      "Gestor da Midia",
+      "registrou input de leilao",
+      activeSection === "googleYoutube" ? "Google/YouTube" : "Facebook",
+      `CPM ${auctionInput.cpm || "0"} | CPC ${auctionInput.cpc || "0"} | Freq ${auctionInput.frequency || "0"}`,
+    );
+  }
+
+  function addBacklogItem() {
+    if (!permissions.canManageCreativeBacklog || !backlogInput.trim()) {
+      return;
+    }
+    setCreativeBacklog((prev) => [backlogInput.trim(), ...prev]);
+    appendActivity("Copywriter", "Creative Director", "adicionou backlog", backlogInput.trim(), "nova hipótese criativa");
+    setBacklogInput("");
+  }
+
+  const hiddenFinanceForRole = activeRole === "videoEditor";
+  const isSectionAllowed = permissions.allowedSections.includes(activeSection);
+  const canShowRoas = permissions.canViewRoasReal && !hiddenFinanceForRole;
+  const retentionSpotlight = permissions.emphasizeRetention;
+
   return (
     <div className="min-h-screen p-4 md:p-6">
       <div className="mx-auto grid max-w-[1600px] gap-6 xl:grid-cols-[300px_minmax(0,1fr)]">
@@ -112,15 +198,19 @@ export default function Dashboard({ data }: DashboardProps) {
             {sections.map((section) => {
               const Icon = section.icon;
               const isActive = section.id === activeSection;
+              const canAccessSection = permissions.allowedSections.includes(section.id);
               return (
                 <Button
                   key={section.id}
-                  onClick={() => setActiveSection(section.id)}
+                  onClick={() => (canAccessSection ? setActiveSection(section.id) : undefined)}
                   variant={isActive ? "default" : "ghost"}
+                  disabled={!canAccessSection}
                   className={`w-full rounded-xl border px-3 py-3 text-left transition ${
                     isActive
                       ? "border-cyan-300/50 bg-cyan-500/15 shadow-[0_0_24px_rgba(34,211,238,0.15)]"
-                      : "border-white/10 bg-white/0 hover:border-white/30 hover:bg-white/5"
+                      : canAccessSection
+                        ? "border-white/10 bg-white/0 hover:border-white/30 hover:bg-white/5"
+                        : "cursor-not-allowed border-white/10 bg-slate-800/60 opacity-50"
                   }`}
                 >
                   <div className="flex items-center gap-3">
@@ -131,6 +221,7 @@ export default function Dashboard({ data }: DashboardProps) {
                       </p>
                       <p className="text-xs text-slate-400">{section.subtitle}</p>
                     </div>
+                    {!canAccessSection && <Lock className="ml-auto h-3.5 w-3.5 text-slate-400" />}
                   </div>
                 </Button>
               );
@@ -151,15 +242,51 @@ export default function Dashboard({ data }: DashboardProps) {
           <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
             <div>
               <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Direct Response ERP</p>
-              <h2 className="text-2xl font-semibold text-white">WAR ROOM OS - Squads + Dados + Producao</h2>
+              <h2 className="text-2xl font-semibold text-white">WAR ROOM OS - Multi-User & Permissions</h2>
+              <div className="mt-2 inline-flex items-center gap-2 rounded-md border border-white/15 bg-white/5 px-2 py-1 text-xs text-slate-300">
+                <ActiveRoleIcon className="h-3.5 w-3.5" />
+                Perfil ativo: {permissions.label}
+              </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 md:max-w-[660px] md:justify-end">
+              {(Object.keys(rolePermissions) as UserRole[]).map((roleKey) => {
+                const role = rolePermissions[roleKey];
+                const Icon = role.icon;
+                const selected = roleKey === activeRole;
+                return (
+                  <button
+                    key={roleKey}
+                    onClick={() => setActiveRole(roleKey)}
+                    className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition ${
+                      selected
+                        ? "border-cyan-300/40 bg-cyan-500/20 text-cyan-100"
+                        : "border-white/15 bg-white/5 text-slate-300 hover:bg-white/10"
+                    }`}
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                    {role.label}
+                  </button>
+                );
+              })}
               <Badge variant="sky">Fonte: {data.sourceLabel}</Badge>
               <Badge variant="default">Atualizado em {updatedAt}</Badge>
             </div>
           </header>
 
-          {activeSection === "overview" && (
+          {!isSectionAllowed && (
+            <Card className="mb-5 border-rose-300/30 bg-rose-500/10">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Lock className="h-4 w-4 text-rose-200" /> Rota protegida
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm text-rose-100">
+                O perfil {permissions.label} nao possui acesso a esta secao.
+              </CardContent>
+            </Card>
+          )}
+
+          {activeSection === "overview" && isSectionAllowed && (
             <section className="space-y-5">
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <Card className="bg-gradient-to-br from-slate-800 to-slate-900">
@@ -172,26 +299,30 @@ export default function Dashboard({ data }: DashboardProps) {
                     <p className="text-2xl font-semibold">{formatCurrency(data.globalOverview.investment)}</p>
                   </CardContent>
                 </Card>
-                <Card className="bg-gradient-to-br from-slate-800 to-slate-900">
-                  <CardHeader className="pb-2">
-                    <CardDescription className="flex items-center gap-2">
-                      <BadgeDollarSign className="h-4 w-4 text-cyan-300" /> Faturamento (Utmify)
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-2xl font-semibold">{formatCurrency(data.globalOverview.revenue)}</p>
-                  </CardContent>
-                </Card>
-                <Card className="bg-gradient-to-br from-slate-800 to-slate-900">
-                  <CardHeader className="pb-2">
-                    <CardDescription className="flex items-center gap-2">
-                      <TrendingUp className="h-4 w-4 text-cyan-300" /> ROAS Macro
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-2xl font-semibold">{macroRoas.toFixed(2)}</p>
-                  </CardContent>
-                </Card>
+                {!hiddenFinanceForRole && (
+                  <Card className="bg-gradient-to-br from-slate-800 to-slate-900">
+                    <CardHeader className="pb-2">
+                      <CardDescription className="flex items-center gap-2">
+                        <BadgeDollarSign className="h-4 w-4 text-cyan-300" /> Faturamento (Utmify)
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-2xl font-semibold">{formatCurrency(data.globalOverview.revenue)}</p>
+                    </CardContent>
+                  </Card>
+                )}
+                {canShowRoas && (
+                  <Card className="bg-gradient-to-br from-slate-800 to-slate-900">
+                    <CardHeader className="pb-2">
+                      <CardDescription className="flex items-center gap-2">
+                        <TrendingUp className="h-4 w-4 text-cyan-300" /> ROAS Macro
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-2xl font-semibold">{macroRoas.toFixed(2)}</p>
+                    </CardContent>
+                  </Card>
+                )}
                 <Card className="bg-gradient-to-br from-slate-800 to-slate-900">
                   <CardHeader className="pb-2">
                     <CardDescription className="flex items-center gap-2">
@@ -220,6 +351,18 @@ export default function Dashboard({ data }: DashboardProps) {
                     <p>
                       LTV consolidado: <span className="font-semibold text-white">{formatCurrency(data.finance.ltv)}</span>
                     </p>
+                    {permissions.canViewSensitiveFinancials && (
+                      <>
+                        <p>
+                          Faturamento liquido:{" "}
+                          <span className="font-semibold text-emerald-200">{formatCurrency(data.finance.netRevenue)}</span>
+                        </p>
+                        <p>
+                          Margem de lucro:{" "}
+                          <span className="font-semibold text-emerald-200">{formatPercent(data.finance.profitMargin)}</span>
+                        </p>
+                      </>
+                    )}
                     <p className="text-slate-400">
                       Objetivo: manter velocity acima da meta em cada squad para acelerar iteracao em DR.
                     </p>
@@ -247,15 +390,85 @@ export default function Dashboard({ data }: DashboardProps) {
                 </Card>
               </div>
 
+              {!permissions.canViewSensitiveFinancials && (
+                <Card className="border-white/15 bg-slate-900/70">
+                  <CardContent className="p-4 text-sm text-slate-300">
+                    Dados financeiros sensiveis (faturamento liquido e margem) restritos ao perfil CEO (Admin).
+                  </CardContent>
+                </Card>
+              )}
+
+              {permissions.canInputAuctionMetrics && (
+                <Card className="border-cyan-300/30 bg-cyan-500/10">
+                  <CardHeader>
+                    <CardTitle className="text-base">Input de dados brutos de leilao</CardTitle>
+                    <CardDescription>CPM, CPC, frequencia, Hook Rate e Hold Rate</CardDescription>
+                  </CardHeader>
+                  <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+                    <input
+                      className="h-9 rounded-md border border-white/15 bg-slate-900/70 px-2 text-sm"
+                      placeholder="CPM"
+                      value={auctionInput.cpm}
+                      onChange={(event) => setAuctionInput((prev) => ({ ...prev, cpm: event.target.value }))}
+                    />
+                    <input
+                      className="h-9 rounded-md border border-white/15 bg-slate-900/70 px-2 text-sm"
+                      placeholder="CPC"
+                      value={auctionInput.cpc}
+                      onChange={(event) => setAuctionInput((prev) => ({ ...prev, cpc: event.target.value }))}
+                    />
+                    <input
+                      className="h-9 rounded-md border border-white/15 bg-slate-900/70 px-2 text-sm"
+                      placeholder="Frequencia"
+                      value={auctionInput.frequency}
+                      onChange={(event) => setAuctionInput((prev) => ({ ...prev, frequency: event.target.value }))}
+                    />
+                    <input
+                      className="h-9 rounded-md border border-white/15 bg-slate-900/70 px-2 text-sm"
+                      placeholder="Hook Rate (%)"
+                      value={auctionInput.hookRate}
+                      onChange={(event) => setAuctionInput((prev) => ({ ...prev, hookRate: event.target.value }))}
+                    />
+                    <input
+                      className="h-9 rounded-md border border-white/15 bg-slate-900/70 px-2 text-sm"
+                      placeholder="Hold Rate (%)"
+                      value={auctionInput.holdRate}
+                      onChange={(event) => setAuctionInput((prev) => ({ ...prev, holdRate: event.target.value }))}
+                    />
+                    <Button variant="outline" onClick={handleAuctionInput}>
+                      Registrar input
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+
+              {permissions.canApproveScaleCampaigns && (
+                <Card className="border-emerald-300/30 bg-emerald-500/10">
+                  <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+                    <p className="text-sm text-emerald-100">Aprovacao final de campanhas de escala disponivel para CEO.</p>
+                    <Button
+                      onClick={() =>
+                        appendActivity("CEO", "Admin", "aprovou campanha", "Scale - Macro CBO", "ROAS e margem dentro do alvo")
+                      }
+                    >
+                      Aprovar campanha de escala
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+
               <LiveAdsTable
                 title="Live Ads Tracking"
                 subtitle="Hook Rate (3s/Imp) | Hold Rate (15s/3s) | VSL Efficiency (IC/LP)"
                 rows={data.liveAdsTracking}
+                hideRoasReal={!canShowRoas}
+                emphasizeRetention={retentionSpotlight}
+                simplified={permissions.simplifiedPerformanceView}
               />
             </section>
           )}
 
-          {activeSection === "facebook" && (
+          {activeSection === "facebook" && isSectionAllowed && (
             <section className="space-y-5">
               <div className="grid gap-4 xl:grid-cols-3">
                 <Card>
@@ -282,22 +495,47 @@ export default function Dashboard({ data }: DashboardProps) {
                     <CardTitle className="text-base">Foco do dia</CardTitle>
                   </CardHeader>
                   <CardContent className="text-sm text-slate-200">
-                    Iterar criativos com hold baixo e manter os hooks acima de 30% para preservar escala.
+                    {retentionSpotlight
+                      ? "Destaque de retencao habilitado para orientar copy e edicao."
+                      : "Iterar criativos com hold baixo e manter os hooks acima de 30% para preservar escala."}
                   </CardContent>
                 </Card>
               </div>
+
+              {permissions.canAlertSquad && (
+                <Card className="border-amber-300/30 bg-amber-500/10">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <AlertTriangle className="h-4 w-4 text-amber-200" /> Alertar Squad
+                    </CardTitle>
+                    <CardDescription>Aciona a producao quando o CPA sai do KPI</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Button variant="outline" onClick={handleAlertSquad}>
+                      Enviar alerta para Copy e Edicao
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
 
               <LiveAdsTable
                 title="Live Ads Tracking - Squad Facebook"
                 subtitle="Badges automaticas para decisao de escala ou ajuste"
                 rows={data.liveAdsTracking}
                 squadFilter="facebook"
+                hideRoasReal={!canShowRoas}
+                emphasizeRetention={retentionSpotlight}
+                simplified={permissions.simplifiedPerformanceView}
               />
-              <DailyBriefing items={data.dailyBriefing} squadFilter="facebook" />
+              <DailyBriefing
+                items={data.dailyBriefing}
+                squadFilter="facebook"
+                allowReply={permissions.canUploadCreativeVersions || permissions.canManageCreativeBacklog}
+              />
             </section>
           )}
 
-          {activeSection === "googleYoutube" && (
+          {activeSection === "googleYoutube" && isSectionAllowed && (
             <section className="space-y-5">
               <div className="grid gap-4 xl:grid-cols-3">
                 <Card>
@@ -324,22 +562,47 @@ export default function Dashboard({ data }: DashboardProps) {
                     <CardTitle className="text-base">Diagnostico</CardTitle>
                   </CardHeader>
                   <CardContent className="text-sm text-slate-200">
-                    Priorizar criativos de VVC com retencao acima de 20% antes de aumentar volume.
+                    {retentionSpotlight
+                      ? "Copywriter/Editor: priorizar curvas de retencao e VSL efficiency."
+                      : "Priorizar criativos de VVC com retencao acima de 20% antes de aumentar volume."}
                   </CardContent>
                 </Card>
               </div>
+
+              {permissions.canAlertSquad && (
+                <Card className="border-amber-300/30 bg-amber-500/10">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <AlertTriangle className="h-4 w-4 text-amber-200" /> Alertar Squad
+                    </CardTitle>
+                    <CardDescription>Dispara acao de iteracao quando CPA rompe KPI</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Button variant="outline" onClick={handleAlertSquad}>
+                      Alertar Squad Google/YouTube
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
 
               <LiveAdsTable
                 title="Live Ads Tracking - Squad Google/YouTube"
                 subtitle="Search + VVC + Display com leitura de gargalos em tempo real"
                 rows={data.liveAdsTracking}
                 squadFilter="googleYoutube"
+                hideRoasReal={!canShowRoas}
+                emphasizeRetention={retentionSpotlight}
+                simplified={permissions.simplifiedPerformanceView}
               />
-              <DailyBriefing items={data.dailyBriefing} squadFilter="googleYoutube" />
+              <DailyBriefing
+                items={data.dailyBriefing}
+                squadFilter="googleYoutube"
+                allowReply={permissions.canUploadCreativeVersions || permissions.canManageCreativeBacklog}
+              />
             </section>
           )}
 
-          {activeSection === "factory" && (
+          {activeSection === "factory" && isSectionAllowed && (
             <section className="space-y-5">
               <CreativeFactoryBoard tasks={data.creativeFactory.tasks} />
               <div className="grid gap-4 xl:grid-cols-2">
@@ -378,10 +641,62 @@ export default function Dashboard({ data }: DashboardProps) {
                     <p className="text-slate-400">Ganhar em DR = errar, medir e corrigir mais rapido que o mercado.</p>
                   </CardContent>
                 </Card>
+                {permissions.canManageCreativeBacklog && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Backlog de Criativos (Scripts e Angulos)</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="flex gap-2">
+                        <input
+                          className="h-9 flex-1 rounded-md border border-white/15 bg-slate-900/70 px-2 text-sm"
+                          placeholder="Novo item de backlog..."
+                          value={backlogInput}
+                          onChange={(event) => setBacklogInput(event.target.value)}
+                        />
+                        <Button variant="outline" onClick={addBacklogItem}>
+                          Adicionar
+                        </Button>
+                      </div>
+                      <ul className="space-y-2 text-sm text-slate-200">
+                        {creativeBacklog.slice(0, 5).map((item) => (
+                          <li key={item} className="rounded-md border border-white/10 bg-white/5 px-2 py-1.5">
+                            {item}
+                          </li>
+                        ))}
+                      </ul>
+                    </CardContent>
+                  </Card>
+                )}
               </div>
-              <DailyBriefing items={data.dailyBriefing} />
+              <DailyBriefing
+                items={data.dailyBriefing}
+                allowReply={permissions.canUploadCreativeVersions || permissions.canManageCreativeBacklog}
+              />
             </section>
           )}
+
+          <section className="mt-5">
+            <Card>
+              <CardHeader>
+                <CardTitle>Log de Atividades</CardTitle>
+                <CardDescription>Accountability operacional entre squads e gestao de midia</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm text-slate-200">
+                {activityLog.slice(0, 6).map((entry) => {
+                  const line = `[${entry.actorName}] ${entry.action} [${entry.entity}] por ${entry.reason}`;
+                  return (
+                    <div key={entry.id} className="rounded-md border border-white/10 bg-white/5 px-3 py-2">
+                      <p>{line}</p>
+                      <p className="text-xs text-slate-400">
+                        {entry.actorRole} - {entry.timestamp}
+                      </p>
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+          </section>
         </main>
       </div>
     </div>

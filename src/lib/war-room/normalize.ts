@@ -188,6 +188,28 @@ export function normalizeWarRoomData(
     };
   });
 
+  const activityInput = Array.isArray(input.activityLog) ? input.activityLog : fallback.activityLog;
+  const activityLog = (activityInput as unknown[]).map((item, index) => {
+    const row = toObject(item);
+    const fallbackLog = fallback.activityLog[index % fallback.activityLog.length];
+    return {
+      id: toString(row.id, fallbackLog.id),
+      actorRole: toString(row.actorRole, fallbackLog.actorRole),
+      actorName: toString(row.actorName, fallbackLog.actorName),
+      action: toString(row.action, fallbackLog.action),
+      entity: toString(row.entity, fallbackLog.entity),
+      reason: toString(row.reason, fallbackLog.reason),
+      timestamp: toString(row.timestamp, fallbackLog.timestamp),
+    };
+  });
+
+  const derivedNetRevenue = toNumber(oldFinance.netRevenue, toNumber(oldFinance.revenue, fallback.finance.netRevenue) * 0.62);
+  const derivedProfitMargin =
+    toNumber(oldFinance.profitMargin, 0) ||
+    (toNumber(oldFinance.revenue, 0) > 0
+      ? (derivedNetRevenue / toNumber(oldFinance.revenue, fallback.globalOverview.revenue)) * 100
+      : fallback.finance.profitMargin);
+
   const normalized: WarRoomData = {
     source,
     sourceLabel,
@@ -227,9 +249,12 @@ export function normalizeWarRoomData(
     },
     dailyBriefing: dailyBriefing.length > 0 ? dailyBriefing : fallback.dailyBriefing,
     finance: {
+      netRevenue: toNumber(financeInput.netRevenue, derivedNetRevenue),
+      profitMargin: toNumber(financeInput.profitMargin, derivedProfitMargin),
       approvalRate: toNumber(financeInput.approvalRate, fallback.finance.approvalRate),
       ltv: toNumber(financeInput.ltv, fallback.finance.ltv),
     },
+    activityLog: activityLog.length > 0 ? activityLog : fallback.activityLog,
     oldSchema: {
       ads: {
         investmentTotal: toNumber(oldAds.investmentTotal, 0),
@@ -247,6 +272,8 @@ export function normalizeWarRoomData(
       },
       finance: {
         revenue: toNumber(oldFinance.revenue, 0),
+        netRevenue: toNumber(oldFinance.netRevenue, 0),
+        profitMargin: toNumber(oldFinance.profitMargin, 0),
         approvalRate: toNumber(oldFinance.approvalRate, 0),
         ltv: toNumber(oldFinance.ltv, 0),
       },

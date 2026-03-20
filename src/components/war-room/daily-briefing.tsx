@@ -11,6 +11,7 @@ import type { DailyReplyRole, SquadKey, WarRoomData } from "@/lib/war-room/types
 type DailyBriefingProps = {
   items: WarRoomData["dailyBriefing"];
   squadFilter?: SquadKey;
+  allowReply?: boolean;
 };
 
 type ReplyFormState = {
@@ -33,7 +34,7 @@ function squadLabel(squad: SquadKey) {
   return squad === "facebook" ? "Facebook" : "Google/YouTube";
 }
 
-export function DailyBriefing({ items, squadFilter }: DailyBriefingProps) {
+export function DailyBriefing({ items, squadFilter, allowReply = true }: DailyBriefingProps) {
   const [briefings, setBriefings] = useState(items);
   const [forms, setForms] = useState<Record<string, ReplyFormState>>({});
 
@@ -118,41 +119,47 @@ export function DailyBriefing({ items, squadFilter }: DailyBriefingProps) {
               ))}
             </div>
 
-            <div className="grid gap-2 md:grid-cols-2">
-              <Input
-                placeholder="Autor (ex: Ana)"
-                value={formState(briefing.id).author}
-                onChange={(event) => updateForm(briefing.id, { author: event.target.value })}
-              />
-              <Input
-                placeholder="Versao (ex: V4)"
-                value={formState(briefing.id).version}
-                onChange={(event) => updateForm(briefing.id, { version: event.target.value })}
-              />
-            </div>
-            <div className="grid gap-2 md:grid-cols-[160px_minmax(0,1fr)]">
-              <select
-                value={formState(briefing.id).role}
-                onChange={(event) => updateForm(briefing.id, { role: event.target.value as DailyReplyRole })}
-                className="h-9 rounded-md border border-white/15 bg-slate-900/70 px-2 text-sm text-slate-100 outline-none"
-              >
-                <option value="Copy">Copy</option>
-                <option value="Edicao">Edicao</option>
-              </select>
-              <Input
-                placeholder="URL da versao (Drive, Frame.io, etc)"
-                value={formState(briefing.id).assetUrl}
-                onChange={(event) => updateForm(briefing.id, { assetUrl: event.target.value })}
-              />
-            </div>
-            <Textarea
-              placeholder="Observacao da iteracao..."
-              value={formState(briefing.id).note}
-              onChange={(event) => updateForm(briefing.id, { note: event.target.value })}
-            />
-            <Button variant="outline" onClick={() => addReply(briefing.id)}>
-              Publicar resposta no briefing
-            </Button>
+            {allowReply ? (
+              <>
+                <div className="grid gap-2 md:grid-cols-2">
+                  <Input
+                    placeholder="Autor (ex: Ana)"
+                    value={formState(briefing.id).author}
+                    onChange={(event) => updateForm(briefing.id, { author: event.target.value })}
+                  />
+                  <Input
+                    placeholder="Versao (ex: V4)"
+                    value={formState(briefing.id).version}
+                    onChange={(event) => updateForm(briefing.id, { version: event.target.value })}
+                  />
+                </div>
+                <div className="grid gap-2 md:grid-cols-[160px_minmax(0,1fr)]">
+                  <select
+                    value={formState(briefing.id).role}
+                    onChange={(event) => updateForm(briefing.id, { role: event.target.value as DailyReplyRole })}
+                    className="h-9 rounded-md border border-white/15 bg-slate-900/70 px-2 text-sm text-slate-100 outline-none"
+                  >
+                    <option value="Copy">Copy</option>
+                    <option value="Edicao">Edicao</option>
+                  </select>
+                  <Input
+                    placeholder="URL da versao (Drive, Frame.io, etc)"
+                    value={formState(briefing.id).assetUrl}
+                    onChange={(event) => updateForm(briefing.id, { assetUrl: event.target.value })}
+                  />
+                </div>
+                <Textarea
+                  placeholder="Observacao da iteracao..."
+                  value={formState(briefing.id).note}
+                  onChange={(event) => updateForm(briefing.id, { note: event.target.value })}
+                />
+                <Button variant="outline" onClick={() => addReply(briefing.id)}>
+                  Publicar resposta no briefing
+                </Button>
+              </>
+            ) : (
+              <p className="text-sm text-slate-400">Perfil atual com acesso somente leitura ao briefing.</p>
+            )}
           </CardContent>
         </Card>
       ))}

@@ -11,6 +11,9 @@ type LiveAdsTableProps = {
   title: string;
   subtitle?: string;
   squadFilter?: SquadKey;
+  hideRoasReal?: boolean;
+  emphasizeRetention?: boolean;
+  simplified?: boolean;
 };
 
 const percent = (value: number) =>
@@ -30,7 +33,15 @@ function squadLabel(squad: SquadKey) {
   return squad === "facebook" ? "Facebook" : "Google/YouTube";
 }
 
-export function LiveAdsTable({ rows, title, subtitle, squadFilter }: LiveAdsTableProps) {
+export function LiveAdsTable({
+  rows,
+  title,
+  subtitle,
+  squadFilter,
+  hideRoasReal = false,
+  emphasizeRetention = false,
+  simplified = false,
+}: LiveAdsTableProps) {
   const filteredRows = squadFilter ? rows.filter((row) => row.squad === squadFilter) : rows;
 
   return (
@@ -44,13 +55,13 @@ export function LiveAdsTable({ rows, title, subtitle, squadFilter }: LiveAdsTabl
           <table className="min-w-full text-sm">
             <thead>
               <tr className="border-b border-white/10 text-left text-slate-400">
-                <th className="px-2 py-2 font-medium">Squad</th>
-                <th className="px-2 py-2 font-medium">Campanha</th>
+                {!simplified && <th className="px-2 py-2 font-medium">Squad</th>}
+                {!simplified && <th className="px-2 py-2 font-medium">Campanha</th>}
                 <th className="px-2 py-2 font-medium">Anuncio</th>
                 <th className="px-2 py-2 font-medium">Hook Rate</th>
-                <th className="px-2 py-2 font-medium">Hold Rate</th>
+                <th className={`px-2 py-2 font-medium ${emphasizeRetention ? "text-violet-300" : ""}`}>Hold Rate</th>
                 <th className="px-2 py-2 font-medium">VSL Efficiency</th>
-                <th className="px-2 py-2 font-medium">ROAS</th>
+                {!hideRoasReal && <th className="px-2 py-2 font-medium">ROAS</th>}
                 <th className="px-2 py-2 font-medium">Badges</th>
               </tr>
             </thead>
@@ -60,13 +71,15 @@ export function LiveAdsTable({ rows, title, subtitle, squadFilter }: LiveAdsTabl
 
                 return (
                   <tr key={row.id} className="border-b border-white/5 text-slate-100">
-                    <td className="px-2 py-3">{squadLabel(row.squad)}</td>
-                    <td className="px-2 py-3">{row.campaign}</td>
+                    {!simplified && <td className="px-2 py-3">{squadLabel(row.squad)}</td>}
+                    {!simplified && <td className="px-2 py-3">{row.campaign}</td>}
                     <td className="px-2 py-3">{row.adName}</td>
                     <td className="px-2 py-3">{percent(metrics.hookRate)}</td>
-                    <td className="px-2 py-3">{percent(metrics.holdRate)}</td>
+                    <td className={`px-2 py-3 ${emphasizeRetention ? "font-semibold text-violet-200" : ""}`}>
+                      {percent(metrics.holdRate)}
+                    </td>
                     <td className="px-2 py-3">{percent(metrics.vslEfficiency)}</td>
-                    <td className="px-2 py-3">{row.roas.toFixed(2)}</td>
+                    {!hideRoasReal && <td className="px-2 py-3">{row.roas.toFixed(2)}</td>}
                     <td className="px-2 py-3">
                       <div className="flex flex-wrap gap-1.5">
                         {metrics.hookRate > 30 ? <Badge variant="gold">Gancho de Ouro</Badge> : null}
