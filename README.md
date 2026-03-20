@@ -61,6 +61,19 @@ Tambem foi adicionado o **Log de Atividades**, com trilha de acoes no formato:
 
 - `[Gestor X] pausou criativo [Y] por baixo Hook Rate`
 
+## Auditoria de Escalabilidade (upgrade corporativo)
+
+- Escopo de dados por sessao no backend (`/api/war-room`) com sanitizacao por cargo.
+- Troca de usuario simulada com cookie httpOnly (`/api/auth/switch-user`).
+- Tabela de anuncios otimizada para alto volume com paginação de render.
+- Formulas DR centralizadas com protecao contra `NaN`/`Infinity`:
+  - Hook Rate = `3s / Imp`
+  - Hold Rate = `15s / 3s`
+  - VSL Efficiency = `IC / LP`
+- Tooltips operacionais nas metricas principais.
+- Componente **Recomendacoes da IA** para acao imediata.
+- **Health Check** em tempo real com latencia API + indice de Page Drop.
+
 ## Fontes de dados reais
 
 O projeto aceita 4 fontes via `WAR_ROOM_SOURCE`:
@@ -202,7 +215,11 @@ Tabelas legadas suportadas:
 
 ## Endpoint interno
 
-- `GET /api/war-room` retorna o payload consolidado que alimenta o dashboard.
+- `GET /api/war-room` retorna:
+  - `data`: payload consolidado (ja sanitizado pelo RBAC da sessao)
+  - `session`: metadados da sessao ativa (role/userId)
+- `POST /api/auth/switch-user` troca usuario de demonstracao e atualiza cookie httpOnly.
+- `GET /api/health` retorna status para health check de latencia.
 
 ## Estrutura principal
 

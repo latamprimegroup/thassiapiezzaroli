@@ -21,10 +21,14 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ActionableInsights } from "@/components/war-room/actionable-insights";
 import { CreativeFactoryBoard } from "@/components/war-room/creative-factory-board";
 import { DailyBriefing } from "@/components/war-room/daily-briefing";
+import { HealthCheck } from "@/components/war-room/health-check";
 import { LiveAdsTable } from "@/components/war-room/live-ads-table";
 import { rolePermissions, type SectionId, type UserRole } from "@/lib/auth/rbac";
+import type { DemoUser } from "@/lib/auth/users";
+import { computeKpis, safeDivide, toFiniteNumber } from "@/lib/metrics/kpis";
 import type { WarRoomData } from "@/lib/war-room/types";
 
 type Section = {
@@ -69,11 +73,21 @@ const formatPercent = (value: number) =>
 
 type DashboardProps = {
   data: WarRoomData;
+  users: DemoUser[];
+  session: {
+    userId: string;
+    role: UserRole;
+  };
 };
 
-export default function Dashboard({ data }: DashboardProps) {
-  const [activeRole, setActiveRole] = useState<UserRole>("ceo");
-  const [activeSection, setActiveSection] = useState<SectionId>("overview");
+export default function Dashboard({ data, users, session }: DashboardProps) {
+  const [viewData, setViewData] = useState(data);
+  const [sessionState, setSessionState] = useState(session);
+  const [isSwitchingUser, setIsSwitchingUser] = useState(false);
+  const initialAllowedSections = rolePermissions[session.role].allowedSections;
+  const [activeSection, setActiveSection] = useState<SectionId>(
+    initialAllowedSections.includes("overview") ? "overview" : initialAllowedSections[0],
+  );
   const [activityLog, setActivityLog] = useState(data.activityLog);
   const [auctionInput, setAuctionInput] = useState({
     cpm: "",
@@ -95,25 +109,24 @@ export default function Dashboard({ data }: DashboardProps) {
     ];
   });
 
-  const permissions = rolePermissions[activeRole];
+  const permissions = rolePermissions[sessionState.role];
   const ActiveRoleIcon = permissions.icon;
+  const activeUser = users.find((user) => user.id === sessionState.userId) ?? users[0];
 
   const intelligence = useMemo(() => {
-    const rows = data.liveAdsTracking;
+    const rows = viewData.liveAdsTracking;
     const winners = rows.filter((row) => row.roas > 2.5).length;
-    const goldHooks = rows.filter((row) => row.impressions > 0 && (row.views3s / row.impressions) * 100 > 30).length;
-    const retentionBottleneck = rows.filter((row) => row.views3s > 0 && (row.views15s / row.views3s) * 100 < 20).length;
+    const goldHooks = rows.filter((row) => computeKpis(row).hookRate > 30).length;
+    const retentionBottleneck = rows.filter((row) => computeKpis(row).holdRate < 20).length;
     return { winners, goldHooks, retentionBottleneck };
-  }, [data.liveAdsTracking]);
+  }, [viewData.liveAdsTracking]);
 
-  const macroRoas = useMemo(() => {
-    if (data.globalOverview.investment <= 0) {
-      return 0;
-    }
-    return data.globalOverview.revenue / data.globalOverview.investment;
-  }, [data.globalOverview.investment, data.globalOverview.revenue]);
+  const macroRoas = useMemo(
+    () => safeDivide(viewData.globalOverview.revenue, viewData.globalOverview.investment),
+    [viewData.globalOverview.investment, viewData.globalOverview.revenue],
+  );
 
-  const updatedAtDate = new Date(data.updatedAt);
+  const updatedAtDate = new Date(viewData.updatedAt);
   const safeUpdatedAtDate = Number.isNaN(updatedAtDate.getTime()) ? new Date() : updatedAtDate;
   const updatedAt = safeUpdatedAtDate.toLocaleDateString("pt-BR", {
     day: "2-digit",
@@ -145,7 +158,9 @@ export default function Dashboard({ data }: DashboardProps) {
       "Gestor da Midia",
       "alertou squad",
       activeSection === "googleYoutube" ? "Squad Google/YouTube" : "Squad Facebook",
-      `CPA acima do KPI. Hook ${auctionInput.hookRate || "0"}% | Hold ${auctionInput.holdRate || "0"}%`,
+      `CPA acima do KPI. Hook ${toFiniteNumber(auctionInput.hookRate)}% | Hold ${toFiniteNumber(
+        auctionInput.holdRate,
+      )}%`,
     );
   }
 
@@ -158,7 +173,9 @@ export default function Dashboard({ data }: DashboardProps) {
       "Gestor da Midia",
       "registrou input de leilao",
       activeSection === "googleYoutube" ? "Google/YouTube" : "Facebook",
-      `CPM ${auctionInput.cpm || "0"} | CPC ${auctionInput.cpc || "0"} | Freq ${auctionInput.frequency || "0"}`,
+      `CPM ${toFiniteNumber(auctionInput.cpm)} | CPC ${toFiniteNumber(auctionInput.cpc)} | Freq ${toFiniteNumber(
+        auctionInput.frequency,
+      )}`,
     );
   }
 
@@ -171,16 +188,48 @@ export default function Dashboard({ data }: DashboardProps) {
     setBacklogInput("");
   }
 
-  const hiddenFinanceForRole = activeRole === "videoEditor";
+  const hiddenFinanceForRole = sessionState.role === "videoEditor";
   const isSectionAllowed = permissions.allowedSections.includes(activeSection);
   const canShowRoas = permissions.canViewRoasReal && !hiddenFinanceForRole;
   const retentionSpotlight = permissions.emphasizeRetention;
 
-  function handleRoleSwitch(roleKey: UserRole) {
-    const nextPermissions = rolePermissions[roleKey];
-    setActiveRole(roleKey);
-    if (!nextPermissions.allowedSections.includes(activeSection)) {
-      setActiveSection(nextPermissions.allowedSections[0]);
+  async function switchUser(userId: string) {
+    setIsSwitchingUser(true);
+    try {
+      const switchResponse = await fetch("/api/auth/switch-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+      });
+
+      if (!switchResponse.ok) {
+        throw new Error("Falha ao trocar usuario.");
+      }
+
+      const dataResponse = await fetch("/api/war-room", { cache: "no-store" });
+      if (!dataResponse.ok) {
+        throw new Error("Falha ao recarregar dados por perfil.");
+      }
+
+      const payload = (await dataResponse.json()) as {
+        data: WarRoomData;
+        session: { userId: string; role: UserRole };
+      };
+
+      const nextRole = payload.session.role;
+      const nextPermissions = rolePermissions[nextRole];
+
+      // Senior-only note: role/permission source of truth stays server-side.
+      // The client only reflects already-sanitized payload from API.
+      setViewData(payload.data);
+      setActivityLog(payload.data.activityLog);
+      setSessionState({
+        userId: payload.session.userId,
+        role: nextRole,
+      });
+      setActiveSection((prev) => (nextPermissions.allowedSections.includes(prev) ? prev : nextPermissions.allowedSections[0]));
+    } finally {
+      setIsSwitchingUser(false);
     }
   }
 
@@ -251,26 +300,7 @@ export default function Dashboard({ data }: DashboardProps) {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2 md:max-w-[660px] md:justify-end">
-              {(Object.keys(rolePermissions) as UserRole[]).map((roleKey) => {
-                const role = rolePermissions[roleKey];
-                const Icon = role.icon;
-                const selected = roleKey === activeRole;
-                return (
-                  <button
-                    key={roleKey}
-                    onClick={() => handleRoleSwitch(roleKey)}
-                    className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition ${
-                      selected
-                        ? "border-cyan-300/40 bg-cyan-500/20 text-cyan-100"
-                        : "border-white/15 bg-white/5 text-slate-300 hover:bg-white/10"
-                    }`}
-                  >
-                    <Icon className="h-3.5 w-3.5" />
-                    {role.label}
-                  </button>
-                );
-              })}
-              <Badge variant="sky">Fonte: {data.sourceLabel}</Badge>
+              <Badge variant="sky">Fonte: {viewData.sourceLabel}</Badge>
               <Badge variant="default">Atualizado em {updatedAt}</Badge>
             </div>
           </header>
@@ -288,6 +318,49 @@ export default function Dashboard({ data }: DashboardProps) {
             </Card>
           )}
 
+          <div className="mb-5 grid gap-4 xl:grid-cols-3">
+            <Card className="xl:col-span-2">
+              <CardHeader>
+                <CardTitle className="text-base">Switch de Usuario (RBAC)</CardTitle>
+                <CardDescription>
+                  Troca de sessao simulada com escopo de dados no backend para demonstracao segura.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-wrap items-center gap-2">
+                {users.map((user) => {
+                  const role = rolePermissions[user.role];
+                  const Icon = role.icon;
+                  const selected = user.id === sessionState.userId;
+                  return (
+                    <button
+                      key={user.id}
+                      disabled={isSwitchingUser}
+                      onClick={() => void switchUser(user.id)}
+                      className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition ${
+                        selected
+                          ? "border-cyan-300/40 bg-cyan-500/20 text-cyan-100"
+                          : "border-white/15 bg-white/5 text-slate-300 hover:bg-white/10"
+                      }`}
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                      {user.name}
+                    </button>
+                  );
+                })}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Sessao ativa</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-1 text-sm">
+                <p className="font-semibold text-white">{activeUser.name}</p>
+                <p className="text-slate-300">{permissions.description}</p>
+                {isSwitchingUser && <p className="text-xs text-cyan-300">Atualizando escopo de dados...</p>}
+              </CardContent>
+            </Card>
+          </div>
+
           {activeSection === "overview" && isSectionAllowed && (
             <section className="space-y-5">
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -298,7 +371,7 @@ export default function Dashboard({ data }: DashboardProps) {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-2xl font-semibold">{formatCurrency(data.globalOverview.investment)}</p>
+                    <p className="text-2xl font-semibold">{formatCurrency(viewData.globalOverview.investment)}</p>
                   </CardContent>
                 </Card>
                 {!hiddenFinanceForRole && (
@@ -309,7 +382,7 @@ export default function Dashboard({ data }: DashboardProps) {
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <p className="text-2xl font-semibold">{formatCurrency(data.globalOverview.revenue)}</p>
+                      <p className="text-2xl font-semibold">{formatCurrency(viewData.globalOverview.revenue)}</p>
                     </CardContent>
                   </Card>
                 )}
@@ -332,7 +405,7 @@ export default function Dashboard({ data }: DashboardProps) {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-sm text-slate-200">{data.globalOverview.utmifySyncAt}</p>
+                    <p className="text-sm text-slate-200">{viewData.globalOverview.utmifySyncAt}</p>
                     <p className="mt-2 text-xs text-slate-400">Status de ingestao em tempo real</p>
                   </CardContent>
                 </Card>
@@ -348,20 +421,20 @@ export default function Dashboard({ data }: DashboardProps) {
                   <CardContent className="space-y-2 text-sm text-slate-200">
                     <p>
                       Taxa de aprovacao de pagamento:{" "}
-                      <span className="font-semibold text-white">{formatPercent(data.finance.approvalRate)}</span>
+                      <span className="font-semibold text-white">{formatPercent(viewData.finance.approvalRate)}</span>
                     </p>
                     <p>
-                      LTV consolidado: <span className="font-semibold text-white">{formatCurrency(data.finance.ltv)}</span>
+                      LTV consolidado: <span className="font-semibold text-white">{formatCurrency(viewData.finance.ltv)}</span>
                     </p>
                     {permissions.canViewSensitiveFinancials && (
                       <>
                         <p>
                           Faturamento liquido:{" "}
-                          <span className="font-semibold text-emerald-200">{formatCurrency(data.finance.netRevenue)}</span>
+                          <span className="font-semibold text-emerald-200">{formatCurrency(viewData.finance.netRevenue)}</span>
                         </p>
                         <p>
                           Margem de lucro:{" "}
-                          <span className="font-semibold text-emerald-200">{formatPercent(data.finance.profitMargin)}</span>
+                          <span className="font-semibold text-emerald-200">{formatPercent(viewData.finance.profitMargin)}</span>
                         </p>
                       </>
                     )}
@@ -462,11 +535,16 @@ export default function Dashboard({ data }: DashboardProps) {
               <LiveAdsTable
                 title="Live Ads Tracking"
                 subtitle="Hook Rate (3s/Imp) | Hold Rate (15s/3s) | VSL Efficiency (IC/LP)"
-                rows={data.liveAdsTracking}
+                rows={viewData.liveAdsTracking}
                 hideRoasReal={!canShowRoas}
                 emphasizeRetention={retentionSpotlight}
                 simplified={permissions.simplifiedPerformanceView}
               />
+
+              <div className="grid gap-4 xl:grid-cols-2">
+                <ActionableInsights rows={viewData.liveAdsTracking} role={sessionState.role} />
+                <HealthCheck baselineDropRate={viewData.oldSchema?.tech?.pageLoadDropOff ?? 18} />
+              </div>
             </section>
           )}
 
@@ -476,19 +554,19 @@ export default function Dashboard({ data }: DashboardProps) {
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-base">Squad Facebook</CardTitle>
-                    <CardDescription>{data.squads.facebook.focus}</CardDescription>
+                    <CardDescription>{viewData.squads.facebook.focus}</CardDescription>
                   </CardHeader>
-                  <CardContent className="text-sm text-slate-200">{data.squads.facebook.managerComment}</CardContent>
+                  <CardContent className="text-sm text-slate-200">{viewData.squads.facebook.managerComment}</CardContent>
                 </Card>
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-base">Creative Velocity</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-2xl font-semibold">{data.squads.facebook.creativeVelocity}/semana</p>
+                    <p className="text-2xl font-semibold">{viewData.squads.facebook.creativeVelocity}/semana</p>
                     <p className="mt-1 text-sm text-slate-400">
-                      Meta: {data.squads.facebook.creativeVelocityTarget} | Validados:{" "}
-                      {data.squads.facebook.validatedCreatives}
+                      Meta: {viewData.squads.facebook.creativeVelocityTarget} | Validados:{" "}
+                      {viewData.squads.facebook.validatedCreatives}
                     </p>
                   </CardContent>
                 </Card>
@@ -523,14 +601,14 @@ export default function Dashboard({ data }: DashboardProps) {
               <LiveAdsTable
                 title="Live Ads Tracking - Squad Facebook"
                 subtitle="Badges automaticas para decisao de escala ou ajuste"
-                rows={data.liveAdsTracking}
+                rows={viewData.liveAdsTracking}
                 squadFilter="facebook"
                 hideRoasReal={!canShowRoas}
                 emphasizeRetention={retentionSpotlight}
                 simplified={permissions.simplifiedPerformanceView}
               />
               <DailyBriefing
-                items={data.dailyBriefing}
+                items={viewData.dailyBriefing}
                 squadFilter="facebook"
                 allowReply={permissions.canUploadCreativeVersions || permissions.canManageCreativeBacklog}
               />
@@ -543,19 +621,19 @@ export default function Dashboard({ data }: DashboardProps) {
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-base">Squad Google/YouTube</CardTitle>
-                    <CardDescription>{data.squads.googleYoutube.focus}</CardDescription>
+                    <CardDescription>{viewData.squads.googleYoutube.focus}</CardDescription>
                   </CardHeader>
-                  <CardContent className="text-sm text-slate-200">{data.squads.googleYoutube.managerComment}</CardContent>
+                  <CardContent className="text-sm text-slate-200">{viewData.squads.googleYoutube.managerComment}</CardContent>
                 </Card>
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-base">Creative Velocity</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-2xl font-semibold">{data.squads.googleYoutube.creativeVelocity}/semana</p>
+                    <p className="text-2xl font-semibold">{viewData.squads.googleYoutube.creativeVelocity}/semana</p>
                     <p className="mt-1 text-sm text-slate-400">
-                      Meta: {data.squads.googleYoutube.creativeVelocityTarget} | Validados:{" "}
-                      {data.squads.googleYoutube.validatedCreatives}
+                      Meta: {viewData.squads.googleYoutube.creativeVelocityTarget} | Validados:{" "}
+                      {viewData.squads.googleYoutube.validatedCreatives}
                     </p>
                   </CardContent>
                 </Card>
@@ -590,14 +668,14 @@ export default function Dashboard({ data }: DashboardProps) {
               <LiveAdsTable
                 title="Live Ads Tracking - Squad Google/YouTube"
                 subtitle="Search + VVC + Display com leitura de gargalos em tempo real"
-                rows={data.liveAdsTracking}
+                rows={viewData.liveAdsTracking}
                 squadFilter="googleYoutube"
                 hideRoasReal={!canShowRoas}
                 emphasizeRetention={retentionSpotlight}
                 simplified={permissions.simplifiedPerformanceView}
               />
               <DailyBriefing
-                items={data.dailyBriefing}
+                items={viewData.dailyBriefing}
                 squadFilter="googleYoutube"
                 allowReply={permissions.canUploadCreativeVersions || permissions.canManageCreativeBacklog}
               />
@@ -606,7 +684,7 @@ export default function Dashboard({ data }: DashboardProps) {
 
           {activeSection === "factory" && isSectionAllowed && (
             <section className="space-y-5">
-              <CreativeFactoryBoard tasks={data.creativeFactory.tasks} />
+              <CreativeFactoryBoard tasks={viewData.creativeFactory.tasks} />
               <div className="grid gap-4 xl:grid-cols-2">
                 <Card>
                   <CardHeader>
@@ -631,13 +709,13 @@ export default function Dashboard({ data }: DashboardProps) {
                     <p>
                       Facebook:{" "}
                       <span className="font-semibold">
-                        {data.squads.facebook.creativeVelocity}/{data.squads.facebook.creativeVelocityTarget}
+                        {viewData.squads.facebook.creativeVelocity}/{viewData.squads.facebook.creativeVelocityTarget}
                       </span>
                     </p>
                     <p>
                       Google/YouTube:{" "}
                       <span className="font-semibold">
-                        {data.squads.googleYoutube.creativeVelocity}/{data.squads.googleYoutube.creativeVelocityTarget}
+                        {viewData.squads.googleYoutube.creativeVelocity}/{viewData.squads.googleYoutube.creativeVelocityTarget}
                       </span>
                     </p>
                     <p className="text-slate-400">Ganhar em DR = errar, medir e corrigir mais rapido que o mercado.</p>
@@ -672,7 +750,7 @@ export default function Dashboard({ data }: DashboardProps) {
                 )}
               </div>
               <DailyBriefing
-                items={data.dailyBriefing}
+                items={viewData.dailyBriefing}
                 allowReply={permissions.canUploadCreativeVersions || permissions.canManageCreativeBacklog}
               />
             </section>

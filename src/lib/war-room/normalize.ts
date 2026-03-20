@@ -89,6 +89,7 @@ export function normalizeWarRoomData(
   const oldFinance = toObject(input.finance);
   const oldCopy = toObject(input.copy);
   const oldProduction = toObject(oldCopy.productionFlow);
+  const oldTech = toObject(input.tech);
 
   const globalInput = toObject(input.globalOverview);
   const squadsInput = toObject(input.squads);
@@ -269,6 +270,14 @@ export function normalizeWarRoomData(
           gravando: toStringArray(oldProduction.gravando, []),
           editando: toStringArray(oldProduction.editando, []),
         },
+      },
+      tech: {
+        pageLoadDropOff: toNumber(oldTech.pageLoadDropOff, 0),
+        pageLoadNote: toString(oldTech.pageLoadNote, ""),
+        vslRetention: toNumber(oldTech.vslRetention, 0),
+        vslNote: toString(oldTech.vslNote, ""),
+        checkoutConversion: toNumber(oldTech.checkoutConversion, 0),
+        checkoutNote: toString(oldTech.checkoutNote, ""),
       },
       finance: {
         revenue: toNumber(oldFinance.revenue, 0),
