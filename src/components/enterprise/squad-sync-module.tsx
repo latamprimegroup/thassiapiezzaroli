@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -59,6 +59,7 @@ export function SquadSyncModule({ canInputDailyFeedback, actorName }: SquadSyncM
   const [sentimentNotes, setSentimentNotes] = useState("");
   const [messages, setMessages] = useState<AutoMessage[]>([]);
   const [lastReportAt, setLastReportAt] = useState(data.updatedAt);
+  const [currentTimeMs, setCurrentTimeMs] = useState(() => new Date().getTime());
 
   const liveRows = data.liveAdsTracking;
   const defaultCreativeId = liveRows[0]?.id ?? "";
@@ -146,7 +147,15 @@ export function SquadSyncModule({ canInputDailyFeedback, actorName }: SquadSyncM
 
   const winnerAngle = anglePerformance[0]?.angle ?? "Sem dados";
 
-  const hoursSinceReport = Math.max(0, (Date.now() - new Date(lastReportAt).getTime()) / (1000 * 60 * 60));
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setCurrentTimeMs(new Date().getTime());
+    }, 60_000);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const hoursSinceReport = Math.max(0, (currentTimeMs - new Date(lastReportAt).getTime()) / (1000 * 60 * 60));
   const syncWarning = !Number.isFinite(hoursSinceReport) || hoursSinceReport > 24;
 
   function resetKpisForCreative(creativeId: string) {
@@ -179,6 +188,7 @@ export function SquadSyncModule({ canInputDailyFeedback, actorName }: SquadSyncM
 
     setMessages((prev) => [message, ...prev].slice(0, 8));
     setLastReportAt(now.toISOString());
+    setCurrentTimeMs(now.getTime());
 
     addActivity(
       "Media Buyer",
@@ -200,7 +210,7 @@ export function SquadSyncModule({ canInputDailyFeedback, actorName }: SquadSyncM
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-2">
           <div className="rounded-md border border-white/10 bg-black/40 p-3 font-mono text-xs">
-            <p className="text-slate-300">Status de Sincronia (Mídia)</p>
+            <p className="text-slate-300">Status de Sincronia (Midia)</p>
             <div className="mt-2 flex items-center gap-2">
               <Badge variant={syncWarning ? "warning" : "success"}>
                 {syncWarning ? "ALERTA LARANJA" : "SYNC OK"}
