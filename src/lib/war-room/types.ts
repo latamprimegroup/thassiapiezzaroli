@@ -1,41 +1,108 @@
-export type CreativeVerdict = "Escalar" | "Matar";
+export type SquadKey = "facebook" | "googleYoutube";
+
+export type PipelineStage = "Roteiro" | "Gravacao" | "Edicao" | "Teste" | "Winner";
+
+export type DailyReplyRole = "Copy" | "Edicao";
+
+export type WarRoomDataSource = "mock" | "api" | "sheet" | "database" | "fallback";
 
 export type WarRoomData = {
-  source: "mock" | "api" | "sheet" | "database" | "fallback";
+  source: WarRoomDataSource;
   sourceLabel: string;
   updatedAt: string;
-  ads: {
-    investmentTotal: number;
-    avgRoas: number;
-    avgCpm: number;
-    creatives: Array<{
+  globalOverview: {
+    investment: number;
+    revenue: number;
+    utmifySyncAt: string;
+  };
+
+  squads: Record<
+    SquadKey,
+    {
+      name: string;
+      focus: string;
+      creativeVelocity: number;
+      creativeVelocityTarget: number;
+      validatedCreatives: number;
+      managerComment: string;
+    }
+  >;
+
+  liveAdsTracking: Array<{
+    id: string;
+    squad: SquadKey;
+    campaign: string;
+    adName: string;
+    impressions: number;
+    views3s: number;
+    views15s: number;
+    ic: number;
+    lp: number;
+    roas: number;
+  }>;
+
+  creativeFactory: {
+    tasks: Array<{
       id: string;
-      hookRate: number;
-      holdRate: number;
-      roas: number;
-      verdict: CreativeVerdict;
+      squad: SquadKey;
+      title: string;
+      owner: string;
+      status: PipelineStage;
+      metricContext: string;
+      updatedAt: string;
     }>;
   };
-  copy: {
-    angles: string[];
-    hooksBacklog: string[];
-    productionFlow: {
-      roteirizando: string[];
-      gravando: string[];
-      editando: string[];
-    };
-  };
-  tech: {
-    pageLoadDropOff: number;
-    pageLoadNote: string;
-    vslRetention: number;
-    vslNote: string;
-    checkoutConversion: number;
-    checkoutNote: string;
-  };
+
+  dailyBriefing: Array<{
+    id: string;
+    squad: SquadKey;
+    trafficManagerComment: string;
+    replies: Array<{
+      role: DailyReplyRole;
+      author: string;
+      version: string;
+      assetUrl: string;
+      note: string;
+    }>;
+  }>;
+
   finance: {
-    revenue: number;
     approvalRate: number;
     ltv: number;
+  };
+  oldSchema?: {
+    ads?: {
+      investmentTotal?: number;
+      avgRoas?: number;
+      avgCpm?: number;
+      creatives?: Array<{
+        id: string;
+        hookRate: number;
+        holdRate: number;
+        roas: number;
+      }>;
+    };
+    copy?: {
+      angles?: string[];
+      hooksBacklog?: string[];
+      productionFlow?: {
+        roteirizando?: string[];
+        gravando?: string[];
+        editando?: string[];
+      };
+    };
+    tech?: {
+      pageLoadDropOff?: number;
+      pageLoadNote?: string;
+      vslRetention?: number;
+      vslNote?: string;
+      checkoutConversion?: number;
+      checkoutNote?: string;
+    };
+    finance?: {
+      revenue?: number;
+      approvalRate?: number;
+      ltv?: number;
+    };
   };
 };

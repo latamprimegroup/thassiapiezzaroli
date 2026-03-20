@@ -1,6 +1,11 @@
-# WAR ROOM DASHBOARD
+# WAR ROOM OS - 8-Figure Squad Engine
 
-Central de Inteligencia da Empresa com foco em operacao, performance e financeiro.
+Single Page Application (SPA) para operacao de Direct Response com:
+
+- alinhamento de squads (Copy, Trafego, Edicao),
+- pipeline de producao estilo Kanban,
+- tracking de anuncios em tempo real,
+- inteligencia automatica por badges.
 
 ## Stack
 
@@ -8,6 +13,7 @@ Central de Inteligencia da Empresa com foco em operacao, performance e financeir
 - React
 - Tailwind CSS
 - Lucide Icons
+- Componentes UI estilo Shadcn (`src/components/ui`)
 
 ## Como rodar do zero
 
@@ -18,9 +24,27 @@ npm run dev
 
 Abra `http://localhost:3000`.
 
-## Dashboard conectado a dados reais
+## Modulos da aplicacao
 
-O projeto aceita 4 fontes de dados via variavel de ambiente `WAR_ROOM_SOURCE`:
+1. **Global Overview**
+   - Investimento vs Faturamento (Utmify)
+   - ROAS macro consolidado
+2. **Squad Facebook**
+   - Live Ads Tracking + Daily Briefing + Creative Velocity
+3. **Squad Google/YouTube**
+   - Live Ads Tracking + Daily Briefing + Creative Velocity
+4. **Creative Factory**
+   - Kanban: Roteiro -> Gravacao -> Edicao -> Teste -> Winner
+
+## Regras de inteligencia
+
+- Hook Rate (3s/Imp) > 30% => **Gancho de Ouro**
+- Hold Rate (15s/3s) < 20% => **Gargalo de Retencao**
+- ROAS > 2.5 => **WINNER DETECTED**
+
+## Fontes de dados reais
+
+O projeto aceita 4 fontes via `WAR_ROOM_SOURCE`:
 
 - `mock`: dados locais (fallback seguro)
 - `api`: endpoint HTTP externo
@@ -33,7 +57,7 @@ Crie seu arquivo `.env.local` a partir do exemplo:
 cp .env.example .env.local
 ```
 
-### 1) Fonte por API externa
+### 1) API externa
 
 ```env
 WAR_ROOM_SOURCE=api
@@ -41,45 +65,87 @@ WAR_ROOM_API_URL=https://sua-api.com/war-room
 WAR_ROOM_API_TOKEN=seu_token_opcional
 ```
 
-Estrutura JSON esperada:
+Estrutura recomendada:
 
 ```json
 {
   "updatedAt": "2026-03-20T12:00:00.000Z",
-  "ads": {
-    "investmentTotal": 250000,
-    "avgRoas": 2.45,
-    "avgCpm": 39.5,
-    "creatives": [
-      { "id": "CRTV-001", "hookRate": 33.5, "holdRate": 47.2, "roas": 2.9, "verdict": "Escalar" }
-    ]
+  "globalOverview": {
+    "investment": 1920000,
+    "revenue": 5580000,
+    "utmifySyncAt": "Agora mesmo"
   },
-  "copy": {
-    "angles": ["..."],
-    "hooksBacklog": ["..."],
-    "productionFlow": {
-      "roteirizando": ["..."],
-      "gravando": ["..."],
-      "editando": ["..."]
+  "squads": {
+    "facebook": {
+      "name": "Squad Facebook",
+      "focus": "FB Ads + UGC",
+      "creativeVelocity": 17,
+      "creativeVelocityTarget": 14,
+      "validatedCreatives": 11,
+      "managerComment": "..."
+    },
+    "googleYoutube": {
+      "name": "Squad Google/YouTube",
+      "focus": "Search + VVC + Display",
+      "creativeVelocity": 9,
+      "creativeVelocityTarget": 12,
+      "validatedCreatives": 5,
+      "managerComment": "..."
     }
   },
-  "tech": {
-    "pageLoadDropOff": 24.3,
-    "pageLoadNote": "...",
-    "vslRetention": 46.1,
-    "vslNote": "...",
-    "checkoutConversion": 6.2,
-    "checkoutNote": "..."
+  "liveAdsTracking": [
+    {
+      "id": "FB-101",
+      "squad": "facebook",
+      "campaign": "Scale UGC CBO",
+      "adName": "Dor aguda + prova social",
+      "impressions": 182440,
+      "views3s": 63671,
+      "views15s": 21200,
+      "ic": 3102,
+      "lp": 9741,
+      "roas": 2.7
+    }
+  ],
+  "creativeFactory": {
+    "tasks": [
+      {
+        "id": "TASK-001",
+        "squad": "facebook",
+        "title": "V3 - Hook anti-erro",
+        "owner": "Copy Ana",
+        "status": "Roteiro",
+        "metricContext": "Hold < 20%",
+        "updatedAt": "09:40"
+      }
+    ]
   },
+  "dailyBriefing": [
+    {
+      "id": "BRIEF-1",
+      "squad": "facebook",
+      "trafficManagerComment": "...",
+      "replies": [
+        {
+          "role": "Copy",
+          "author": "Ana",
+          "version": "V2",
+          "assetUrl": "https://...",
+          "note": "..."
+        }
+      ]
+    }
+  ],
   "finance": {
-    "revenue": 640000,
     "approvalRate": 88.4,
     "ltv": 1940
   }
 }
 ```
 
-### 2) Fonte por Google Sheets
+> O normalizador ainda aceita payload legado (`ads/copy/tech/finance`) para retrocompatibilidade.
+
+### 2) Google Sheets
 
 ```env
 WAR_ROOM_SOURCE=sheet
@@ -87,7 +153,7 @@ GOOGLE_SHEETS_SPREADSHEET_ID=...
 GOOGLE_SHEETS_API_KEY=...
 ```
 
-Abas esperadas (editaveis por range no `.env.local`):
+Abas legadas suportadas (editaveis por range no `.env.local`):
 
 - `ads_metrics` (investmentTotal, avgRoas, avgCpm)
 - `creatives` (id, hookRate, holdRate, roas, verdict)
@@ -97,7 +163,7 @@ Abas esperadas (editaveis por range no `.env.local`):
 - `tech_metrics` (pageLoadDropOff, pageLoadNote, vslRetention, vslNote, checkoutConversion, checkoutNote)
 - `finance_metrics` (revenue, approvalRate, ltv)
 
-### 3) Fonte por PostgreSQL
+### 3) PostgreSQL
 
 ```env
 WAR_ROOM_SOURCE=database
@@ -105,7 +171,7 @@ DATABASE_URL=postgresql://usuario:senha@host:5432/banco
 DATABASE_SSL=false
 ```
 
-Tabelas esperadas:
+Tabelas legadas suportadas:
 
 - `war_room_ads_metrics`
 - `war_room_creatives`
@@ -121,11 +187,10 @@ Tabelas esperadas:
 
 ## Estrutura principal
 
-- `src/components/Dashboard.tsx`: dashboard completo com sidebar e departamentos.
+- `src/components/Dashboard.tsx`: shell principal da SPA.
+- `src/components/war-room/live-ads-table.tsx`: tabela de performance com calculo de Hook/Hold/VSL + badges.
+- `src/components/war-room/daily-briefing.tsx`: fluxo de comentario tecnico + respostas com links V2/V3.
+- `src/components/war-room/creative-factory-board.tsx`: pipeline Kanban de producao.
+- `src/components/ui/*`: componentes UI estilo Shadcn.
 - `src/app/page.tsx`: entrada principal da aplicacao.
 - `src/lib/war-room/*`: conectores de dados (API, Google Sheets e PostgreSQL).
-
-## Regras de inteligencia implementadas
-
-- **Health Score**: criativos com **Hook Rate < 20%** entram em alerta vermelho.
-- **Winner Badge**: criativos com **ROAS > 2.2** recebem badge dourado.
