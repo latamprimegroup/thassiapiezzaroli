@@ -116,17 +116,12 @@ export function CommandCenterModule({ actorName }: CommandCenterModuleProps) {
     [data.liveAdsTracking],
   );
   const [selectedFatigueCreativeId, setSelectedFatigueCreativeId] = useState(fatigueWinners[0]?.id ?? "");
+  const effectiveSelectedFatigueCreativeId = selectedFatigueCreativeId || fatigueWinners[0]?.id || "";
 
   useEffect(() => {
     const timer = window.setInterval(() => setNowMs(Date.now()), 60_000);
     return () => window.clearInterval(timer);
   }, []);
-
-  useEffect(() => {
-    if (!selectedFatigueCreativeId && fatigueWinners.length > 0) {
-      setSelectedFatigueCreativeId(fatigueWinners[0].id);
-    }
-  }, [fatigueWinners, selectedFatigueCreativeId]);
 
   function updateTask(taskId: string, updater: (task: DemandTask) => DemandTask) {
     setTasks((prev) => prev.map((task) => (task.id === taskId ? updater(task) : task)));
@@ -211,14 +206,14 @@ export function CommandCenterModule({ actorName }: CommandCenterModuleProps) {
   }
 
   function createMirrorDemands() {
-    if (!selectedFatigueCreativeId) {
+    if (!effectiveSelectedFatigueCreativeId) {
       return;
     }
     const hasOpenWorkflow = tasks.some(
-      (task) => task.status !== "done" && task.title.includes(selectedFatigueCreativeId) && task.impact === "critical",
+      (task) => task.status !== "done" && task.title.includes(effectiveSelectedFatigueCreativeId) && task.impact === "critical",
     );
     if (hasOpenWorkflow) {
-      addActivity("COO", actorName, "ignorar automacao duplicada", selectedFatigueCreativeId, "workflow ja aberto");
+      addActivity("COO", actorName, "ignorar automacao duplicada", effectiveSelectedFatigueCreativeId, "workflow ja aberto");
       return;
     }
 
@@ -228,7 +223,7 @@ export function CommandCenterModule({ actorName }: CommandCenterModuleProps) {
     const trafficTask: DemandTask = {
       id: `${baseId}-TRF`,
       department: "trafficMedia",
-      title: `Fadiga detectada no winner ${selectedFatigueCreativeId}`,
+      title: `Fadiga detectada no winner ${effectiveSelectedFatigueCreativeId}`,
       description: "Confirmar queda de CTR e acionar workflow espelho para copy + edicao.",
       squadHead: "Head Midia - Caio",
       assignee: "Media Buyer A",
@@ -243,7 +238,7 @@ export function CommandCenterModule({ actorName }: CommandCenterModuleProps) {
     const copyTask: DemandTask = {
       id: `${baseId}-CPY`,
       department: "copyResearch",
-      title: `Refatoracao de gancho para ${selectedFatigueCreativeId}`,
+      title: `Refatoracao de gancho para ${effectiveSelectedFatigueCreativeId}`,
       description: "Criar nova abertura e promessa para recuperar tracao do winner.",
       squadHead: "Head Copy - Ana",
       assignee: "Copywriter A",
@@ -258,7 +253,7 @@ export function CommandCenterModule({ actorName }: CommandCenterModuleProps) {
     const editTask: DemandTask = {
       id: `${baseId}-EDT`,
       department: "editorsCreative",
-      title: `Novas variacoes visuais para ${selectedFatigueCreativeId}`,
+      title: `Novas variacoes visuais para ${effectiveSelectedFatigueCreativeId}`,
       description: "Produzir V2/V3 com pattern interrupt e ritmo de corte acelerado.",
       squadHead: "Head Edicao - Nati",
       assignee: "Editor A",
@@ -272,7 +267,7 @@ export function CommandCenterModule({ actorName }: CommandCenterModuleProps) {
     };
 
     setTasks((prev) => [trafficTask, copyTask, editTask, ...prev]);
-    addActivity("COO", actorName, "acionou workflow espelho", selectedFatigueCreativeId, "trafego -> copy + edicao");
+    addActivity("COO", actorName, "acionou workflow espelho", effectiveSelectedFatigueCreativeId, "trafego -> copy + edicao");
   }
 
   const throughput = useMemo(() => {
@@ -432,7 +427,7 @@ export function CommandCenterModule({ actorName }: CommandCenterModuleProps) {
               Quando Midia sinaliza fadiga em winner, sistema abre demandas vinculadas para Copy e Edicao.
             </p>
             <select
-              value={selectedFatigueCreativeId}
+              value={effectiveSelectedFatigueCreativeId}
               onChange={(event) => setSelectedFatigueCreativeId(event.target.value)}
               className="mb-2 h-7 w-full rounded border border-white/15 bg-black/40 px-2 text-[11px]"
             >
@@ -446,7 +441,12 @@ export function CommandCenterModule({ actorName }: CommandCenterModuleProps) {
                 ))
               )}
             </select>
-            <Button type="button" className="h-7 w-full text-[11px]" onClick={createMirrorDemands} disabled={!selectedFatigueCreativeId}>
+            <Button
+              type="button"
+              className="h-7 w-full text-[11px]"
+              onClick={createMirrorDemands}
+              disabled={!effectiveSelectedFatigueCreativeId}
+            >
               Sinalizar fadiga e abrir tarefas espelho
             </Button>
           </div>
