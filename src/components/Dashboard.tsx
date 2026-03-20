@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import type { LucideIcon } from "lucide-react";
-import { Binary, BrainCircuit, Clapperboard, Lock, MessageSquare, SatelliteDish, Wallet } from "lucide-react";
+import { Binary, BrainCircuit, ClipboardList, Clapperboard, Lock, MessageSquare, SatelliteDish, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { CeoFinanceModule } from "@/components/enterprise/ceo-finance-module";
+import { CommandCenterModule } from "@/components/enterprise/command-center-module";
 import { CopyResearchModule } from "@/components/enterprise/copy-research-module";
 import { EditorsProductionModule } from "@/components/enterprise/editors-production-module";
 import { SquadSyncModule } from "@/components/enterprise/squad-sync-module";
@@ -37,6 +38,7 @@ const sections: Section[] = [
   { id: "ceoFinance", label: "CEO & Financeiro", subtitle: "Soberania de Caixa", icon: Wallet },
   { id: "copyResearch", label: "Copy & Pesquisa", subtitle: "The Brain", icon: BrainCircuit },
   { id: "trafficAttribution", label: "Trafego & Atribuicao", subtitle: "The Engine", icon: SatelliteDish },
+  { id: "commandCenter", label: "Command Center", subtitle: "Demandas 9D", icon: ClipboardList },
   { id: "squadSync", label: "Squad Sync", subtitle: "Hub de Demanda", icon: MessageSquare },
   { id: "editorsProduction", label: "Editores & Producao", subtitle: "The Retention", icon: Clapperboard },
   { id: "techCro", label: "Tech & CRO", subtitle: "The Frictionless Flow", icon: Binary },
@@ -255,6 +257,7 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
             )}
             {activeSection === "copyResearch" && isSectionAllowed && <CopyResearchModule />}
             {activeSection === "trafficAttribution" && isSectionAllowed && <TrafficAttributionModule />}
+            {activeSection === "commandCenter" && isSectionAllowed && <CommandCenterModule actorName={activeUser.name} />}
             {activeSection === "squadSync" && isSectionAllowed && (
               <SquadSyncModule canInputDailyFeedback={permissions.canInputAuctionMetrics} actorName={activeUser.name} />
             )}

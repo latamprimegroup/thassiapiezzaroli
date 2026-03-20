@@ -1,5 +1,14 @@
 import { mockWarRoomData } from "./mock-data";
-import type { DailyReplyRole, PipelineStage, SquadKey, TrafficSourceKey, WarRoomData } from "./types";
+import type {
+  DailyReplyRole,
+  DemandDepartment,
+  DemandStatus,
+  FinancialImpact,
+  PipelineStage,
+  SquadKey,
+  TrafficSourceKey,
+  WarRoomData,
+} from "./types";
 
 function toNumber(value: unknown, fallback: number): number {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -59,6 +68,20 @@ function toStage(value: unknown, fallback: PipelineStage): PipelineStage {
 
 function toReplyRole(value: unknown, fallback: DailyReplyRole): DailyReplyRole {
   return value === "Copy" || value === "Edicao" ? value : fallback;
+}
+
+function toDemandDepartment(value: unknown, fallback: DemandDepartment): DemandDepartment {
+  return value === "copyResearch" || value === "trafficMedia" || value === "editorsCreative" || value === "techCro"
+    ? value
+    : fallback;
+}
+
+function toDemandStatus(value: unknown, fallback: DemandStatus): DemandStatus {
+  return value === "backlog" || value === "doing" || value === "review" || value === "done" ? value : fallback;
+}
+
+function toFinancialImpact(value: unknown, fallback: FinancialImpact): FinancialImpact {
+  return value === "low" || value === "medium" || value === "high" || value === "critical" ? value : fallback;
 }
 
 function toStatus(value: unknown, fallback: "ok" | "warning" | "blocked") {
@@ -129,6 +152,7 @@ export function normalizeWarRoomData(
   const squadsInput = toObject(input.squads);
   const financeInput = toObject(input.finance);
   const creativeFactoryInput = toObject(input.creativeFactory);
+  const commandCenterInput = toObject(input.commandCenter);
   const squadSyncInput = toObject(input.squadSync);
   const integrationsInput = toObject(input.integrations);
   const contingencyInput = toObject(input.contingency);
@@ -242,6 +266,36 @@ export function normalizeWarRoomData(
     };
   });
 
+  const commandTasksInput = Array.isArray(commandCenterInput.tasks) ? commandCenterInput.tasks : fallback.commandCenter.tasks;
+  const commandTasks = (commandTasksInput as unknown[]).map((item, index) => {
+    const row = toObject(item);
+    const fallbackTask = fallback.commandCenter.tasks[index % fallback.commandCenter.tasks.length];
+    const decisionInput = Array.isArray(row.decisionLog) ? row.decisionLog : fallbackTask.decisionLog;
+    return {
+      id: toString(row.id, fallbackTask.id),
+      department: toDemandDepartment(row.department, fallbackTask.department),
+      title: toString(row.title, fallbackTask.title),
+      description: toString(row.description, fallbackTask.description),
+      squadHead: toString(row.squadHead, fallbackTask.squadHead),
+      assignee: toString(row.assignee, fallbackTask.assignee),
+      status: toDemandStatus(row.status, fallbackTask.status),
+      impact: toFinancialImpact(row.impact, fallbackTask.impact),
+      createdAt: toString(row.createdAt, fallbackTask.createdAt),
+      lastMovedAt: toString(row.lastMovedAt, fallbackTask.lastMovedAt),
+      dueAt: toString(row.dueAt, fallbackTask.dueAt),
+      dependencyIds: toStringArray(row.dependencyIds, fallbackTask.dependencyIds),
+      decisionLog: (decisionInput as unknown[]).map((decision, decisionIndex) => {
+        const decisionRow = toObject(decision);
+        const fallbackDecision = fallbackTask.decisionLog[decisionIndex % fallbackTask.decisionLog.length];
+        return {
+          at: toString(decisionRow.at, fallbackDecision.at),
+          author: toString(decisionRow.author, fallbackDecision.author),
+          note: toString(decisionRow.note, fallbackDecision.note),
+        };
+      }),
+    };
+  });
+
   const activityInput = Array.isArray(input.activityLog) ? input.activityLog : fallback.activityLog;
   const activityLog = (activityInput as unknown[]).map((item, index) => {
     const row = toObject(item);
@@ -334,6 +388,24 @@ export function normalizeWarRoomData(
       tasks: tasks.length > 0 ? tasks : fallback.creativeFactory.tasks,
     },
     dailyBriefing: dailyBriefing.length > 0 ? dailyBriefing : fallback.dailyBriefing,
+    commandCenter: {
+      tasks: commandTasks.length > 0 ? commandTasks : fallback.commandCenter.tasks,
+      squadMembers: {
+        copyResearch: toStringArray(
+          toObject(commandCenterInput.squadMembers).copyResearch,
+          fallback.commandCenter.squadMembers.copyResearch,
+        ),
+        trafficMedia: toStringArray(
+          toObject(commandCenterInput.squadMembers).trafficMedia,
+          fallback.commandCenter.squadMembers.trafficMedia,
+        ),
+        editorsCreative: toStringArray(
+          toObject(commandCenterInput.squadMembers).editorsCreative,
+          fallback.commandCenter.squadMembers.editorsCreative,
+        ),
+        techCro: toStringArray(toObject(commandCenterInput.squadMembers).techCro, fallback.commandCenter.squadMembers.techCro),
+      },
+    },
     finance: {
       netRevenue: toNumber(financeInput.netRevenue, derivedNetRevenue),
       profitMargin: toNumber(financeInput.profitMargin, derivedProfitMargin),

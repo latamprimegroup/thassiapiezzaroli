@@ -7,6 +7,7 @@ export type SectionId =
   | "ceoFinance"
   | "copyResearch"
   | "trafficAttribution"
+  | "commandCenter"
   | "squadSync"
   | "editorsProduction"
   | "techCro";
@@ -32,7 +33,15 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     label: "CEO (Admin)",
     description: "Visao total e aprovacao final",
     icon: Crown,
-    allowedSections: ["ceoFinance", "copyResearch", "trafficAttribution", "squadSync", "editorsProduction", "techCro"],
+    allowedSections: [
+      "ceoFinance",
+      "copyResearch",
+      "trafficAttribution",
+      "commandCenter",
+      "squadSync",
+      "editorsProduction",
+      "techCro",
+    ],
     canViewSensitiveFinancials: true,
     canViewRoasReal: true,
     canApproveScaleCampaigns: true,
@@ -47,7 +56,7 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     label: "Media Buyer",
     description: "Leilao, CPA e acionamento de squads",
     icon: SatelliteDish,
-    allowedSections: ["trafficAttribution", "squadSync", "techCro", "editorsProduction"],
+    allowedSections: ["trafficAttribution", "commandCenter", "squadSync", "techCro", "editorsProduction"],
     canViewSensitiveFinancials: false,
     canViewRoasReal: true,
     canApproveScaleCampaigns: false,
@@ -62,7 +71,7 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     label: "Copywriter / Creative Director",
     description: "Engajamento, backlog e retencao",
     icon: PenSquare,
-    allowedSections: ["copyResearch", "trafficAttribution", "squadSync", "editorsProduction"],
+    allowedSections: ["copyResearch", "trafficAttribution", "commandCenter", "squadSync", "editorsProduction"],
     canViewSensitiveFinancials: false,
     canViewRoasReal: true,
     canApproveScaleCampaigns: false,
@@ -77,7 +86,7 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     label: "Video Editor",
     description: "Performance por criativo e novas versoes",
     icon: Clapperboard,
-    allowedSections: ["trafficAttribution", "squadSync", "editorsProduction"],
+    allowedSections: ["trafficAttribution", "commandCenter", "squadSync", "editorsProduction"],
     canViewSensitiveFinancials: false,
     canViewRoasReal: false,
     canApproveScaleCampaigns: false,

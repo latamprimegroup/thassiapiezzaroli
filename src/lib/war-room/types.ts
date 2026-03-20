@@ -6,6 +6,9 @@ export type PipelineStage = "Roteiro" | "Gravacao" | "Edicao" | "Teste" | "Winne
 export type DailyReplyRole = "Copy" | "Edicao";
 
 export type WarRoomDataSource = "mock" | "api" | "sheet" | "database" | "fallback";
+export type DemandDepartment = "copyResearch" | "trafficMedia" | "editorsCreative" | "techCro";
+export type DemandStatus = "backlog" | "doing" | "review" | "done";
+export type FinancialImpact = "low" | "medium" | "high" | "critical";
 
 export type SquadSyncKpiSnapshot = {
   hookRate: number;
@@ -104,6 +107,28 @@ export type WarRoomData = {
       note: string;
     }>;
   }>;
+  commandCenter: {
+    tasks: Array<{
+      id: string;
+      department: DemandDepartment;
+      title: string;
+      description: string;
+      squadHead: string;
+      assignee: string;
+      status: DemandStatus;
+      impact: FinancialImpact;
+      createdAt: string;
+      lastMovedAt: string;
+      dueAt: string;
+      dependencyIds: string[];
+      decisionLog: Array<{
+        at: string;
+        author: string;
+        note: string;
+      }>;
+    }>;
+    squadMembers: Record<DemandDepartment, string[]>;
+  };
 
   finance: {
     netRevenue: number;
