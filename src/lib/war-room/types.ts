@@ -315,6 +315,38 @@ export type WarRoomData = {
         severity: "normal" | "critical";
       };
     };
+    operations: {
+      opportunityLost: {
+        estimatedLossToday: number;
+        currentLossPerMinute: number;
+        currentlyLosing: boolean;
+        incidents: Array<{
+          id: string;
+          severity: "warning" | "critical";
+          reason: string;
+          estimatedLoss: number;
+          startedAt: string;
+        }>;
+      };
+      reconciliation: {
+        status: "ok" | "warning" | "critical";
+        lastCheckedAt: string;
+        ledger: Array<{
+          id: string;
+          expected: number;
+          observed: number;
+          variancePct: number;
+          status: "ok" | "warning" | "critical";
+          note: string;
+        }>;
+      };
+      worker: {
+        queueDepth: number;
+        failedJobs: number;
+        processedToday: number;
+        lastRunAt: string;
+      };
+    };
   };
   contingency: {
     domains: Array<{

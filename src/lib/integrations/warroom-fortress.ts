@@ -127,6 +127,12 @@ function getRuntimeState(): VaultRuntimeState {
       lastSirenActive: false,
     };
   }
+  if (typeof globalThis.__warRoomVaultRuntimeState.lastVaultHash !== "string") {
+    globalThis.__warRoomVaultRuntimeState.lastVaultHash = "";
+  }
+  if (typeof globalThis.__warRoomVaultRuntimeState.lastSirenActive !== "boolean") {
+    globalThis.__warRoomVaultRuntimeState.lastSirenActive = false;
+  }
   return globalThis.__warRoomVaultRuntimeState;
 }
 

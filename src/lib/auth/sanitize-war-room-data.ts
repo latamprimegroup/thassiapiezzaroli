@@ -42,6 +42,17 @@ export function sanitizeWarRoomDataForRole(input: WarRoomData, role: UserRole): 
     data.integrations.fortress.scaleSimulator.roiPct = 0;
     data.integrations.fortress.executiveBriefing.summary = "Resumo executivo oculto para este perfil.";
     data.integrations.fortress.executiveBriefing.suggestedAction = "Sem permissao para dados financeiros sensiveis.";
+    data.integrations.operations.opportunityLost.estimatedLossToday = 0;
+    data.integrations.operations.opportunityLost.currentLossPerMinute = 0;
+    data.integrations.operations.opportunityLost.incidents = data.integrations.operations.opportunityLost.incidents.map(
+      (incident) => ({ ...incident, estimatedLoss: 0 }),
+    );
+    data.integrations.operations.reconciliation.ledger = data.integrations.operations.reconciliation.ledger.map((row) => ({
+      ...row,
+      expected: 0,
+      observed: 0,
+      variancePct: 0,
+    }));
     data.integrations.attribution.realRoiLeaderboard = data.integrations.attribution.realRoiLeaderboard.map((item) => ({
       ...item,
       realProfit: 0,

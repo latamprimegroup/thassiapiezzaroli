@@ -5,6 +5,8 @@ import {
   type ProviderName,
 } from "@/lib/integrations/warroom-adapters";
 import { listDeadLetterEvents } from "@/lib/persistence/war-room-ops-store";
+import { enqueueOpsJob, getOpsJobStats } from "@/lib/persistence/war-room-ops-store";
+import { processOpsJobQueue } from "@/lib/ops/war-room-ops-worker";
 import { processDueWebhookRetries, processIncomingWebhook } from "@/lib/integrations/warroom-webhook-service";
 
 export const runtime = "nodejs";
@@ -64,24 +66,64 @@ export async function POST(request: Request) {
     (typeof payload.id === "string" ? payload.id : "") ||
     `auto-${Date.now()}`;
 
-  const result = await processIncomingWebhook({
-    provider: adapter.provider,
-    payload,
-    eventId,
-    rawBody,
-    signature,
-  });
-
-  if (!result.ok) {
-    return NextResponse.json({ error: result.message }, { status: result.statusCode });
+  const syncMode = process.env.WAR_ROOM_WEBHOOK_SYNC_MODE === "true";
+  if (syncMode) {
+    const result = await processIncomingWebhook({
+      provider: adapter.provider,
+      payload,
+      eventId,
+      rawBody,
+      signature,
+    });
+    if (!result.ok) {
+      return NextResponse.json({ error: result.message }, { status: result.statusCode });
+    }
+    return NextResponse.json({
+      ok: true,
+      mode: "sync",
+      duplicate: result.duplicate,
+      provider: adapter.provider,
+      eventId,
+      status: result.status,
+      normalizedFields: [
+        "valor_bruto",
+        "valor_liquido",
+        "spend",
+        "real_purchase_count",
+        "meta_reported_purchase_count",
+        "ltv_7d",
+        "ltv_30d",
+        "ltv_90d",
+        "cart_abandonment_rate",
+        "card_approval_rate",
+        "upsell_take_rates",
+      ],
+    });
   }
 
+  const jobId = `job:webhook:${adapter.provider}:${eventId}`;
+  await enqueueOpsJob({
+    id: jobId,
+    type: "webhook_ingest",
+    payload: {
+      provider: adapter.provider,
+      eventId,
+      payload,
+      rawBody,
+      signature,
+    },
+  });
+  const workerKick = await processOpsJobQueue(10);
+  const stats = await getOpsJobStats();
   return NextResponse.json({
     ok: true,
-    duplicate: result.duplicate,
+    mode: "async",
+    queued: true,
+    jobId,
     provider: adapter.provider,
     eventId,
-    status: result.status,
+    workerKick,
+    queue: stats,
     normalizedFields: [
       "valor_bruto",
       "valor_liquido",
@@ -103,9 +145,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Nao autorizado." }, { status: 401 });
   }
   const retries = await processDueWebhookRetries(50);
+  const worker = await processOpsJobQueue(25);
   const deadLetters = await listDeadLetterEvents(25);
   return NextResponse.json({
     retries,
+    worker,
     deadLetterSize: deadLetters.length,
     deadLetters,
   });

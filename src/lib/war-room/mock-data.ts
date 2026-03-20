@@ -682,6 +682,50 @@ export const mockWarRoomData: WarRoomData = {
         severity: "normal",
       },
     },
+    operations: {
+      opportunityLost: {
+        estimatedLossToday: 4_200,
+        currentLossPerMinute: 140,
+        currentlyLosing: false,
+        incidents: [
+          {
+            id: "INC-OPP-001",
+            severity: "warning",
+            reason: "Queda temporaria de aprovacao Appmax em janela de pico.",
+            estimatedLoss: 4_200,
+            startedAt: "10:12",
+          },
+        ],
+      },
+      reconciliation: {
+        status: "warning",
+        lastCheckedAt: "12:06",
+        ledger: [
+          {
+            id: "spend_vs_utmify",
+            expected: 1_920_000,
+            observed: 1_905_000,
+            variancePct: -0.78,
+            status: "ok",
+            note: "Diferenca dentro da tolerancia operacional.",
+          },
+          {
+            id: "gross_vs_gateways",
+            expected: 5_640_000,
+            observed: 5_580_000,
+            variancePct: -1.06,
+            status: "warning",
+            note: "Aguardando fechamento de lotes D0 em gateway.",
+          },
+        ],
+      },
+      worker: {
+        queueDepth: 0,
+        failedJobs: 0,
+        processedToday: 47,
+        lastRunAt: "12:06",
+      },
+    },
   },
   contingency: {
     domains: [

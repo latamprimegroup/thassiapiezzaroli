@@ -29,8 +29,26 @@ export type TaskApprovalRecord = {
   note: string;
 };
 
+export type OpsJobType = "webhook_ingest";
+export type OpsJobStatus = "pending" | "processing" | "completed" | "failed" | "dead_letter";
+
+export type OpsJobRecord = {
+  id: string;
+  type: OpsJobType;
+  status: OpsJobStatus;
+  attempts: number;
+  maxAttempts: number;
+  runAt: string;
+  createdAt: string;
+  updatedAt: string;
+  processedAt: string;
+  lastError: string;
+  payload: Record<string, unknown>;
+};
+
 type OpsStorePayload = {
   webhookEvents: WebhookEventRecord[];
+  jobs: OpsJobRecord[];
   commandCenter: {
     tasks: DemandTask[];
     approvals: TaskApprovalRecord[];
@@ -50,6 +68,7 @@ function nowIso() {
 function defaultStore(): OpsStorePayload {
   return {
     webhookEvents: [],
+    jobs: [],
     commandCenter: {
       tasks: [],
       approvals: [],
@@ -68,6 +87,7 @@ async function readStore(): Promise<OpsStorePayload> {
     const parsed = JSON.parse(raw) as Partial<OpsStorePayload>;
     return {
       webhookEvents: Array.isArray(parsed.webhookEvents) ? parsed.webhookEvents : [],
+      jobs: Array.isArray(parsed.jobs) ? parsed.jobs : [],
       commandCenter: {
         tasks: Array.isArray(parsed.commandCenter?.tasks) ? parsed.commandCenter.tasks : [],
         approvals: Array.isArray(parsed.commandCenter?.approvals) ? parsed.commandCenter.approvals : [],
@@ -160,4 +180,138 @@ export async function appendTaskApproval(approval: TaskApprovalRecord) {
 export async function readTaskApprovals(taskId: string) {
   const store = await readStore();
   return store.commandCenter.approvals.filter((approval) => approval.taskId === taskId);
+}
+
+export async function enqueueOpsJob(params: {
+  id: string;
+  type: OpsJobType;
+  payload: Record<string, unknown>;
+  runAt?: string;
+  maxAttempts?: number;
+}) {
+  return withStoreMutation((store) => {
+    const now = nowIso();
+    const existingIndex = store.jobs.findIndex((job) => job.id === params.id);
+    const record: OpsJobRecord = {
+      id: params.id,
+      type: params.type,
+      status: "pending",
+      attempts: 0,
+      maxAttempts: params.maxAttempts ?? 6,
+      runAt: params.runAt ?? now,
+      createdAt: now,
+      updatedAt: now,
+      processedAt: "",
+      lastError: "",
+      payload: params.payload,
+    };
+    if (existingIndex >= 0) {
+      store.jobs[existingIndex] = { ...store.jobs[existingIndex], ...record };
+    } else {
+      store.jobs.push(record);
+    }
+    if (store.jobs.length > 10_000) {
+      store.jobs = store.jobs.slice(-10_000);
+    }
+    return record;
+  });
+}
+
+export async function claimDueOpsJobs(limit = 25) {
+  return withStoreMutation((store) => {
+    const now = nowIso();
+    const due = store.jobs
+      .filter((job) => job.status === "pending" && job.runAt <= now)
+      .sort((a, b) => a.runAt.localeCompare(b.runAt))
+      .slice(0, limit);
+    for (const job of due) {
+      const idx = store.jobs.findIndex((item) => item.id === job.id);
+      if (idx >= 0) {
+        store.jobs[idx] = {
+          ...store.jobs[idx],
+          status: "processing",
+          attempts: store.jobs[idx].attempts + 1,
+          updatedAt: now,
+        };
+      }
+    }
+    return due.map((job) => ({
+      ...job,
+      status: "processing" as const,
+      attempts: job.attempts + 1,
+      updatedAt: now,
+    }));
+  });
+}
+
+export async function completeOpsJob(jobId: string) {
+  return withStoreMutation((store) => {
+    const now = nowIso();
+    const index = store.jobs.findIndex((job) => job.id === jobId);
+    if (index < 0) {
+      return null;
+    }
+    store.jobs[index] = {
+      ...store.jobs[index],
+      status: "completed",
+      updatedAt: now,
+      processedAt: now,
+      lastError: "",
+    };
+    return store.jobs[index];
+  });
+}
+
+export async function failOpsJob(jobId: string, errorMessage: string) {
+  return withStoreMutation((store) => {
+    const now = nowIso();
+    const index = store.jobs.findIndex((job) => job.id === jobId);
+    if (index < 0) {
+      return null;
+    }
+    const current = store.jobs[index];
+    const shouldDeadLetter = current.attempts >= current.maxAttempts;
+    const backoffMinutes = Math.min(60, 2 ** Math.max(1, current.attempts));
+    store.jobs[index] = {
+      ...current,
+      status: shouldDeadLetter ? "dead_letter" : "pending",
+      runAt: shouldDeadLetter ? current.runAt : new Date(Date.now() + backoffMinutes * 60 * 1000).toISOString(),
+      updatedAt: now,
+      lastError: errorMessage,
+    };
+    return store.jobs[index];
+  });
+}
+
+export async function deadLetterOpsJob(jobId: string, errorMessage: string) {
+  return withStoreMutation((store) => {
+    const now = nowIso();
+    const index = store.jobs.findIndex((job) => job.id === jobId);
+    if (index < 0) {
+      return null;
+    }
+    store.jobs[index] = {
+      ...store.jobs[index],
+      status: "dead_letter",
+      updatedAt: now,
+      lastError: errorMessage,
+      processedAt: now,
+    };
+    return store.jobs[index];
+  });
+}
+
+export async function getOpsJobStats() {
+  const store = await readStore();
+  const todayPrefix = nowIso().slice(0, 10);
+  const processedToday = store.jobs.filter((job) => job.status === "completed" && job.processedAt.startsWith(todayPrefix)).length;
+  const failedJobs = store.jobs.filter((job) => job.status === "failed" || job.status === "dead_letter").length;
+  const queueDepth = store.jobs.filter((job) => job.status === "pending" || job.status === "processing").length;
+  const latest = [...store.jobs].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+  return {
+    queueDepth,
+    failedJobs,
+    processedToday,
+    lastRunAt: latest?.updatedAt ?? "",
+  };
 }

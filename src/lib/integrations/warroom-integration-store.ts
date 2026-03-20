@@ -1,5 +1,6 @@
 import { safeDivide } from "@/lib/metrics/kpis";
 import { WAR_ROOM_OPS_CONSTANTS } from "@/lib/config/war-room-ops.constants";
+import { getOpsJobStats } from "@/lib/persistence/war-room-ops-store";
 import type { TrafficSourceKey, WarRoomData } from "@/lib/war-room/types";
 import type { ProviderName, RecoveryAgent, UnifiedProviderEvent } from "./warroom-adapters";
 
@@ -397,6 +398,85 @@ export function mergeWarRoomWithIntegrations(base: WarRoomData): WarRoomData {
     (spendTotal || next.globalOverview.investment) -
     (state.config.fixedCosts > 0 ? state.config.fixedCosts : next.integrations.gateway.fixedCosts);
   const simulatedRoiPct = safeDivide(simulatedNetProfit, consolidatedGross || 1) * 100;
+  const revenuePerMinute = safeDivide(consolidatedGross || next.globalOverview.revenue, 24 * 60);
+  const approvalDropThreshold =
+    next.integrations.gateway.appmaxPreviousDayApprovalRate *
+    (1 - WAR_ROOM_OPS_CONSTANTS.thresholds.appmax.approvalDropAlertPct / 100);
+  const approvalIncident = next.integrations.gateway.appmaxCardApprovalRate > 0 &&
+    next.integrations.gateway.appmaxCardApprovalRate < approvalDropThreshold;
+  const checkoutIncident = next.integrations.gateway.yampiCartAbandonmentRate > 60;
+  const pixelIncident = pixelStatus === "unhealthy";
+  const lossPerMinute =
+    (checkoutIncident ? revenuePerMinute * safeDivide(next.integrations.gateway.yampiCartAbandonmentRate - 60, 100) : 0) +
+    (approvalIncident ? revenuePerMinute * 0.22 : 0) +
+    (pixelIncident ? revenuePerMinute * 0.18 : 0);
+  const currentIncidents: WarRoomData["integrations"]["operations"]["opportunityLost"]["incidents"] = [];
+  if (checkoutIncident) {
+    currentIncidents.push({
+      id: `INC-YAMPI-${Date.now()}`,
+      severity: "critical",
+      reason: "Checkout com abandono acima de 60%.",
+      estimatedLoss: Math.round(revenuePerMinute * 15),
+      startedAt: nowLabel(),
+    });
+  }
+  if (approvalIncident) {
+    currentIncidents.push({
+      id: `INC-APPMAX-${Date.now()}`,
+      severity: "warning",
+      reason: `Aprovacao Appmax caiu mais de ${WAR_ROOM_OPS_CONSTANTS.thresholds.appmax.approvalDropAlertPct}%.`,
+      estimatedLoss: Math.round(revenuePerMinute * 10),
+      startedAt: nowLabel(),
+    });
+  }
+  if (pixelIncident) {
+    currentIncidents.push({
+      id: `INC-PIXEL-${Date.now()}`,
+      severity: "warning",
+      reason: "Divergencia Pixel/CAPI acima do limite.",
+      estimatedLoss: Math.round(revenuePerMinute * 8),
+      startedAt: nowLabel(),
+    });
+  }
+  const reconciliationLedger: WarRoomData["integrations"]["operations"]["reconciliation"]["ledger"] = [
+    {
+      id: "spend_vs_utmify",
+      expected: fallbackSpend,
+      observed: spendTotal,
+      variancePct: safeDivide(spendTotal - fallbackSpend, fallbackSpend || 1) * 100,
+      status: Math.abs(safeDivide(spendTotal - fallbackSpend, fallbackSpend || 1) * 100) > 5 ? "warning" : "ok",
+      note: "Conferencia do spend consolidado entre fontes internas e Utmify.",
+    },
+    {
+      id: "gross_vs_gateways",
+      expected: next.globalOverview.revenue,
+      observed: consolidatedGross || next.globalOverview.revenue,
+      variancePct: safeDivide((consolidatedGross || next.globalOverview.revenue) - next.globalOverview.revenue, next.globalOverview.revenue || 1) * 100,
+      status:
+        Math.abs(
+          safeDivide((consolidatedGross || next.globalOverview.revenue) - next.globalOverview.revenue, next.globalOverview.revenue || 1) * 100,
+        ) > 3
+          ? "warning"
+          : "ok",
+      note: "Conferencia de faturamento bruto vs gateways.",
+    },
+    {
+      id: "profit_formula_check",
+      expected: simulatedNetProfit,
+      observed: next.enterprise.ceoFinance.netProfit,
+      variancePct: safeDivide(next.enterprise.ceoFinance.netProfit - simulatedNetProfit, simulatedNetProfit || 1) * 100,
+      status:
+        Math.abs(safeDivide(next.enterprise.ceoFinance.netProfit - simulatedNetProfit, simulatedNetProfit || 1) * 100) > 2
+          ? "critical"
+          : "ok",
+      note: "Conferencia da formula de lucro liquido operacional.",
+    },
+  ];
+  const reconciliationStatus = reconciliationLedger.some((item) => item.status === "critical")
+    ? "critical"
+    : reconciliationLedger.some((item) => item.status === "warning")
+      ? "warning"
+      : "ok";
 
   const leaderboard = Object.entries(state.utmify.creatives)
     .map(([creativeId, value]) => ({
@@ -525,6 +605,20 @@ export function mergeWarRoomWithIntegrations(base: WarRoomData): WarRoomData {
       executiveBriefing: next.integrations.fortress.executiveBriefing,
       siren: next.integrations.fortress.siren,
     },
+    operations: {
+      opportunityLost: {
+        estimatedLossToday: Math.round(lossPerMinute * 30),
+        currentLossPerMinute: Math.round(lossPerMinute),
+        currentlyLosing: lossPerMinute > 0,
+        incidents: currentIncidents,
+      },
+      reconciliation: {
+        status: reconciliationStatus,
+        lastCheckedAt: nowLabel(),
+        ledger: reconciliationLedger,
+      },
+      worker: next.integrations.operations.worker,
+    },
   };
 
   if (consolidatedGross > 0) {
@@ -616,9 +710,6 @@ export function mergeWarRoomWithIntegrations(base: WarRoomData): WarRoomData {
   next.finance.ltv = ltvD90;
   next.finance.netRevenue = realNetProfit;
 
-  const approvalDropThreshold =
-    next.integrations.gateway.appmaxPreviousDayApprovalRate *
-    (1 - WAR_ROOM_OPS_CONSTANTS.thresholds.appmax.approvalDropAlertPct / 100);
   if (
     next.integrations.gateway.appmaxPreviousDayApprovalRate > 0 &&
     next.integrations.gateway.appmaxCardApprovalRate < approvalDropThreshold
@@ -632,5 +723,12 @@ export function mergeWarRoomWithIntegrations(base: WarRoomData): WarRoomData {
     next.integrations.apiStatus.utmify.errorMessage = `Divergencia de Pixel/CAPI acima de ${WAR_ROOM_OPS_CONSTANTS.thresholds.pixel.maxDiscrepancyPct}%.`;
   }
 
+  return next;
+}
+
+export async function enrichWarRoomOperations(input: WarRoomData): Promise<WarRoomData> {
+  const next = structuredClone(input);
+  const stats = await getOpsJobStats();
+  next.integrations.operations.worker = stats;
   return next;
 }

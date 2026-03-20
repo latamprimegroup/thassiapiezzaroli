@@ -966,6 +966,89 @@ export function normalizeWarRoomData(
           })(),
         },
       },
+      operations: {
+        opportunityLost: {
+          estimatedLossToday: toNumber(
+            toObject(toObject(integrationsInput.operations).opportunityLost).estimatedLossToday,
+            fallback.integrations.operations.opportunityLost.estimatedLossToday,
+          ),
+          currentLossPerMinute: toNumber(
+            toObject(toObject(integrationsInput.operations).opportunityLost).currentLossPerMinute,
+            fallback.integrations.operations.opportunityLost.currentLossPerMinute,
+          ),
+          currentlyLosing:
+            typeof toObject(toObject(integrationsInput.operations).opportunityLost).currentlyLosing === "boolean"
+              ? Boolean(toObject(toObject(integrationsInput.operations).opportunityLost).currentlyLosing)
+              : fallback.integrations.operations.opportunityLost.currentlyLosing,
+          incidents: (Array.isArray(toObject(toObject(integrationsInput.operations).opportunityLost).incidents)
+            ? (toObject(toObject(integrationsInput.operations).opportunityLost).incidents as unknown[])
+            : fallback.integrations.operations.opportunityLost.incidents
+          ).map((item, index) => {
+            const row = toObject(item);
+            const fallbackItem =
+              fallback.integrations.operations.opportunityLost.incidents[
+                index % fallback.integrations.operations.opportunityLost.incidents.length
+              ];
+            const severity = row.severity;
+            return {
+              id: toString(row.id, fallbackItem.id),
+              severity: severity === "warning" || severity === "critical" ? severity : fallbackItem.severity,
+              reason: toString(row.reason, fallbackItem.reason),
+              estimatedLoss: toNumber(row.estimatedLoss, fallbackItem.estimatedLoss),
+              startedAt: toString(row.startedAt, fallbackItem.startedAt),
+            };
+          }),
+        },
+        reconciliation: {
+          status: (() => {
+            const value = toObject(toObject(integrationsInput.operations).reconciliation).status;
+            return value === "ok" || value === "warning" || value === "critical"
+              ? value
+              : fallback.integrations.operations.reconciliation.status;
+          })(),
+          lastCheckedAt: toString(
+            toObject(toObject(integrationsInput.operations).reconciliation).lastCheckedAt,
+            fallback.integrations.operations.reconciliation.lastCheckedAt,
+          ),
+          ledger: (Array.isArray(toObject(toObject(integrationsInput.operations).reconciliation).ledger)
+            ? (toObject(toObject(integrationsInput.operations).reconciliation).ledger as unknown[])
+            : fallback.integrations.operations.reconciliation.ledger
+          ).map((item, index) => {
+            const row = toObject(item);
+            const fallbackItem =
+              fallback.integrations.operations.reconciliation.ledger[
+                index % fallback.integrations.operations.reconciliation.ledger.length
+              ];
+            const status = row.status;
+            return {
+              id: toString(row.id, fallbackItem.id),
+              expected: toNumber(row.expected, fallbackItem.expected),
+              observed: toNumber(row.observed, fallbackItem.observed),
+              variancePct: toNumber(row.variancePct, fallbackItem.variancePct),
+              status: status === "ok" || status === "warning" || status === "critical" ? status : fallbackItem.status,
+              note: toString(row.note, fallbackItem.note),
+            };
+          }),
+        },
+        worker: {
+          queueDepth: toNumber(
+            toObject(toObject(integrationsInput.operations).worker).queueDepth,
+            fallback.integrations.operations.worker.queueDepth,
+          ),
+          failedJobs: toNumber(
+            toObject(toObject(integrationsInput.operations).worker).failedJobs,
+            fallback.integrations.operations.worker.failedJobs,
+          ),
+          processedToday: toNumber(
+            toObject(toObject(integrationsInput.operations).worker).processedToday,
+            fallback.integrations.operations.worker.processedToday,
+          ),
+          lastRunAt: toString(
+            toObject(toObject(integrationsInput.operations).worker).lastRunAt,
+            fallback.integrations.operations.worker.lastRunAt,
+          ),
+        },
+      },
     },
     contingency: {
       domains: (domainsInput as unknown[]).map((item, index) => {

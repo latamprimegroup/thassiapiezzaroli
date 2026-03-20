@@ -410,6 +410,81 @@ export function CeoFinanceModule({ canViewSensitiveFinancials }: CeoFinanceModul
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Opportunity Lost Engine</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm">
+          <p>
+            Perda estimada hoje:{" "}
+            <span className="text-[#EA4335]">{currency(data.integrations.operations.opportunityLost.estimatedLossToday)}</span>
+          </p>
+          <p>
+            Burn atual por minuto:{" "}
+            <span className={data.integrations.operations.opportunityLost.currentlyLosing ? "text-[#EA4335]" : "text-[#10B981]"}>
+              {currency(data.integrations.operations.opportunityLost.currentLossPerMinute)}
+            </span>
+          </p>
+          {data.integrations.operations.opportunityLost.currentlyLosing ? (
+            <Badge variant="danger">ALERTA: sistema detecta perda ativa de oportunidade</Badge>
+          ) : (
+            <Badge variant="success">Sem perda ativa no momento</Badge>
+          )}
+          {data.integrations.operations.opportunityLost.incidents.map((incident) => (
+            <div key={incident.id} className="rounded border border-white/10 bg-white/5 p-2">
+              <p className={incident.severity === "critical" ? "text-[#EA4335]" : "text-[#FF9900]"}>{incident.reason}</p>
+              <p className="text-xs text-slate-400">
+                {incident.startedAt} | Estimativa: {currency(incident.estimatedLoss)}
+              </p>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Reconciliacao Financeira / Atribuicao</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm">
+          <p>
+            Status:{" "}
+            <span
+              className={
+                data.integrations.operations.reconciliation.status === "critical"
+                  ? "text-[#EA4335]"
+                  : data.integrations.operations.reconciliation.status === "warning"
+                    ? "text-[#FF9900]"
+                    : "text-[#10B981]"
+              }
+            >
+              {data.integrations.operations.reconciliation.status.toUpperCase()}
+            </span>{" "}
+            | Ultima checagem: {data.integrations.operations.reconciliation.lastCheckedAt}
+          </p>
+          {data.integrations.operations.reconciliation.ledger.map((row) => (
+            <div key={row.id} className="rounded border border-white/10 bg-white/5 p-2">
+              <p className="font-mono text-xs text-slate-300">{row.id}</p>
+              <p className="text-xs text-slate-200">
+                Esperado {currency(row.expected)} | Observado {currency(row.observed)} | Variancia {row.variancePct.toFixed(2)}%
+              </p>
+              <p className="text-xs text-slate-400">{row.note}</p>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Worker Queue (Async Ops)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-1 text-sm">
+          <p>Fila atual: {data.integrations.operations.worker.queueDepth}</p>
+          <p>Falhas/DLQ: {data.integrations.operations.worker.failedJobs}</p>
+          <p>Processados hoje: {data.integrations.operations.worker.processedToday}</p>
+          <p className="text-xs text-slate-400">Ultimo ciclo: {data.integrations.operations.worker.lastRunAt || "N/A"}</p>
+        </CardContent>
+      </Card>
+
       {canViewSensitiveFinancials ? (
         <Card>
           <CardHeader>
