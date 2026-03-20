@@ -298,6 +298,54 @@ export const mockWarRoomData: WarRoomData = {
     upsellTakeRate: 21.4,
     ltv: 1_930,
   },
+  squadSync: {
+    lastReportAt: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(),
+    dailyInput: {
+      creativeId: "FB-118",
+      kpisToday: {
+        hookRate: 18.7,
+        holdRate15s: 27.3,
+        ctrOutbound: 1.1,
+        icRate: 10.8,
+        frequency: 3.9,
+      },
+      kpisYesterday: {
+        hookRate: 20.5,
+        holdRate15s: 29.1,
+        ctrOutbound: 1.4,
+        icRate: 11.6,
+        frequency: 3.4,
+      },
+      sentimentNotes:
+        "Objeções recorrentes sobre prazo de entrega e percepção de preço. Comentários pedindo prova de resultado no primeiro bloco.",
+    },
+    commandOrders: [
+      {
+        id: "ORD-001",
+        audience: "editors",
+        status: "failing",
+        title: "Novo Gancho para Winner em Saturacao",
+        diagnosis: "ROAS > 2.0 com Hook abaixo de 20% em FB-118.",
+        action: "Criar 3 variações de pattern interrupt para os 5s iniciais.",
+        createdAt: "11:54",
+      },
+      {
+        id: "ORD-002",
+        audience: "techCro",
+        status: "failing",
+        title: "Friccao de Checkout",
+        diagnosis: "IC Rate global abaixo de 12%.",
+        action: "Revisar velocidade da LP + campos de checkout e gatilhos de confiança.",
+        createdAt: "11:55",
+      },
+    ],
+    notifications: {
+      lastDispatchAt: "11:56",
+      lastMessage: "Diagnóstico enviado para Edição e Tech/CRO.",
+      slackStatus: "simulated",
+      whatsappStatus: "simulated",
+    },
+  },
   contingency: {
     domains: [
       { name: "checkout-principal.com", status: "ok", score: 92, lastCheck: "12:03" },
@@ -327,6 +375,11 @@ export const mockWarRoomData: WarRoomData = {
       },
       paybackDays: 17,
       taxProvision: 474_000,
+      recoveryLeaderboard: [
+        { agent: "Rafa CS", boletoRecoveryRate: 21.4, pixRecoveryRate: 36.8, recoveredRevenue: 148_000 },
+        { agent: "Luana CS", boletoRecoveryRate: 19.9, pixRecoveryRate: 34.1, recoveredRevenue: 132_500 },
+        { agent: "Marcos Recovery", boletoRecoveryRate: 17.8, pixRecoveryRate: 31.2, recoveredRevenue: 119_400 },
+      ],
     },
     copyResearch: {
       uniqueMechanismProblem: "Saturacao criativa acelera CAC quando o avatar para de se reconhecer no angulo.",

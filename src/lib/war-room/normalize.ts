@@ -129,6 +129,7 @@ export function normalizeWarRoomData(
   const squadsInput = toObject(input.squads);
   const financeInput = toObject(input.finance);
   const creativeFactoryInput = toObject(input.creativeFactory);
+  const squadSyncInput = toObject(input.squadSync);
   const contingencyInput = toObject(input.contingency);
   const enterpriseInput = toObject(input.enterprise);
 
@@ -343,6 +344,104 @@ export function normalizeWarRoomData(
       upsellTakeRate: toNumber(financeInput.upsellTakeRate, fallback.finance.upsellTakeRate),
       ltv: toNumber(financeInput.ltv, fallback.finance.ltv),
     },
+    squadSync: {
+      lastReportAt: toString(squadSyncInput.lastReportAt, fallback.squadSync.lastReportAt),
+      dailyInput: {
+        creativeId: toString(toObject(squadSyncInput.dailyInput).creativeId, fallback.squadSync.dailyInput.creativeId),
+        kpisToday: {
+          hookRate: toNumber(
+            toObject(toObject(squadSyncInput.dailyInput).kpisToday).hookRate,
+            fallback.squadSync.dailyInput.kpisToday.hookRate,
+          ),
+          holdRate15s: toNumber(
+            toObject(toObject(squadSyncInput.dailyInput).kpisToday).holdRate15s,
+            fallback.squadSync.dailyInput.kpisToday.holdRate15s,
+          ),
+          ctrOutbound: toNumber(
+            toObject(toObject(squadSyncInput.dailyInput).kpisToday).ctrOutbound,
+            fallback.squadSync.dailyInput.kpisToday.ctrOutbound,
+          ),
+          icRate: toNumber(
+            toObject(toObject(squadSyncInput.dailyInput).kpisToday).icRate,
+            fallback.squadSync.dailyInput.kpisToday.icRate,
+          ),
+          frequency: toNumber(
+            toObject(toObject(squadSyncInput.dailyInput).kpisToday).frequency,
+            fallback.squadSync.dailyInput.kpisToday.frequency,
+          ),
+        },
+        kpisYesterday: {
+          hookRate: toNumber(
+            toObject(toObject(squadSyncInput.dailyInput).kpisYesterday).hookRate,
+            fallback.squadSync.dailyInput.kpisYesterday.hookRate,
+          ),
+          holdRate15s: toNumber(
+            toObject(toObject(squadSyncInput.dailyInput).kpisYesterday).holdRate15s,
+            fallback.squadSync.dailyInput.kpisYesterday.holdRate15s,
+          ),
+          ctrOutbound: toNumber(
+            toObject(toObject(squadSyncInput.dailyInput).kpisYesterday).ctrOutbound,
+            fallback.squadSync.dailyInput.kpisYesterday.ctrOutbound,
+          ),
+          icRate: toNumber(
+            toObject(toObject(squadSyncInput.dailyInput).kpisYesterday).icRate,
+            fallback.squadSync.dailyInput.kpisYesterday.icRate,
+          ),
+          frequency: toNumber(
+            toObject(toObject(squadSyncInput.dailyInput).kpisYesterday).frequency,
+            fallback.squadSync.dailyInput.kpisYesterday.frequency,
+          ),
+        },
+        sentimentNotes: toString(
+          toObject(squadSyncInput.dailyInput).sentimentNotes,
+          fallback.squadSync.dailyInput.sentimentNotes,
+        ),
+      },
+      commandOrders: (Array.isArray(squadSyncInput.commandOrders)
+        ? squadSyncInput.commandOrders
+        : fallback.squadSync.commandOrders
+      ).map((item, index) => {
+        const row = toObject(item);
+        const fallbackOrder = fallback.squadSync.commandOrders[index % fallback.squadSync.commandOrders.length];
+        const audience = row.audience;
+        const status = row.status;
+        return {
+          id: toString(row.id, fallbackOrder.id),
+          audience:
+            audience === "editors" ||
+            audience === "copywriters" ||
+            audience === "mediaBuyers" ||
+            audience === "techCro" ||
+            audience === "ceoFinance"
+              ? audience
+              : fallbackOrder.audience,
+          status: status === "winner" || status === "scaling" || status === "failing" ? status : fallbackOrder.status,
+          title: toString(row.title, fallbackOrder.title),
+          diagnosis: toString(row.diagnosis, fallbackOrder.diagnosis),
+          action: toString(row.action, fallbackOrder.action),
+          createdAt: toString(row.createdAt, fallbackOrder.createdAt),
+        };
+      }),
+      notifications: {
+        lastDispatchAt: toString(
+          toObject(squadSyncInput.notifications).lastDispatchAt,
+          fallback.squadSync.notifications.lastDispatchAt,
+        ),
+        lastMessage: toString(toObject(squadSyncInput.notifications).lastMessage, fallback.squadSync.notifications.lastMessage),
+        slackStatus: (() => {
+          const value = toObject(squadSyncInput.notifications).slackStatus;
+          return value === "idle" || value === "sent" || value === "simulated" || value === "failed"
+            ? value
+            : fallback.squadSync.notifications.slackStatus;
+        })(),
+        whatsappStatus: (() => {
+          const value = toObject(squadSyncInput.notifications).whatsappStatus;
+          return value === "idle" || value === "sent" || value === "simulated" || value === "failed"
+            ? value
+            : fallback.squadSync.notifications.whatsappStatus;
+        })(),
+      },
+    },
     contingency: {
       domains: (domainsInput as unknown[]).map((item, index) => {
         const row = toObject(item);
@@ -392,6 +491,22 @@ export function normalizeWarRoomData(
         },
         paybackDays: toNumber(enterpriseCeoInput.paybackDays, fallback.enterprise.ceoFinance.paybackDays),
         taxProvision: toNumber(enterpriseCeoInput.taxProvision, fallback.enterprise.ceoFinance.taxProvision),
+        recoveryLeaderboard: (Array.isArray(enterpriseCeoInput.recoveryLeaderboard)
+          ? enterpriseCeoInput.recoveryLeaderboard
+          : fallback.enterprise.ceoFinance.recoveryLeaderboard
+        ).map((item, index) => {
+          const row = toObject(item);
+          const fallbackAgent =
+            fallback.enterprise.ceoFinance.recoveryLeaderboard[
+              index % fallback.enterprise.ceoFinance.recoveryLeaderboard.length
+            ];
+          return {
+            agent: toString(row.agent, fallbackAgent.agent),
+            boletoRecoveryRate: toNumber(row.boletoRecoveryRate, fallbackAgent.boletoRecoveryRate),
+            pixRecoveryRate: toNumber(row.pixRecoveryRate, fallbackAgent.pixRecoveryRate),
+            recoveredRevenue: toNumber(row.recoveredRevenue, fallbackAgent.recoveredRevenue),
+          };
+        }),
       },
       copyResearch: {
         uniqueMechanismProblem: toString(

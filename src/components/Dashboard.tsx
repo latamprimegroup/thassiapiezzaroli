@@ -15,7 +15,7 @@ import { ActionableInsights } from "@/components/war-room/actionable-insights";
 import { recalculateEnterpriseFinance, WarRoomContext } from "@/context/war-room-context";
 import { rolePermissions, type SectionId, type UserRole } from "@/lib/auth/rbac";
 import type { DemoUser } from "@/lib/auth/users";
-import type { TrafficSourceKey, WarRoomData } from "@/lib/war-room/types";
+import type { SquadSyncCommandOrder, SquadSyncKpiSnapshot, TrafficSourceKey, WarRoomData } from "@/lib/war-room/types";
 
 type DashboardProps = {
   data: WarRoomData;
@@ -87,6 +87,41 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
     });
   }
 
+  function applySquadSyncFeedback(payload: {
+    creativeId: string;
+    kpisToday: SquadSyncKpiSnapshot;
+    kpisYesterday: SquadSyncKpiSnapshot;
+    sentimentNotes: string;
+    commandOrders: SquadSyncCommandOrder[];
+  }) {
+    setViewData((prev) => {
+      const next = structuredClone(prev);
+      const nowIso = new Date().toISOString();
+      const createdAt = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+
+      next.updatedAt = nowIso;
+      next.squadSync.lastReportAt = nowIso;
+      next.squadSync.dailyInput = {
+        creativeId: payload.creativeId,
+        kpisToday: payload.kpisToday,
+        kpisYesterday: payload.kpisYesterday,
+        sentimentNotes: payload.sentimentNotes,
+      };
+      next.squadSync.commandOrders = [...payload.commandOrders, ...next.squadSync.commandOrders].slice(0, 20);
+      next.squadSync.notifications = {
+        ...next.squadSync.notifications,
+        lastDispatchAt: createdAt,
+        lastMessage:
+          payload.commandOrders[0]?.title ??
+          "Relatorio diario processado e ordens de comando distribuidas para os squads.",
+      };
+
+      next.enterprise.techCro.checkout.checkoutConversion = payload.kpisToday.icRate;
+      next.enterprise.techCro.checkout.gatewayAlert = payload.kpisToday.icRate < 12;
+      return next;
+    });
+  }
+
   async function switchUser(userId: string) {
     setIsSwitchingUser(true);
     try {
@@ -119,6 +154,7 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
     data: viewData,
     updateTrafficCpa,
     addActivity,
+    applySquadSyncFeedback,
   };
 
   return (

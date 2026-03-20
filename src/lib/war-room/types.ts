@@ -7,6 +7,24 @@ export type DailyReplyRole = "Copy" | "Edicao";
 
 export type WarRoomDataSource = "mock" | "api" | "sheet" | "database" | "fallback";
 
+export type SquadSyncKpiSnapshot = {
+  hookRate: number;
+  holdRate15s: number;
+  ctrOutbound: number;
+  icRate: number;
+  frequency: number;
+};
+
+export type SquadSyncCommandOrder = {
+  id: string;
+  audience: "editors" | "copywriters" | "mediaBuyers" | "techCro" | "ceoFinance";
+  status: "winner" | "scaling" | "failing";
+  title: string;
+  diagnosis: string;
+  action: string;
+  createdAt: string;
+};
+
 export type WarRoomData = {
   source: WarRoomDataSource;
   sourceLabel: string;
@@ -96,6 +114,22 @@ export type WarRoomData = {
     upsellTakeRate: number;
     ltv: number;
   };
+  squadSync: {
+    lastReportAt: string;
+    dailyInput: {
+      creativeId: string;
+      kpisToday: SquadSyncKpiSnapshot;
+      kpisYesterday: SquadSyncKpiSnapshot;
+      sentimentNotes: string;
+    };
+    commandOrders: SquadSyncCommandOrder[];
+    notifications: {
+      lastDispatchAt: string;
+      lastMessage: string;
+      slackStatus: "idle" | "sent" | "simulated" | "failed";
+      whatsappStatus: "idle" | "sent" | "simulated" | "failed";
+    };
+  };
   contingency: {
     domains: Array<{
       name: string;
@@ -131,6 +165,12 @@ export type WarRoomData = {
       };
       paybackDays: number;
       taxProvision: number;
+      recoveryLeaderboard: Array<{
+        agent: string;
+        boletoRecoveryRate: number;
+        pixRecoveryRate: number;
+        recoveredRevenue: number;
+      }>;
     };
     copyResearch: {
       uniqueMechanismProblem: string;

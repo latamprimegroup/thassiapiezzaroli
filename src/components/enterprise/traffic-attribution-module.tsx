@@ -4,6 +4,7 @@ import { useWarRoom } from "@/context/war-room-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ContingencyMonitor } from "@/components/war-room/contingency-monitor";
+import { computeIntelligenceEngine } from "@/lib/metrics/intelligence-engine";
 
 const percent = (value: number) => `${value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
 const currency = (value: number) => value.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -13,6 +14,7 @@ type Source = "meta" | "google" | "native";
 export function TrafficAttributionModule() {
   const { data, updateTrafficCpa, addActivity } = useWarRoom();
   const squads = data.enterprise.trafficAttribution.squads;
+  const intelligence = computeIntelligenceEngine(data);
 
   function renderSquad(source: Source, label: string) {
     const row = squads[source];
@@ -70,11 +72,20 @@ export function TrafficAttributionModule() {
           <CardTitle className="text-base">Scale Calculator</CardTitle>
         </CardHeader>
         <CardContent className="text-sm">
-          <p>Sugestao de aumento: {data.enterprise.trafficAttribution.scaleCalculator.suggestedIncreasePct.toFixed(2)}%</p>
-          <p className="text-slate-400">{data.enterprise.trafficAttribution.scaleCalculator.reason}</p>
-          <Badge variant="warning" className="mt-2">
-            Proatividade &gt; Reatividade
-          </Badge>
+          <p>
+            Sugestao DSS de aumento:{" "}
+            {intelligence.scalePolicy.locked ? "0.00" : intelligence.scalePolicy.suggestedBudgetIncreasePct.toFixed(2)}%
+          </p>
+          <p className="text-slate-400">{intelligence.scalePolicy.reason}</p>
+          {intelligence.scalePolicy.locked ? (
+            <Badge variant="danger" className="mt-2">
+              Escala travada por MER abaixo da meta
+            </Badge>
+          ) : (
+            <Badge variant="success" className="mt-2">
+              Escala permitida por MER
+            </Badge>
+          )}
         </CardContent>
       </Card>
 

@@ -2,12 +2,19 @@
 
 import { createContext, useContext } from "react";
 import { safeDivide } from "@/lib/metrics/kpis";
-import type { TrafficSourceKey, WarRoomData } from "@/lib/war-room/types";
+import type { SquadSyncCommandOrder, SquadSyncKpiSnapshot, TrafficSourceKey, WarRoomData } from "@/lib/war-room/types";
 
 type WarRoomContextValue = {
   data: WarRoomData;
   updateTrafficCpa: (source: TrafficSourceKey, newValue: number) => void;
   addActivity: (actorRole: string, actorName: string, action: string, entity: string, reason: string) => void;
+  applySquadSyncFeedback: (payload: {
+    creativeId: string;
+    kpisToday: SquadSyncKpiSnapshot;
+    kpisYesterday: SquadSyncKpiSnapshot;
+    sentimentNotes: string;
+    commandOrders: SquadSyncCommandOrder[];
+  }) => void;
 };
 
 export const WarRoomContext = createContext<WarRoomContextValue | null>(null);

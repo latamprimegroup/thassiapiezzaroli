@@ -3,6 +3,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useWarRoom } from "@/context/war-room-context";
+import { computeIntelligenceEngine, ELITE_BENCHMARKS } from "@/lib/metrics/intelligence-engine";
 
 type CeoFinanceModuleProps = {
   canViewSensitiveFinancials: boolean;
@@ -14,6 +15,10 @@ const percent = (value: number) => `${value.toLocaleString("pt-BR", { minimumFra
 export function CeoFinanceModule({ canViewSensitiveFinancials }: CeoFinanceModuleProps) {
   const { data, addActivity } = useWarRoom();
   const f = data.enterprise.ceoFinance;
+  const intelligence = computeIntelligenceEngine(data);
+  const contingencyItems = [...data.contingency.domains, ...data.contingency.adAccounts, ...data.contingency.fanpages];
+  const blockedCount = contingencyItems.filter((item) => item.status === "blocked").length;
+  const warningCount = contingencyItems.filter((item) => item.status === "warning").length;
 
   const cohortMax = Math.max(f.ltvCohorts.d30, f.ltvCohorts.d60, f.ltvCohorts.d90, 1);
   const cohorts = [
@@ -31,6 +36,7 @@ export function CeoFinanceModule({ canViewSensitiveFinancials }: CeoFinanceModul
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-semibold text-[#34A853]">{f.mer.toFixed(2)}</p>
+            <p className="mt-1 text-xs text-slate-400">Benchmark elite: {ELITE_BENCHMARKS.mer.toFixed(1)}x</p>
           </CardContent>
         </Card>
         <Card className="bg-[#050505]">
@@ -61,6 +67,25 @@ export function CeoFinanceModule({ canViewSensitiveFinancials }: CeoFinanceModul
 
       <Card>
         <CardHeader>
+          <CardTitle className="text-base">Governanca de Escala (DSS via MER)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm">
+          <p>{intelligence.scalePolicy.reason}</p>
+          {intelligence.scalePolicy.locked ? (
+            <Badge variant="danger">Escala travada: MER abaixo de {ELITE_BENCHMARKS.mer.toFixed(1)}x</Badge>
+          ) : (
+            <Badge variant="success">Escala liberada: sugestao +{intelligence.scalePolicy.suggestedBudgetIncreasePct}% budget</Badge>
+          )}
+          {intelligence.assessments.icRate.value < ELITE_BENCHMARKS.icRate && (
+            <Badge variant="warning">
+              Alerta cruzado CEO/Tech: IC Rate em {intelligence.assessments.icRate.value.toFixed(2)}%
+            </Badge>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle className="text-base">LTV Cohort Tracker (30/60/90)</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -76,6 +101,23 @@ export function CeoFinanceModule({ canViewSensitiveFinancials }: CeoFinanceModul
                   style={{ width: `${(cohort.value / cohortMax) * 100}%` }}
                 />
               </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Leaderboard de Recuperacao (Boleto/Pix)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {f.recoveryLeaderboard.map((agent) => (
+            <div key={agent.agent} className="rounded-md border border-white/10 bg-white/5 p-2 text-sm">
+              <p className="font-medium text-slate-100">{agent.agent}</p>
+              <p className="text-xs text-slate-300">
+                Boleto: {percent(agent.boletoRecoveryRate)} | Pix: {percent(agent.pixRecoveryRate)} | Recuperado:{" "}
+                {currency(agent.recoveredRevenue)}
+              </p>
             </div>
           ))}
         </CardContent>
@@ -109,6 +151,24 @@ export function CeoFinanceModule({ canViewSensitiveFinancials }: CeoFinanceModul
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Ativo de Contingencia (Dominios, BMs e Perfis)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm">
+          <p className="text-slate-300">
+            Bloqueados: <span className="text-[#EA4335]">{blockedCount}</span> | Warning:{" "}
+            <span className="text-[#FF9900]">{warningCount}</span> | Saudaveis:{" "}
+            <span className="text-[#10B981]">{contingencyItems.length - blockedCount - warningCount}</span>
+          </p>
+          {blockedCount > 0 ? (
+            <Badge variant="danger">Ativar plano de contingencia imediatamente</Badge>
+          ) : (
+            <Badge variant="success">Contingencia sob controle</Badge>
+          )}
+        </CardContent>
+      </Card>
     </section>
   );
 }

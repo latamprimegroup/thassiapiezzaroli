@@ -4,12 +4,14 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { HealthCheck } from "@/components/war-room/health-check";
 import { useWarRoom } from "@/context/war-room-context";
+import { computeIntelligenceEngine, ELITE_BENCHMARKS } from "@/lib/metrics/intelligence-engine";
 
 const percent = (value: number) => `${value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
 
 export function TechCroModule() {
   const { data } = useWarRoom();
   const tech = data.enterprise.techCro;
+  const intelligence = computeIntelligenceEngine(data);
 
   return (
     <section className="war-fade-in space-y-4">
@@ -48,7 +50,13 @@ export function TechCroModule() {
         <CardContent className="space-y-1 text-sm">
           <p>Abandono de Carrinho: {percent(tech.checkout.cartAbandonment)}</p>
           <p>Conversao de Checkout: {percent(tech.checkout.checkoutConversion)}</p>
+          <p className="text-slate-400">
+            IC Rate global DSS: {intelligence.metrics.icRate.toFixed(2)}% (alvo &gt; {ELITE_BENCHMARKS.icRate}%)
+          </p>
           {tech.checkout.gatewayAlert && <Badge variant="warning">Gateway com queda de performance</Badge>}
+          {intelligence.metrics.icRate < ELITE_BENCHMARKS.icRate && (
+            <Badge variant="danger">Alerta DSS: friccao detectada em checkout</Badge>
+          )}
         </CardContent>
       </Card>
 

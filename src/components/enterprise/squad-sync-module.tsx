@@ -5,7 +5,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useWarRoom } from "@/context/war-room-context";
+import {
+  buildCommandOrdersFromSnapshot,
+  computeIntelligenceEngine,
+  ELITE_BENCHMARKS,
+} from "@/lib/metrics/intelligence-engine";
 import { computeKpis, safeDivide, toFiniteNumber } from "@/lib/metrics/kpis";
+import type { SquadSyncKpiSnapshot } from "@/lib/war-room/types";
 
 type SquadSyncModuleProps = {
   canInputDailyFeedback: boolean;
@@ -22,6 +28,12 @@ type AutoMessage = {
   createdAt: string;
 };
 
+type NotificationResult = {
+  slack: "idle" | "sent" | "simulated" | "failed";
+  whatsapp: "idle" | "sent" | "simulated" | "failed";
+  note: string;
+};
+
 const KPI_FIELDS: Array<{ key: KpiFieldKey; label: string; suffix: string }> = [
   { key: "hookRate", label: "Hook Rate", suffix: "%" },
   { key: "holdRate15s", label: "Hold Rate 15s", suffix: "%" },
@@ -29,23 +41,6 @@ const KPI_FIELDS: Array<{ key: KpiFieldKey; label: string; suffix: string }> = [
   { key: "icRate", label: "IC Rate", suffix: "%" },
   { key: "frequency", label: "Frequencia", suffix: "x" },
 ];
-
-function inferAngle(campaign: string, adName: string) {
-  const text = `${campaign} ${adName}`.toLowerCase();
-  if (/prova|depoimento|social/.test(text)) {
-    return "Prova Social";
-  }
-  if (/mecanismo|cient|metodo|framework/.test(text)) {
-    return "Mecanismo Cientifico";
-  }
-  if (/objec|preco|quebra/.test(text)) {
-    return "Quebra de Objecao";
-  }
-  if (/comparativo|transformacao|antes|depois|visual/.test(text)) {
-    return "Comparativo Visual";
-  }
-  return "Narrativa Direta";
-}
 
 function formatDelta(value: number) {
   if (Math.abs(value) < 0.01) {
@@ -55,16 +50,27 @@ function formatDelta(value: number) {
 }
 
 export function SquadSyncModule({ canInputDailyFeedback, actorName }: SquadSyncModuleProps) {
-  const { data, addActivity } = useWarRoom();
-  const [sentimentNotes, setSentimentNotes] = useState("");
-  const [messages, setMessages] = useState<AutoMessage[]>([]);
-  const [lastReportAt, setLastReportAt] = useState(data.updatedAt);
+  const { data, addActivity, applySquadSyncFeedback } = useWarRoom();
+  const [sentimentNotes, setSentimentNotes] = useState(data.squadSync.dailyInput.sentimentNotes);
+  const [messages, setMessages] = useState<AutoMessage[]>(
+    data.squadSync.commandOrders.slice(0, 8).map((order) => ({
+      id: order.id,
+      text: `[${order.audience}] ${order.title}: ${order.action}`,
+      createdAt: order.createdAt,
+    })),
+  );
+  const [lastReportAt, setLastReportAt] = useState(data.squadSync.lastReportAt || data.updatedAt);
   const [currentTimeMs, setCurrentTimeMs] = useState(() => new Date().getTime());
+  const [notifyResult, setNotifyResult] = useState<NotificationResult>({
+    slack: data.squadSync.notifications.slackStatus,
+    whatsapp: data.squadSync.notifications.whatsappStatus,
+    note: data.squadSync.notifications.lastMessage || "Sem disparos nesta sessao.",
+  });
 
   const liveRows = data.liveAdsTracking;
   const defaultCreativeId = liveRows[0]?.id ?? "";
-
-  const [selectedCreativeId, setSelectedCreativeId] = useState(defaultCreativeId);
+  const [selectedCreativeId, setSelectedCreativeId] = useState(data.squadSync.dailyInput.creativeId || defaultCreativeId);
+  const intelligence = useMemo(() => computeIntelligenceEngine(data), [data]);
 
   const snapshotsByCreative = useMemo(() => {
     const map = new Map<string, { today: KpiSnapshot; yesterday: KpiSnapshot }>();
@@ -108,42 +114,11 @@ export function SquadSyncModule({ canInputDailyFeedback, actorName }: SquadSyncM
     },
   };
 
-  const [todayKpis, setTodayKpis] = useState<KpiSnapshot>(baseSnapshot.today);
-  const [yesterdayKpis, setYesterdayKpis] = useState<KpiSnapshot>(baseSnapshot.yesterday);
+  const [todayKpis, setTodayKpis] = useState<KpiSnapshot>(data.squadSync.dailyInput.kpisToday || baseSnapshot.today);
+  const [yesterdayKpis, setYesterdayKpis] = useState<KpiSnapshot>(data.squadSync.dailyInput.kpisYesterday || baseSnapshot.yesterday);
 
-  const editorPriority = useMemo(() => {
-    return liveRows
-      .map((row) => {
-        const kpi = computeKpis(row);
-        return {
-          row,
-          hookRate: kpi.hookRate,
-          holdRate: kpi.holdRate,
-        };
-      })
-      .filter((item) => item.row.roas > 2.0 && item.hookRate < 20)
-      .sort((a, b) => a.hookRate - b.hookRate || b.row.roas - a.row.roas);
-  }, [liveRows]);
-
-  const anglePerformance = useMemo(() => {
-    const grouped = new Map<string, { totalCpa: number; totalRoas: number; count: number }>();
-    for (const row of liveRows) {
-      const angle = inferAngle(row.campaign, row.adName);
-      const current = grouped.get(angle) ?? { totalCpa: 0, totalRoas: 0, count: 0 };
-      current.totalCpa += row.cpa;
-      current.totalRoas += row.roas;
-      current.count += 1;
-      grouped.set(angle, current);
-    }
-    return [...grouped.entries()]
-      .map(([angle, values]) => ({
-        angle,
-        avgCpa: safeDivide(values.totalCpa, values.count),
-        avgRoas: safeDivide(values.totalRoas, values.count),
-        count: values.count,
-      }))
-      .sort((a, b) => a.avgCpa - b.avgCpa);
-  }, [liveRows]);
+  const editorPriority = intelligence.editorPriorities;
+  const anglePerformance = intelligence.angleComparative;
 
   const winnerAngle = anglePerformance[0]?.angle ?? "Sem dados";
 
@@ -167,35 +142,102 @@ export function SquadSyncModule({ canInputDailyFeedback, actorName }: SquadSyncM
     setYesterdayKpis(snapshot.yesterday);
   }
 
+  function isCtrTrendFalling(ctrTrend: number[]) {
+    return ctrTrend.length >= 3 && ctrTrend[0] > ctrTrend[1] && ctrTrend[1] > ctrTrend[2];
+  }
+
+  function getBenchmarkBadge(value: number, target: number) {
+    if (value >= target * 1.08) {
+      return <Badge variant="success">WINNER</Badge>;
+    }
+    if (value >= target) {
+      return <Badge variant="sky">SCALING</Badge>;
+    }
+    return <Badge variant="danger">FAILING</Badge>;
+  }
+
+  async function notifySquad(message: string) {
+    try {
+      const response = await fetch("/api/notify-squad", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message }),
+      });
+      if (!response.ok) {
+        throw new Error("Falha ao notificar squads.");
+      }
+      const payload = (await response.json()) as {
+        slack: NotificationResult["slack"];
+        whatsapp: NotificationResult["whatsapp"];
+        note: string;
+      };
+      setNotifyResult(payload);
+    } catch {
+      setNotifyResult({
+        slack: "failed",
+        whatsapp: "failed",
+        note: "Falha no envio. Verifique webhooks de notificacao.",
+      });
+    }
+  }
+
   function saveDailyFeedback() {
     if (!canInputDailyFeedback) {
       return;
     }
 
     const now = new Date();
-    const urgent = editorPriority[0];
-    const targetCreative = urgent?.row.id ?? selectedCreativeId;
+    const targetCreative = selectedCreativeId || editorPriority[0]?.row.id || "N/A";
+    const selectedRow = liveRows.find((row) => row.id === targetCreative);
+    const audienceFatigue = selectedRow ? selectedRow.frequency > 2.2 && isCtrTrendFalling(selectedRow.uniqueCtrTrend3d) : false;
+    const generatedAt = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
-    const text = targetCreative
-      ? `Atencao Editor: O Criativo [${targetCreative}] esta com retencao excelente mas o gancho saturou. Gere 3 variacoes de Pattern Interrupt para os primeiros 5 segundos.`
-      : "Atencao Editor: sem criativos elegiveis para alerta automatico neste ciclo.";
-
-    const message: AutoMessage = {
-      id: `SYNC-${now.getTime()}`,
-      text,
-      createdAt: now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+    const kpiSnapshot: SquadSyncKpiSnapshot = {
+      hookRate: todayKpis.hookRate,
+      holdRate15s: todayKpis.holdRate15s,
+      ctrOutbound: todayKpis.ctrOutbound,
+      icRate: todayKpis.icRate,
+      frequency: todayKpis.frequency,
     };
+    const commandOrders = buildCommandOrdersFromSnapshot({
+      creativeId: targetCreative,
+      kpisToday: kpiSnapshot,
+      mer: intelligence.metrics.mer,
+      audienceFatigue,
+      generatedAt,
+    });
 
-    setMessages((prev) => [message, ...prev].slice(0, 8));
+    applySquadSyncFeedback({
+      creativeId: targetCreative,
+      kpisToday: kpiSnapshot,
+      kpisYesterday: yesterdayKpis,
+      sentimentNotes,
+      commandOrders,
+    });
+
+    setMessages((prev) => {
+      const generated = commandOrders.map((order) => ({
+        id: order.id,
+        text: `[${order.audience}] ${order.title}: ${order.action}`,
+        createdAt: order.createdAt,
+      }));
+      return [...generated, ...prev].slice(0, 8);
+    });
     setLastReportAt(now.toISOString());
     setCurrentTimeMs(now.getTime());
+
+    const topMessage =
+      commandOrders[0]?.action ??
+      `Atencao Editor: O Criativo [${targetCreative}] esta com retencao excelente mas o gancho saturou. Gere 3 variacoes de Pattern Interrupt para os primeiros 5 segundos.`;
+
+    void notifySquad(topMessage);
 
     addActivity(
       "Media Buyer",
       actorName,
       "salvou daily feedback",
       targetCreative || "SQUAD SYNC",
-      `Hook ${todayKpis.hookRate.toFixed(2)}% | Hold ${todayKpis.holdRate15s.toFixed(2)}%`,
+      `Hook ${todayKpis.hookRate.toFixed(2)}% | Hold ${todayKpis.holdRate15s.toFixed(2)}% | IC ${todayKpis.icRate.toFixed(2)}%`,
     );
   }
 
@@ -227,8 +269,38 @@ export function SquadSyncModule({ canInputDailyFeedback, actorName }: SquadSyncM
             <div className="mt-2 flex flex-wrap gap-2">
               <Badge variant="warning">Fila Edicao: {editorPriority.length}</Badge>
               <Badge variant="sky">Angulo lider (menor CPA): {winnerAngle}</Badge>
-              <Badge variant="default">Mensagens: {messages.length}</Badge>
+              <Badge variant="default">Ordens ativas: {intelligence.commandOrders.length}</Badge>
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="bg-[#080808]">
+        <CardHeader>
+          <CardTitle className="text-base">Engine de Calculo e Benchmarks (DSS)</CardTitle>
+          <CardDescription className="text-xs">Comparacao automatica com benchmarks de elite</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded border border-white/10 bg-black/40 p-3 text-xs">
+            <p className="text-slate-300">Hook Rate (alvo &gt; {ELITE_BENCHMARKS.hookRate}%)</p>
+            <p className="mt-1 text-lg text-slate-100">{intelligence.metrics.hookRate.toFixed(2)}%</p>
+            {getBenchmarkBadge(intelligence.metrics.hookRate, ELITE_BENCHMARKS.hookRate)}
+          </div>
+          <div className="rounded border border-white/10 bg-black/40 p-3 text-xs">
+            <p className="text-slate-300">Hold Rate 15s (alvo &gt; {ELITE_BENCHMARKS.holdRate15s}%)</p>
+            <p className="mt-1 text-lg text-slate-100">{intelligence.metrics.holdRate15s.toFixed(2)}%</p>
+            {getBenchmarkBadge(intelligence.metrics.holdRate15s, ELITE_BENCHMARKS.holdRate15s)}
+          </div>
+          <div className="rounded border border-white/10 bg-black/40 p-3 text-xs">
+            <p className="text-slate-300">IC Rate (alvo &gt; {ELITE_BENCHMARKS.icRate}%)</p>
+            <p className="mt-1 text-lg text-slate-100">{intelligence.metrics.icRate.toFixed(2)}%</p>
+            {getBenchmarkBadge(intelligence.metrics.icRate, ELITE_BENCHMARKS.icRate)}
+          </div>
+          <div className="rounded border border-white/10 bg-black/40 p-3 text-xs">
+            <p className="text-slate-300">MER Global (alvo &gt; {ELITE_BENCHMARKS.mer.toFixed(1)}x)</p>
+            <p className="mt-1 text-lg text-slate-100">{intelligence.metrics.mer.toFixed(2)}x</p>
+            {getBenchmarkBadge(intelligence.metrics.mer, ELITE_BENCHMARKS.mer)}
+            <p className="mt-2 text-[11px] text-slate-400">{intelligence.scalePolicy.reason}</p>
           </div>
         </CardContent>
       </Card>
@@ -348,9 +420,30 @@ export function SquadSyncModule({ canInputDailyFeedback, actorName }: SquadSyncM
         <Card className="bg-[#080808]">
           <CardHeader>
             <CardTitle className="text-base">4) Actionable Messages</CardTitle>
-            <CardDescription className="text-xs">Notificacoes automaticas apos salvar o daily feedback</CardDescription>
+            <CardDescription className="text-xs">
+              Notificacoes automaticas apos salvar o daily feedback (Slack/WhatsApp)
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
+            <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+              <Badge variant={notifyResult.slack === "sent" ? "success" : notifyResult.slack === "simulated" ? "sky" : notifyResult.slack === "failed" ? "danger" : "default"}>
+                Slack: {notifyResult.slack.toUpperCase()}
+              </Badge>
+              <Badge
+                variant={
+                  notifyResult.whatsapp === "sent"
+                    ? "success"
+                    : notifyResult.whatsapp === "simulated"
+                      ? "sky"
+                      : notifyResult.whatsapp === "failed"
+                        ? "danger"
+                        : "default"
+                }
+              >
+                WhatsApp: {notifyResult.whatsapp.toUpperCase()}
+              </Badge>
+              <span className="text-slate-400">{notifyResult.note}</span>
+            </div>
             {messages.length === 0 ? (
               <div className="rounded-md border border-white/10 bg-white/5 p-3 text-xs text-slate-400">
                 Nenhuma mensagem automatica ainda. Envie o relatorio diario para alimentar a esteira de demanda.
@@ -360,6 +453,23 @@ export function SquadSyncModule({ canInputDailyFeedback, actorName }: SquadSyncM
                 <div key={message.id} className="rounded-md border border-white/10 bg-white/5 p-3">
                   <p className="text-xs text-slate-100">{message.text}</p>
                   <p className="mt-1 text-[11px] text-slate-400">Gerada as {message.createdAt}</p>
+                  <div className="mt-2 flex gap-2">
+                    <Button
+                      type="button"
+                      className="h-7 px-2 text-[11px]"
+                      onClick={() => void notifySquad(message.text)}
+                    >
+                      Notificar Squad
+                    </Button>
+                    <a
+                      href={`https://wa.me/?text=${encodeURIComponent(message.text)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex h-7 items-center rounded border border-white/20 px-2 text-[11px] text-slate-300 hover:bg-white/10"
+                    >
+                      WhatsApp
+                    </a>
+                  </div>
                 </div>
               ))
             )}
@@ -371,7 +481,7 @@ export function SquadSyncModule({ canInputDailyFeedback, actorName }: SquadSyncM
         <Card className="bg-[#080808]">
           <CardHeader>
             <CardTitle className="text-base">2) Feedback para Editores</CardTitle>
-            <CardDescription className="text-xs">Lista automatica de prioridade de edicao</CardDescription>
+            <CardDescription className="text-xs">Vencedores precisando de novos ganchos</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             {editorPriority.length === 0 ? (
@@ -383,7 +493,7 @@ export function SquadSyncModule({ canInputDailyFeedback, actorName }: SquadSyncM
                 <div key={item.row.id} className="rounded-md border border-[#FF9900]/25 bg-[#FF9900]/10 p-3">
                   <div className="mb-1 flex items-center justify-between gap-2">
                     <p className="font-mono text-xs text-slate-100">{item.row.id}</p>
-                    <Badge variant="warning">⚡ URGENTE: NOVO GANCHO NECESSARIO</Badge>
+                    <Badge variant="warning">URGENTE: NOVO GANCHO NECESSARIO</Badge>
                   </div>
                   <p className="text-xs text-slate-300">
                     ROAS {item.row.roas.toFixed(2)} | Hook {item.hookRate.toFixed(2)}% | Hold 15s {item.holdRate.toFixed(2)}%
@@ -397,9 +507,28 @@ export function SquadSyncModule({ canInputDailyFeedback, actorName }: SquadSyncM
         <Card className="bg-[#080808]">
           <CardHeader>
             <CardTitle className="text-base">3) Feedback para Copywriters</CardTitle>
-            <CardDescription className="text-xs">Comparativo de performance por angulo (menor CPA lidera)</CardDescription>
+            <CardDescription className="text-xs">Angulos saturados vs angulos em ascensao</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
+            <div className="grid gap-2 md:grid-cols-2">
+              <div className="rounded border border-rose-300/20 bg-rose-500/10 p-2 text-xs">
+                <p className="mb-1 text-rose-100">Saturados</p>
+                {intelligence.angleMovement.saturated.map((angle) => (
+                  <p key={`sat-${angle.angle}`} className="text-slate-200">
+                    {angle.angle} (delta hook {angle.avgHookDelta24h.toFixed(2)} | ROAS {angle.avgRoas.toFixed(2)})
+                  </p>
+                ))}
+              </div>
+              <div className="rounded border border-emerald-300/20 bg-emerald-500/10 p-2 text-xs">
+                <p className="mb-1 text-emerald-100">Em ascensao</p>
+                {intelligence.angleMovement.rising.map((angle) => (
+                  <p key={`rise-${angle.angle}`} className="text-slate-200">
+                    {angle.angle} (delta hook +{angle.avgHookDelta24h.toFixed(2)} | CPA R$ {angle.avgCpa.toFixed(2)})
+                  </p>
+                ))}
+              </div>
+            </div>
+
             <div className="overflow-x-auto rounded-md border border-white/10">
               <table className="min-w-full text-xs">
                 <thead className="bg-white/5 text-slate-300">
@@ -407,6 +536,7 @@ export function SquadSyncModule({ canInputDailyFeedback, actorName }: SquadSyncM
                     <th className="px-2 py-2 text-left">Angulo</th>
                     <th className="px-2 py-2 text-right">CPA Medio</th>
                     <th className="px-2 py-2 text-right">ROAS Medio</th>
+                    <th className="px-2 py-2 text-right">Delta Hook 24h</th>
                     <th className="px-2 py-2 text-right">Volume</th>
                   </tr>
                 </thead>
@@ -423,6 +553,9 @@ export function SquadSyncModule({ canInputDailyFeedback, actorName }: SquadSyncM
                       </td>
                       <td className="px-2 py-1.5 text-right text-slate-100">R$ {angle.avgCpa.toFixed(2)}</td>
                       <td className="px-2 py-1.5 text-right text-slate-100">{angle.avgRoas.toFixed(2)}</td>
+                      <td className={`px-2 py-1.5 text-right ${angle.avgHookDelta24h >= 0 ? "text-[#10B981]" : "text-[#EA4335]"}`}>
+                        {formatDelta(angle.avgHookDelta24h)}
+                      </td>
                       <td className="px-2 py-1.5 text-right text-slate-300">{angle.count}</td>
                     </tr>
                   ))}
@@ -432,6 +565,31 @@ export function SquadSyncModule({ canInputDailyFeedback, actorName }: SquadSyncM
           </CardContent>
         </Card>
       </div>
+
+      <Card className="bg-[#080808]">
+        <CardHeader>
+          <CardTitle className="text-base">Alerta de Fadiga de Publico (Gestao)</CardTitle>
+          <CardDescription className="text-xs">
+            Regra: Frequencia &gt; 2.2 cruzada com queda sequencial de CTR
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2 text-xs">
+          {intelligence.audienceFatigue.length === 0 ? (
+            <div className="rounded border border-emerald-300/30 bg-emerald-500/10 p-3 text-emerald-100">
+              Sem fadiga critica detectada no momento.
+            </div>
+          ) : (
+            intelligence.audienceFatigue.map((fatigue) => (
+              <div key={fatigue.creativeId} className="rounded border border-[#FF9900]/40 bg-[#FF9900]/10 p-3">
+                <p className="text-slate-100">
+                  {fatigue.creativeId} | Freq {fatigue.frequency.toFixed(2)} | CTR atual {fatigue.ctrNow.toFixed(2)}%
+                </p>
+                <p className="text-slate-300">Trend CTR 3d: {fatigue.ctrTrend.map((v) => v.toFixed(2)).join(" > ")}</p>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
     </section>
   );
 }
