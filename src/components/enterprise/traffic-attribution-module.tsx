@@ -44,6 +44,24 @@ export function TrafficAttributionModule({
       creativeUrl: string;
     }>
   >([]);
+  const [deepTrackForm, setDeepTrackForm] = useState({
+    leadId: "",
+    offerId: data.liveAdsTracking[0]?.id ?? "OFF-001",
+    utmSource: "meta",
+    utmContent: data.liveAdsTracking[0]?.id ?? "CR-001",
+    watchSeconds: 120,
+    adCost: 120,
+    revenue: 0,
+    eventType: "vsl_progress" as "landing_view" | "vsl_progress" | "purchase" | "checkout_start",
+  });
+  const [timelinePreview, setTimelinePreview] = useState<
+    Array<{
+      leadId: string;
+      stage: "cold" | "warm" | "hot" | "buyer";
+      watchMinutes: number;
+      source: string;
+    }>
+  >([]);
   const squads = data.enterprise.trafficAttribution.squads;
   const intelligence = computeIntelligenceEngine(data);
   const killSwitch = data.integrations.operations.killSwitch;
@@ -109,12 +127,66 @@ export function TrafficAttributionModule({
     setAssetWorkflow(payload.items);
   }, []);
 
+  const fetchTimelinePreview = useCallback(async () => {
+    const response = await fetch("/api/lead-intelligence/dashboard", { cache: "no-store" }).catch(() => null);
+    if (!response?.ok) {
+      return;
+    }
+    const payload = (await response.json().catch(() => null)) as
+      | {
+          dashboard?: {
+            timeline?: Array<{
+              leadId: string;
+              stage: "cold" | "warm" | "hot" | "buyer";
+              watchMinutes: number;
+              source: string;
+            }>;
+          };
+        }
+      | null;
+    if (!payload?.dashboard?.timeline) {
+      return;
+    }
+    setTimelinePreview(payload.dashboard.timeline.slice(0, 8));
+  }, []);
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void fetchAssetWorkflow();
+      void fetchTimelinePreview();
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [fetchAssetWorkflow]);
+  }, [fetchAssetWorkflow, fetchTimelinePreview]);
+
+  async function submitDeepTrackingEvent() {
+    if (!deepTrackForm.leadId.trim()) {
+      return;
+    }
+    const response = await fetch("/api/lead-intelligence/events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        event: {
+          leadId: deepTrackForm.leadId,
+          sessionId: `SESSION-${deepTrackForm.leadId}`,
+          offerId: deepTrackForm.offerId,
+          utmSource: deepTrackForm.utmSource,
+          utmCampaign: `${deepTrackForm.utmSource}|${deepTrackForm.offerId}`,
+          utmContent: deepTrackForm.utmContent,
+          eventType: deepTrackForm.eventType,
+          value: deepTrackForm.watchSeconds,
+          adCost: deepTrackForm.adCost,
+          revenue: deepTrackForm.revenue,
+        },
+      }),
+    }).catch(() => null);
+    if (!response?.ok) {
+      return;
+    }
+    addActivity("Trafego", actorName, "registrou evento deep tracking", deepTrackForm.leadId, `${deepTrackForm.eventType}`);
+    setDeepTrackForm((prev) => ({ ...prev, leadId: "", revenue: 0 }));
+    void fetchTimelinePreview();
+  }
 
   return (
     <section className="war-fade-in space-y-4">
@@ -210,6 +282,90 @@ export function TrafficAttributionModule({
           {assetWorkflow.filter((asset) => asset.status === "pronto_para_trafego").length === 0 ? (
             <p className="rounded border border-white/10 bg-white/5 p-2 text-slate-400">Sem ativos liberados no momento.</p>
           ) : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Deep Tracking Pos-Clique (MVP)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-xs">
+          <div className="grid gap-2 md:grid-cols-4">
+            <input
+              value={deepTrackForm.leadId}
+              onChange={(event) => setDeepTrackForm((prev) => ({ ...prev, leadId: event.target.value }))}
+              placeholder="Lead ID"
+              className="h-8 rounded border border-white/10 bg-slate-900/70 px-2"
+            />
+            <select
+              value={deepTrackForm.eventType}
+              onChange={(event) =>
+                setDeepTrackForm((prev) => ({
+                  ...prev,
+                  eventType: event.target.value as "landing_view" | "vsl_progress" | "purchase" | "checkout_start",
+                }))
+              }
+              className="h-8 rounded border border-white/10 bg-slate-900/70 px-2"
+            >
+              <option value="landing_view">landing_view</option>
+              <option value="vsl_progress">vsl_progress</option>
+              <option value="checkout_start">checkout_start</option>
+              <option value="purchase">purchase</option>
+            </select>
+            <input
+              value={deepTrackForm.utmContent}
+              onChange={(event) => setDeepTrackForm((prev) => ({ ...prev, utmContent: event.target.value }))}
+              placeholder="utm_content / criativo"
+              className="h-8 rounded border border-white/10 bg-slate-900/70 px-2"
+            />
+            <input
+              type="number"
+              value={deepTrackForm.watchSeconds}
+              onChange={(event) => setDeepTrackForm((prev) => ({ ...prev, watchSeconds: Number(event.target.value) || 0 }))}
+              placeholder="watch sec"
+              className="h-8 rounded border border-white/10 bg-slate-900/70 px-2"
+            />
+          </div>
+          <div className="grid gap-2 md:grid-cols-3">
+            <input
+              value={deepTrackForm.utmSource}
+              onChange={(event) => setDeepTrackForm((prev) => ({ ...prev, utmSource: event.target.value }))}
+              placeholder="utm_source"
+              className="h-8 rounded border border-white/10 bg-slate-900/70 px-2"
+            />
+            <input
+              type="number"
+              value={deepTrackForm.adCost}
+              onChange={(event) => setDeepTrackForm((prev) => ({ ...prev, adCost: Number(event.target.value) || 0 }))}
+              placeholder="ad cost"
+              className="h-8 rounded border border-white/10 bg-slate-900/70 px-2"
+            />
+            <input
+              type="number"
+              value={deepTrackForm.revenue}
+              onChange={(event) => setDeepTrackForm((prev) => ({ ...prev, revenue: Number(event.target.value) || 0 }))}
+              placeholder="revenue"
+              className="h-8 rounded border border-white/10 bg-slate-900/70 px-2"
+            />
+          </div>
+          <Button type="button" className="h-7 px-2 text-[11px]" onClick={() => void submitDeepTrackingEvent()}>
+            Registrar evento de lead
+          </Button>
+          <div className="space-y-1">
+            {timelinePreview.map((item) => (
+              <div key={item.leadId} className="rounded border border-white/10 bg-white/5 p-2">
+                <p className="text-slate-100">
+                  {item.leadId} | {item.stage}
+                </p>
+                <p className="text-slate-300">
+                  Fonte {item.source} | watch {item.watchMinutes.toFixed(1)} min
+                </p>
+              </div>
+            ))}
+            {timelinePreview.length === 0 ? (
+              <p className="rounded border border-white/10 bg-white/5 p-2 text-slate-500">Sem timeline de leads ainda.</p>
+            ) : null}
+          </div>
         </CardContent>
       </Card>
 

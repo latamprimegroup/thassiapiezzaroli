@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,6 +21,39 @@ function hoursSince(iso: string) {
 export function CustomerExperienceModule() {
   const { data, addActivity } = useWarRoom();
   const yieldOptimizer = useMemo(() => computeYieldOptimizer(data), [data]);
+  const [intelligence, setIntelligence] = useState<{
+    churnRadar: Array<{
+      leadId: string;
+      riskScore: number;
+      purchases: number;
+      refunds: number;
+      watchMinutes: number;
+      idleHours: number;
+      source: string;
+      recommendedPlaybook: "welcome_call" | "support_ticket" | "downsell_offer" | "vip_followup";
+    }>;
+    whaleAlerts: Array<{
+      leadId: string;
+      totalRevenue: number;
+      purchases: number;
+      source: string;
+      note: string;
+    }>;
+    retargetGaps: Array<{
+      leadId: string;
+      source: string;
+      utmContent: string;
+      maxWatchMinutes: number;
+      idleHours: number;
+      reason: string;
+    }>;
+    timeline: Array<{
+      leadId: string;
+      stage: "cold" | "warm" | "hot" | "buyer";
+      watchMinutes: number;
+      source: string;
+    }>;
+  } | null>(null);
 
   const rows = useMemo(
     () => {
@@ -45,6 +78,49 @@ export function CustomerExperienceModule() {
     },
     [data.customerCentrality?.leads],
   );
+
+  useEffect(() => {
+    let active = true;
+    async function loadIntelligence() {
+      const response = await fetch("/api/lead-intelligence/dashboard", { cache: "no-store" }).catch(() => null);
+      if (!response?.ok || !active) {
+        return;
+      }
+      const payload = (await response.json().catch(() => null)) as
+        | {
+            dashboard?: typeof intelligence;
+          }
+        | null;
+      if (!payload?.dashboard || !active) {
+        return;
+      }
+      setIntelligence(payload.dashboard);
+    }
+    void loadIntelligence();
+    const timer = window.setInterval(() => {
+      void loadIntelligence();
+    }, 20_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  async function runPlaybook(leadId: string, action: "welcome_call" | "support_ticket" | "downsell_offer" | "vip_followup") {
+    const response = await fetch("/api/lead-intelligence/playbooks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        leadId,
+        action,
+        note: "Acionado via radar de churn no modulo CX.",
+      }),
+    }).catch(() => null);
+    if (!response?.ok) {
+      return;
+    }
+    addActivity("CX", "Customer Experience", "acionou playbook de churn", leadId, action);
+  }
 
   return (
     <section className="war-fade-in space-y-4">
@@ -170,6 +246,83 @@ export function CustomerExperienceModule() {
                 </div>
               ))}
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Churn/Refund Early Warning (MVP)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-xs">
+          {!intelligence ? (
+            <p className="rounded border border-white/10 bg-white/5 p-2 text-slate-400">Carregando radar de churn...</p>
+          ) : (
+            intelligence.churnRadar.slice(0, 8).map((lead) => (
+              <div key={lead.leadId} className="rounded border border-white/10 bg-white/5 p-2">
+                <div className="mb-1 flex items-center justify-between">
+                  <p className="text-slate-100">
+                    {lead.leadId} ({lead.source})
+                  </p>
+                  <Badge variant={lead.riskScore >= 70 ? "danger" : lead.riskScore >= 45 ? "warning" : "success"}>
+                    RISCO {lead.riskScore.toFixed(0)}
+                  </Badge>
+                </div>
+                <p className="text-slate-300">
+                  Compras: {lead.purchases} | Refunds: {lead.refunds} | Watch: {lead.watchMinutes.toFixed(1)} min | Inativo:{" "}
+                  {lead.idleHours.toFixed(1)}h
+                </p>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  <Button
+                    type="button"
+                    className="h-7 px-2 text-[11px]"
+                    onClick={() => void runPlaybook(lead.leadId, lead.recommendedPlaybook)}
+                  >
+                    Playbook: {lead.recommendedPlaybook}
+                  </Button>
+                </div>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Whale Alert + Retarget Gap Report</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-2 text-xs md:grid-cols-2">
+          <div className="space-y-1">
+            <p className="text-slate-300">Whale Alerts</p>
+            {intelligence?.whaleAlerts.slice(0, 6).map((whale) => (
+              <div key={whale.leadId} className="rounded border border-white/10 bg-black/30 p-2">
+                <p className="text-slate-100">{whale.leadId}</p>
+                <p className="text-[#10B981]">
+                  {currency(whale.totalRevenue)} | compras {whale.purchases}
+                </p>
+                <p className="text-slate-400">{whale.note}</p>
+              </div>
+            ))}
+            {(intelligence?.whaleAlerts.length ?? 0) === 0 ? (
+              <p className="rounded border border-white/10 bg-black/30 p-2 text-slate-500">Sem whales no periodo.</p>
+            ) : null}
+          </div>
+          <div className="space-y-1">
+            <p className="text-slate-300">Retarget Gaps</p>
+            {intelligence?.retargetGaps.slice(0, 6).map((gap) => (
+              <div key={gap.leadId} className="rounded border border-white/10 bg-black/30 p-2">
+                <p className="text-slate-100">
+                  {gap.leadId} | {gap.utmContent}
+                </p>
+                <p className="text-slate-300">
+                  {gap.maxWatchMinutes.toFixed(1)} min de consumo | idle {gap.idleHours.toFixed(1)}h
+                </p>
+                <p className="text-slate-400">{gap.reason}</p>
+              </div>
+            ))}
+            {(intelligence?.retargetGaps.length ?? 0) === 0 ? (
+              <p className="rounded border border-white/10 bg-black/30 p-2 text-slate-500">Sem gaps de retarget identificados.</p>
+            ) : null}
           </div>
         </CardContent>
       </Card>

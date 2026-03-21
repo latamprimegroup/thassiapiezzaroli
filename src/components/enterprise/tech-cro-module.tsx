@@ -67,6 +67,18 @@ export function TechCroModule() {
   const killSwitch = data.integrations.operations.killSwitch;
   const audioGuardRef = useRef<string>("");
   const [opsObservability, setOpsObservability] = useState<OpsObservabilitySnapshot | null>(null);
+  const [routingRules, setRoutingRules] = useState<
+    Array<{
+      id: string;
+      offerId: string;
+      primaryUrl: string;
+      backupUrls: string[];
+      activeUrl: string;
+      mode: "primary" | "failover_manual" | "failover_auto";
+      reason: string;
+      lastSwitchAt: string;
+    }>
+  >([]);
 
   useEffect(() => {
     const shouldAlert = tech.lcpSeconds > 1.5 || intelligence.gatewayHealth.alert || fortress.siren.active;
@@ -119,6 +131,74 @@ export function TechCroModule() {
       window.clearInterval(timer);
     };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    async function loadRouting() {
+      const response = await fetch("/api/routing/switch", { cache: "no-store" }).catch(() => null);
+      if (!response?.ok || !active) {
+        return;
+      }
+      const payload = (await response.json().catch(() => null)) as
+        | {
+            rules?: Array<{
+              id: string;
+              offerId: string;
+              primaryUrl: string;
+              backupUrls: string[];
+              activeUrl: string;
+              mode: "primary" | "failover_manual" | "failover_auto";
+              reason: string;
+              lastSwitchAt: string;
+            }>;
+          }
+        | null;
+      if (!payload?.rules || !active) {
+        return;
+      }
+      setRoutingRules(payload.rules);
+    }
+    void loadRouting();
+    const timer = window.setInterval(() => {
+      void loadRouting();
+    }, WAR_ROOM_OPS_CONSTANTS.performance.dashboardRefreshMs);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  async function forceRoutingFailover() {
+    const globalRoute = routingRules.find((rule) => rule.offerId === "global") ?? routingRules[0];
+    if (!globalRoute) {
+      return;
+    }
+    const nextTarget = globalRoute.backupUrls.find((url) => url !== globalRoute.activeUrl) ?? globalRoute.backupUrls[0];
+    if (!nextTarget) {
+      return;
+    }
+    const response = await fetch("/api/routing/switch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        offerId: globalRoute.offerId,
+        targetUrl: nextTarget,
+        mode: "failover_manual",
+        reason: "failover manual acionado pelo Tech/CRO.",
+      }),
+    }).catch(() => null);
+    if (!response?.ok) {
+      return;
+    }
+    const refresh = await fetch("/api/routing/switch", { cache: "no-store" }).catch(() => null);
+    if (!refresh?.ok) {
+      return;
+    }
+    const payload = (await refresh.json().catch(() => null)) as { rules?: typeof routingRules } | null;
+    if (payload?.rules) {
+      setRoutingRules(payload.rules);
+    }
+  }
 
   function renderProviderStatus(
     label: string,
@@ -384,6 +464,35 @@ export function TechCroModule() {
               <p className="text-[11px] text-slate-500">Alertas enviados para heads: {killSwitch.alertsSent}</p>
             </>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Traffic Router de Contingencia (MVP)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-xs">
+          {routingRules.length === 0 ? (
+            <p className="rounded border border-white/10 bg-white/5 p-2 text-slate-400">Carregando regras de roteamento...</p>
+          ) : (
+            routingRules.slice(0, 3).map((rule) => (
+              <div key={rule.id} className="rounded border border-white/10 bg-white/5 p-2">
+                <p className="text-slate-100">
+                  {rule.offerId} | modo {rule.mode}
+                </p>
+                <p className="text-slate-300">Ativo: {rule.activeUrl}</p>
+                <p className="text-slate-500">Primary: {rule.primaryUrl}</p>
+                <p className="text-slate-500">Motivo: {rule.reason}</p>
+              </div>
+            ))
+          )}
+          <button
+            type="button"
+            onClick={() => void forceRoutingFailover()}
+            className="rounded border border-[#FF9900]/40 bg-[#FF9900]/15 px-3 py-1.5 text-[11px] text-[#FFD39A]"
+          >
+            Forcar failover manual
+          </button>
         </CardContent>
       </Card>
 

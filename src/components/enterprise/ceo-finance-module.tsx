@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { GaugeChart } from "@/components/ui/gauge-chart";
@@ -42,6 +42,37 @@ export function CeoFinanceModule({
   const [mechanismQuery, setMechanismQuery] = useState("INSULINA");
   const [fixedCostsInput, setFixedCostsInput] = useState(data.integrations.gateway.fixedCosts);
   const [taxRateInput, setTaxRateInput] = useState(data.integrations.gateway.taxRatePct);
+  const [leadIntel, setLeadIntel] = useState<{
+    rplBySource: Array<{
+      source: string;
+      leads: number;
+      adCost: number;
+      revenue: number;
+      revenuePerLead: number;
+    }>;
+    breakevenBySource: Array<{
+      source: string;
+      adCost: number;
+      cumulativeRevenue: number;
+      breakevenDay: number;
+      status: "recovering" | "breakeven" | "profit";
+    }>;
+    whaleAlerts: Array<{
+      leadId: string;
+      totalRevenue: number;
+      purchases: number;
+      source: string;
+      note: string;
+    }>;
+    retargetGaps: Array<{
+      leadId: string;
+      source: string;
+      utmContent: string;
+      maxWatchMinutes: number;
+      idleHours: number;
+      reason: string;
+    }>;
+  } | null>(null);
 
   const cohortMax = Math.max(f.ltvCohorts.d30, f.ltvCohorts.d60, f.ltvCohorts.d90, 1);
   const cohorts = [
@@ -91,6 +122,33 @@ export function CeoFinanceModule({
   const filteredMechanismBreakdown = mechanismBreakdown.filter((item) =>
     item.mechanism.includes(mechanismQuery.trim().toUpperCase()),
   );
+
+  useEffect(() => {
+    let active = true;
+    async function loadLeadIntel() {
+      const response = await fetch("/api/lead-intelligence/dashboard", { cache: "no-store" }).catch(() => null);
+      if (!response?.ok || !active) {
+        return;
+      }
+      const payload = (await response.json().catch(() => null)) as
+        | {
+            dashboard?: typeof leadIntel;
+          }
+        | null;
+      if (!payload?.dashboard || !active) {
+        return;
+      }
+      setLeadIntel(payload.dashboard);
+    }
+    void loadLeadIntel();
+    const timer = window.setInterval(() => {
+      void loadLeadIntel();
+    }, 30_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, []);
 
   return (
     <section className="war-fade-in space-y-4">
@@ -220,6 +278,71 @@ export function CeoFinanceModule({
             <p className="text-xs text-slate-400">{merCross.recommendation}</p>
           </div>
           <GaugeChart value={merCross.value} min={0} max={5} label="Gauge MER Global" />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">RPL + Breakeven Day + Retarget/Whale Radar (MVP)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-xs">
+          {!leadIntel ? (
+            <p className="rounded border border-white/10 bg-white/5 p-2 text-slate-400">Carregando inteligencia por lead...</p>
+          ) : (
+            <>
+              <div className="grid gap-2 md:grid-cols-2">
+                <div className="space-y-1">
+                  <p className="text-slate-300">Revenue per Lead (RPL)</p>
+                  {leadIntel.rplBySource.slice(0, 6).map((row) => (
+                    <div key={row.source} className="rounded border border-white/10 bg-white/5 p-2">
+                      <p className="text-slate-100 uppercase">{row.source}</p>
+                      <p className="text-slate-300">
+                        Leads {row.leads} | Receita {currency(row.revenue)} | Custo {currency(row.adCost)}
+                      </p>
+                      <p className="text-[#10B981]">RPL {currency(row.revenuePerLead)}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="space-y-1">
+                  <p className="text-slate-300">Breakeven por source</p>
+                  {leadIntel.breakevenBySource.slice(0, 6).map((row) => (
+                    <div key={row.source} className="rounded border border-white/10 bg-white/5 p-2">
+                      <p className="text-slate-100 uppercase">{row.source}</p>
+                      <p className="text-slate-300">
+                        Breakeven day: {row.breakevenDay} | Status: {row.status}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="grid gap-2 md:grid-cols-2">
+                <div className="space-y-1">
+                  <p className="text-slate-300">Whale Alerts</p>
+                  {leadIntel.whaleAlerts.slice(0, 4).map((row) => (
+                    <div key={row.leadId} className="rounded border border-white/10 bg-black/30 p-2">
+                      <p className="text-slate-100">{row.leadId}</p>
+                      <p className="text-[#10B981]">
+                        {currency(row.totalRevenue)} | compras {row.purchases}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <div className="space-y-1">
+                  <p className="text-slate-300">Retarget Gap</p>
+                  {leadIntel.retargetGaps.slice(0, 4).map((row) => (
+                    <div key={row.leadId} className="rounded border border-white/10 bg-black/30 p-2">
+                      <p className="text-slate-100">
+                        {row.leadId} | {row.utmContent}
+                      </p>
+                      <p className="text-slate-300">
+                        {row.maxWatchMinutes.toFixed(1)} min | idle {row.idleHours.toFixed(1)}h
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 

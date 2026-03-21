@@ -172,6 +172,27 @@ export function TestLaboratoryModule({ actorName, actorRole }: TestLaboratoryMod
       },
     ];
   });
+  const [experimentForm, setExperimentForm] = useState({
+    visitorsA: 1200,
+    conversionsA: 84,
+    visitorsB: 1180,
+    conversionsB: 97,
+    alpha: 0.05,
+    minSamplePerVariant: 500,
+    minDetectableEffectPct: 10,
+  });
+  const [experimentResult, setExperimentResult] = useState<{
+    confidencePct: number;
+    pValue: number;
+    liftPct: number;
+    mdePct: number;
+    winner: "A" | "B" | "none";
+    significant: boolean;
+    stopRule: "keep_running" | "stop_winner_b" | "stop_winner_a" | "stop_no_diff";
+    reason: string;
+    crA: number;
+    crB: number;
+  } | null>(null);
 
   useEffect(() => {
     const timer = window.setInterval(() => setClockMs(Date.now()), WAR_ROOM_OPS_CONSTANTS.performance.dashboardRefreshMs);
@@ -377,6 +398,47 @@ export function TestLaboratoryModule({ actorName, actorRole }: TestLaboratoryMod
       body: JSON.stringify({ message }),
     }).catch(() => undefined);
     addActivity("Test Lab", actorName, "notificou risco de fadiga", "Ready to Upload", "fila vazia");
+  }
+
+  async function runStatisticalExperimentCheck() {
+    const response = await fetch("/api/test-laboratory/evaluate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        targetCpa: Math.max(1, formState.targetCpa),
+        experiment: experimentForm,
+      }),
+    }).catch(() => null);
+    if (!response?.ok) {
+      return;
+    }
+    const payload = (await response.json().catch(() => null)) as
+      | {
+          experimentStats?: {
+            confidencePct: number;
+            pValue: number;
+            liftPct: number;
+            mdePct: number;
+            winner: "A" | "B" | "none";
+            significant: boolean;
+            stopRule: "keep_running" | "stop_winner_b" | "stop_winner_a" | "stop_no_diff";
+            reason: string;
+            crA: number;
+            crB: number;
+          };
+        }
+      | null;
+    if (!payload?.experimentStats) {
+      return;
+    }
+    setExperimentResult(payload.experimentStats);
+    addActivity(
+      "Test Lab",
+      actorName,
+      "executou checagem estatistica",
+      "A/B decision engine",
+      `${payload.experimentStats.stopRule} | conf ${payload.experimentStats.confidencePct.toFixed(2)}%`,
+    );
   }
 
   function exportReadyCsv() {
@@ -808,6 +870,102 @@ export function TestLaboratoryModule({ actorName, actorRole }: TestLaboratoryMod
             Bench atual: Hook medio {formatPct(intelligence.metrics.hookRate)} | Hold medio{" "}
             {formatPct(intelligence.metrics.holdRate15s)}.
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className="bg-[#080808]">
+        <CardHeader>
+          <CardTitle className="text-base">Statistical Experiment Engine (MVP)</CardTitle>
+          <CardDescription className="text-xs">
+            Significancia estatistica + MDE + stop rules para evitar falso winner.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3 text-xs">
+          <div className="grid gap-2 md:grid-cols-4">
+            <input
+              type="number"
+              value={experimentForm.visitorsA}
+              onChange={(event) => setExperimentForm((prev) => ({ ...prev, visitorsA: Number(event.target.value) || 0 }))}
+              className="h-8 rounded border border-white/15 bg-black/40 px-2"
+              placeholder="Visitantes A"
+            />
+            <input
+              type="number"
+              value={experimentForm.conversionsA}
+              onChange={(event) => setExperimentForm((prev) => ({ ...prev, conversionsA: Number(event.target.value) || 0 }))}
+              className="h-8 rounded border border-white/15 bg-black/40 px-2"
+              placeholder="Conversoes A"
+            />
+            <input
+              type="number"
+              value={experimentForm.visitorsB}
+              onChange={(event) => setExperimentForm((prev) => ({ ...prev, visitorsB: Number(event.target.value) || 0 }))}
+              className="h-8 rounded border border-white/15 bg-black/40 px-2"
+              placeholder="Visitantes B"
+            />
+            <input
+              type="number"
+              value={experimentForm.conversionsB}
+              onChange={(event) => setExperimentForm((prev) => ({ ...prev, conversionsB: Number(event.target.value) || 0 }))}
+              className="h-8 rounded border border-white/15 bg-black/40 px-2"
+              placeholder="Conversoes B"
+            />
+          </div>
+          <div className="grid gap-2 md:grid-cols-3">
+            <input
+              type="number"
+              step="0.01"
+              value={experimentForm.alpha}
+              onChange={(event) => setExperimentForm((prev) => ({ ...prev, alpha: Number(event.target.value) || 0.05 }))}
+              className="h-8 rounded border border-white/15 bg-black/40 px-2"
+              placeholder="Alpha"
+            />
+            <input
+              type="number"
+              value={experimentForm.minSamplePerVariant}
+              onChange={(event) =>
+                setExperimentForm((prev) => ({ ...prev, minSamplePerVariant: Number(event.target.value) || 500 }))
+              }
+              className="h-8 rounded border border-white/15 bg-black/40 px-2"
+              placeholder="Amostra minima"
+            />
+            <input
+              type="number"
+              value={experimentForm.minDetectableEffectPct}
+              onChange={(event) =>
+                setExperimentForm((prev) => ({ ...prev, minDetectableEffectPct: Number(event.target.value) || 10 }))
+              }
+              className="h-8 rounded border border-white/15 bg-black/40 px-2"
+              placeholder="MDE (%)"
+            />
+          </div>
+          <Button type="button" className="h-8 text-xs" onClick={() => void runStatisticalExperimentCheck()}>
+            Avaliar significancia do teste
+          </Button>
+          {experimentResult ? (
+            <div className="rounded border border-white/10 bg-black/30 p-2">
+              <p className="text-slate-100">
+                CR A {(experimentResult.crA * 100).toFixed(2)}% | CR B {(experimentResult.crB * 100).toFixed(2)}% | Lift{" "}
+                {experimentResult.liftPct.toFixed(2)}%
+              </p>
+              <p className="text-slate-300">
+                Confianca {experimentResult.confidencePct.toFixed(2)}% | p-value {experimentResult.pValue.toFixed(4)} | MDE{" "}
+                {experimentResult.mdePct.toFixed(2)}%
+              </p>
+              <p
+                className={
+                  experimentResult.stopRule === "keep_running"
+                    ? "text-[#FF9900]"
+                    : experimentResult.winner === "none"
+                      ? "text-slate-300"
+                      : "text-[#10B981]"
+                }
+              >
+                Stop rule: {experimentResult.stopRule} | Winner: {experimentResult.winner}
+              </p>
+              <p className="text-slate-400">{experimentResult.reason}</p>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
     </section>

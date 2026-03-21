@@ -196,6 +196,23 @@ export function CopyResearchModule({
       updatedAt: string;
     }>
   >([]);
+  const [deepInsights, setDeepInsights] = useState<{
+    creativeHeatmap: Array<{
+      utmContent: string;
+      sessions: number;
+      avgWatchMinutes: number;
+      coldPointMinute: number;
+      highestDropPct: number;
+    }>;
+    ipTriggerRanking: Array<{
+      triggerName: string;
+      samples: number;
+      avgRoas: number;
+      avgCpa: number;
+      avgLtv90: number;
+      score: number;
+    }>;
+  } | null>(null);
 
   const selectedIdea = ideas.find((idea) => idea.id === selectedIdeaId) ?? ideas[0];
 
@@ -525,12 +542,48 @@ export function CopyResearchModule({
     setAssetWorkflow(payload.items);
   }, []);
 
+  const fetchDeepInsights = useCallback(async () => {
+    const response = await fetch("/api/lead-intelligence/dashboard", { cache: "no-store" }).catch(() => null);
+    if (!response?.ok) {
+      return;
+    }
+    const payload = (await response.json().catch(() => null)) as
+      | {
+          dashboard?: {
+            creativeHeatmap?: Array<{
+              utmContent: string;
+              sessions: number;
+              avgWatchMinutes: number;
+              coldPointMinute: number;
+              highestDropPct: number;
+            }>;
+            ipTriggerRanking?: Array<{
+              triggerName: string;
+              samples: number;
+              avgRoas: number;
+              avgCpa: number;
+              avgLtv90: number;
+              score: number;
+            }>;
+          };
+        }
+      | null;
+    if (!payload?.dashboard) {
+      return;
+    }
+    setDeepInsights({
+      creativeHeatmap: payload.dashboard.creativeHeatmap ?? [],
+      ipTriggerRanking: payload.dashboard.ipTriggerRanking ?? [],
+    });
+  }, []);
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void fetchAssetWorkflow();
+      void fetchDeepInsights();
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [fetchAssetWorkflow]);
+  }, [fetchAssetWorkflow, fetchDeepInsights]);
 
   async function copyNamingToClipboard() {
     if (!namingPreview.valid) {
@@ -605,6 +658,36 @@ export function CopyResearchModule({
     setAssetDraft((prev) => ({ ...prev, title: "" }));
     addActivity("Copy", actorName, "subiu roteiro", assetDraft.offerId, "status aguardando edicao");
     void fetchAssetWorkflow();
+  }
+
+  async function registerTriggerPerformanceMvp() {
+    if (!selectedIdea) {
+      return;
+    }
+    const response = await fetch("/api/lead-intelligence/events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        triggerPerformance: [
+          {
+            triggerId: `TR-${sanitizeForId(selectedIdea.primaryEmotion)}`,
+            triggerName: `Gatilho ${selectedIdea.primaryEmotion}`,
+            niche: selectedIdea.marketSophisticationLevel >= 4 ? "sofisticado" : "massificado",
+            utmContent: selectedIdea.linkedCreativeId,
+            hookRate: safeDivide(selectedIdea.roasCurrent * 100, Math.max(1, selectedIdea.cpaCurrent)),
+            holdRate: Math.max(10, 55 - selectedIdea.saturationPct * 0.4),
+            cpa: selectedIdea.cpaCurrent,
+            roas: selectedIdea.roasCurrent,
+            ltv90: selectedIdea.assetValue > 0 ? selectedIdea.assetValue / 12 : 0,
+          },
+        ],
+      }),
+    }).catch(() => null);
+    if (!response?.ok) {
+      return;
+    }
+    addActivity("Copy", actorName, "registrou performance de gatilho", selectedIdea.id, selectedIdea.primaryEmotion);
+    void fetchDeepInsights();
   }
 
   return (
@@ -745,6 +828,53 @@ export function CopyResearchModule({
                   <p className="text-[#FF9900]">Status: Aguardando Edicao</p>
                 </div>
               ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Creative Performance Heatmap + IP Trigger Ranking (MVP)</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-2 text-xs md:grid-cols-2">
+          <div className="space-y-1">
+            <p className="text-slate-300">Heatmap por utm_content</p>
+            {deepInsights?.creativeHeatmap.slice(0, 6).map((row) => (
+              <div key={row.utmContent} className="rounded border border-white/10 bg-white/5 p-2">
+                <p className="text-slate-100">{row.utmContent}</p>
+                <p className="text-slate-300">
+                  Sessoes {row.sessions} | Watch medio {row.avgWatchMinutes.toFixed(1)} min
+                </p>
+                <p className={row.highestDropPct >= 45 ? "text-[#EA4335]" : row.highestDropPct >= 30 ? "text-[#FF9900]" : "text-[#10B981]"}>
+                  Esfria no min {row.coldPointMinute} | Drop {row.highestDropPct.toFixed(1)}%
+                </p>
+              </div>
+            ))}
+            {(deepInsights?.creativeHeatmap.length ?? 0) === 0 ? (
+              <p className="rounded border border-white/10 bg-white/5 p-2 text-slate-500">
+                Sem dados de heatmap ainda. Envie eventos para /api/lead-intelligence/events.
+              </p>
+            ) : null}
+          </div>
+          <div className="space-y-1">
+            <p className="text-slate-300">Ranking financeiro de gatilhos</p>
+            {deepInsights?.ipTriggerRanking.slice(0, 6).map((row) => (
+              <div key={row.triggerName} className="rounded border border-white/10 bg-white/5 p-2">
+                <p className="text-slate-100">{row.triggerName}</p>
+                <p className="text-slate-300">
+                  ROAS {row.avgRoas.toFixed(2)} | CPA {row.avgCpa.toFixed(1)} | LTV90 {row.avgLtv90.toFixed(0)}
+                </p>
+                <p className="text-[#10B981]">Score {row.score.toFixed(1)} | amostras {row.samples}</p>
+              </div>
+            ))}
+            {(deepInsights?.ipTriggerRanking.length ?? 0) === 0 ? (
+              <p className="rounded border border-white/10 bg-white/5 p-2 text-slate-500">
+                Sem ranking de gatilhos ainda. Envie triggerPerformance para /api/lead-intelligence/events.
+              </p>
+            ) : null}
+            <Button type="button" className="h-7 px-2 text-[11px]" onClick={() => void registerTriggerPerformanceMvp()}>
+              Registrar gatilho do dossie atual
+            </Button>
           </div>
         </CardContent>
       </Card>

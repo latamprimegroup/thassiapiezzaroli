@@ -2,6 +2,7 @@ import { enrichWarRoomOperations, mergeWarRoomWithIntegrations } from "@/lib/int
 import { runPullSyncForGatewayAttribution } from "@/lib/integrations/warroom-pull-sync";
 import { processDueWebhookRetries } from "@/lib/integrations/warroom-webhook-service";
 import { applyFortressLayer } from "@/lib/integrations/warroom-fortress";
+import { applyAutomaticRoutingFromSignals } from "@/lib/routing/traffic-router";
 import { processOpsJobQueue } from "@/lib/ops/war-room-ops-worker";
 import { mergeCommandCenterFromStore } from "@/lib/command-center/command-center-persistence";
 import { applyOfferScaleDemands } from "@/lib/command-center/offer-demand-automation";
@@ -49,6 +50,7 @@ export async function getWarRoomData(): Promise<WarRoomData> {
     const withIntegrations = mergeWarRoomWithIntegrations(base);
     const withCentrality = enrichCustomerCentrality(withIntegrations);
     const withFortress = await applyFortressLayer(withCentrality);
+    await applyAutomaticRoutingFromSignals(withFortress);
     const withOps = await enrichWarRoomOperations(withFortress);
     const withPersistedTasks = await mergeCommandCenterFromStore(withOps);
     try {
@@ -72,6 +74,7 @@ export async function getWarRoomData(): Promise<WarRoomData> {
     const withIntegrations = mergeWarRoomWithIntegrations(fallback);
     const withCentrality = enrichCustomerCentrality(withIntegrations);
     const withFortress = await applyFortressLayer(withCentrality);
+    await applyAutomaticRoutingFromSignals(withFortress);
     const withOps = await enrichWarRoomOperations(withFortress);
     const withPersistedTasks = await mergeCommandCenterFromStore(withOps);
     try {

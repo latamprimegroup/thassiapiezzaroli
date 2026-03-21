@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { evaluateCreativeTest } from "@/lib/metrics/test-laboratory";
+import { evaluateExperimentStats } from "@/lib/metrics/experiment-stats";
 
 export const runtime = "nodejs";
 
@@ -11,6 +12,15 @@ type EvaluatePayload = {
   ctrOutbound?: number;
   minSpendMultiplier?: number;
   maxSpendMultiplier?: number;
+  experiment?: {
+    visitorsA?: number;
+    conversionsA?: number;
+    visitorsB?: number;
+    conversionsB?: number;
+    alpha?: number;
+    minSamplePerVariant?: number;
+    minDetectableEffectPct?: number;
+  };
 };
 
 export async function POST(request: Request) {
@@ -33,5 +43,17 @@ export async function POST(request: Request) {
     maxSpendMultiplier: Number(payload.maxSpendMultiplier ?? 2),
   });
 
-  return NextResponse.json({ ok: true, result });
+  const experimentStats = payload.experiment
+    ? evaluateExperimentStats({
+        visitorsA: Number(payload.experiment.visitorsA ?? 0),
+        conversionsA: Number(payload.experiment.conversionsA ?? 0),
+        visitorsB: Number(payload.experiment.visitorsB ?? 0),
+        conversionsB: Number(payload.experiment.conversionsB ?? 0),
+        alpha: Number(payload.experiment.alpha ?? 0.05),
+        minSamplePerVariant: Number(payload.experiment.minSamplePerVariant ?? 500),
+        minDetectableEffectPct: Number(payload.experiment.minDetectableEffectPct ?? 10),
+      })
+    : null;
+
+  return NextResponse.json({ ok: true, result, experimentStats });
 }
