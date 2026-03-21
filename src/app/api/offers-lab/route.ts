@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth/session";
 import { getOffersLabDashboard, upsertOffer } from "@/lib/offers/offers-lab-service";
+import { captureServerError } from "@/lib/observability/error-monitoring";
 
 export const runtime = "nodejs";
 
@@ -16,27 +17,45 @@ export async function GET(request: Request) {
   if (!session) {
     return NextResponse.json({ error: "Nao autenticado." }, { status: 401 });
   }
-  const url = new URL(request.url);
-  const niche = url.searchParams.get("niche") || undefined;
-  const ownerId = url.searchParams.get("ownerId") || undefined;
-  const minRoasRaw = url.searchParams.get("minRoas");
-  const minRoas = minRoasRaw ? Number(minRoasRaw) : undefined;
-  const validatedOnly = toBoolean(url.searchParams.get("validatedOnly"));
+  try {
+    const url = new URL(request.url);
+    const niche = url.searchParams.get("niche") || undefined;
+    const ownerId = url.searchParams.get("ownerId") || undefined;
+    const minRoasRaw = url.searchParams.get("minRoas");
+    const minRoas = minRoasRaw ? Number(minRoasRaw) : undefined;
+    const validatedOnly = toBoolean(url.searchParams.get("validatedOnly"));
 
-  const dashboard = await getOffersLabDashboard({
-    niche,
-    ownerId,
-    minRoas: Number.isFinite(minRoas) ? minRoas : undefined,
-    validatedOnly,
-  });
-  const filterOptions = {
-    niches: [...new Set(dashboard.offers.map((offer) => offer.niche))].filter(Boolean),
-    owners: [...new Set(dashboard.offers.map((offer) => offer.ownerId))].filter(Boolean),
-  };
-  return NextResponse.json({
-    data: dashboard,
-    filters: filterOptions,
-  });
+    const dashboard = await getOffersLabDashboard({
+      niche,
+      ownerId,
+      minRoas: Number.isFinite(minRoas) ? minRoas : undefined,
+      validatedOnly,
+    });
+    const filterOptions = {
+      niches: [...new Set(dashboard.offers.map((offer) => offer.niche))].filter(Boolean),
+      owners: [...new Set(dashboard.offers.map((offer) => offer.ownerId))].filter(Boolean),
+    };
+    return NextResponse.json(
+      {
+        data: dashboard,
+        filters: filterOptions,
+      },
+      {
+        headers: {
+          "Cache-Control": "private, max-age=0, stale-while-revalidate=30",
+        },
+      },
+    );
+  } catch (error) {
+    await captureServerError({
+      route: "/api/offers-lab",
+      error,
+      context: {
+        method: "GET",
+      },
+    });
+    return NextResponse.json({ error: "Falha ao carregar dashboard do Offers Lab." }, { status: 500 });
+  }
 }
 
 export async function POST(request: Request) {
@@ -48,8 +67,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Sem permissao para alterar Offers Lab." }, { status: 403 });
   }
 
-  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
   try {
+    const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
     const offer = await upsertOffer({
       id: typeof body.id === "string" ? body.id : undefined,
       name: typeof body.name === "string" ? body.name : "",
@@ -70,6 +89,13 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ ok: true, offer });
   } catch (error) {
+    await captureServerError({
+      route: "/api/offers-lab",
+      error,
+      context: {
+        method: "POST",
+      },
+    });
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Falha ao salvar oferta." },
       { status: 400 },

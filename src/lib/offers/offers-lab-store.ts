@@ -115,6 +115,26 @@ export async function appendTrafficEvent(event: TrafficEventRecord) {
   });
 }
 
+export async function appendTrafficEventsBatch(events: TrafficEventRecord[]) {
+  return withStoreMutation((store) => {
+    const existingIds = new Set(store.trafficEvents.map((row) => row.id));
+    let inserted = 0;
+    for (const event of events) {
+      if (existingIds.has(event.id)) {
+        continue;
+      }
+      store.trafficEvents.unshift(event);
+      existingIds.add(event.id);
+      inserted += 1;
+    }
+    store.trafficEvents = store.trafficEvents.slice(0, 200_000);
+    return {
+      inserted,
+      attempted: events.length,
+    };
+  });
+}
+
 export async function listTrafficEvents(params?: {
   offerId?: string;
   sinceIso?: string;

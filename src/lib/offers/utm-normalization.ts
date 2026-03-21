@@ -14,9 +14,12 @@ const SOURCE_ALIASES: Record<string, TrafficSource> = {
   tt: "tiktok",
   kwai: "kwai",
   kw: "kwai",
+  kuaishou: "kwai",
+  ks: "kwai",
   networking: "networking",
   partner: "networking",
   parceiro: "networking",
+  afiliado: "networking",
   manual: "networking",
 };
 
@@ -32,6 +35,42 @@ function cleanToken(value: string) {
 export function normalizeTrafficSource(input: string): TrafficSource {
   const token = cleanToken(input);
   return SOURCE_ALIASES[token] ?? "unknown";
+}
+
+function inferTrafficSourceFromPayload(payload: Record<string, unknown>) {
+  const candidates = [
+    payload.utm_source,
+    payload.source,
+    payload.traffic_source,
+    payload.network,
+    payload.channel,
+    payload.platform,
+    payload.network_name,
+  ]
+    .map((value) => toStringSafe(value))
+    .filter(Boolean);
+
+  for (const candidate of candidates) {
+    const normalized = normalizeTrafficSource(candidate);
+    if (normalized !== "unknown") {
+      return normalized;
+    }
+  }
+
+  const raw = JSON.stringify(payload).toLowerCase();
+  if (raw.includes("gclid") || raw.includes("google")) {
+    return "google";
+  }
+  if (raw.includes("ttclid") || raw.includes("tiktok")) {
+    return "tiktok";
+  }
+  if (raw.includes("fbclid") || raw.includes("facebook") || raw.includes("instagram")) {
+    return "meta";
+  }
+  if (raw.includes("kwai")) {
+    return "kwai";
+  }
+  return "unknown";
 }
 
 function cleanPart(value: string) {
@@ -97,11 +136,13 @@ export type NormalizedUtmPayload = {
 
 export function normalizeGatewayPayload(payload: Record<string, unknown>): NormalizedUtmPayload {
   const utmSource = toStringSafe(payload.utm_source || payload.source || payload.traffic_source);
-  const trafficSource = normalizeTrafficSource(utmSource);
+  const trafficSource = normalizeTrafficSource(utmSource) !== "unknown" ? normalizeTrafficSource(utmSource) : inferTrafficSourceFromPayload(payload);
   const campaign = splitNameAndId(toStringSafe(payload.utm_campaign || payload.campaign || payload.campaign_name));
   const content = splitNameAndId(toStringSafe(payload.utm_content || payload.content || payload.creative));
   const term = splitNameAndId(toStringSafe(payload.utm_term || payload.term || payload.keyword));
-  const offerId = toStringSafe(payload.offer_id || payload.offerId || payload.product_id || payload.productId).trim();
+  const offerId = toStringSafe(
+    payload.offer_id || payload.offerId || payload.product_id || payload.productId || payload.offer || payload.product,
+  ).trim();
   const eventTypeRaw = toStringSafe(payload.event_type || payload.event || payload.type).toLowerCase();
   const gatewayRaw = toStringSafe(payload.gateway || payload.provider).toLowerCase();
   const occurredRaw = toStringSafe(payload.occurred_at || payload.timestamp || payload.created_at);
@@ -122,10 +163,10 @@ export function normalizeGatewayPayload(payload: Record<string, unknown>): Norma
     trafficSource,
     occurredAt,
     utmSource,
-    utmCampaign: toStringSafe(payload.utm_campaign || payload.campaign),
-    utmMedium: toStringSafe(payload.utm_medium || payload.medium),
-    utmContent: toStringSafe(payload.utm_content || payload.content),
-    utmTerm: toStringSafe(payload.utm_term || payload.term),
+    utmCampaign: toStringSafe(payload.utm_campaign || payload.campaign || payload.campaign_name),
+    utmMedium: toStringSafe(payload.utm_medium || payload.medium || payload.placement),
+    utmContent: toStringSafe(payload.utm_content || payload.content || payload.ad_name),
+    utmTerm: toStringSafe(payload.utm_term || payload.term || payload.keyword || payload.search_term),
     campaignName: campaign.name,
     campaignId: campaign.id,
     contentName: content.name,
@@ -133,9 +174,9 @@ export function normalizeGatewayPayload(payload: Record<string, unknown>): Norma
     termName: term.name,
     termId: term.id,
     utmBroughtBy: toStringSafe(payload.utm_brought_by || payload.partner || payload.brought_by).trim(),
-    device: toStringSafe(payload.device || payload.device_type),
-    network: toStringSafe(payload.network || payload.placement_network),
-    keyword: toStringSafe(payload.keyword || payload.search_term || payload.kw),
+    device: toStringSafe(payload.device || payload.device_type || payload.user_device),
+    network: toStringSafe(payload.network || payload.placement_network || payload.ad_network),
+    keyword: toStringSafe(payload.keyword || payload.search_term || payload.kw || payload.match_keyword),
     revenue: toNumberSafe(payload.revenue || payload.amount || payload.valor_bruto || payload.total_value),
     spend: toNumberSafe(payload.spend || payload.cost || payload.ad_spend || payload.valor_investido),
     currency: toStringSafe(payload.currency || payload.moeda).trim() || "BRL",

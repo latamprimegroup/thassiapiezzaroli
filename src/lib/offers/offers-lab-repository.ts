@@ -21,6 +21,10 @@ export async function appendTrafficEvent(...args: Parameters<typeof fileStore.ap
   return isDatabaseMode() ? dbStore.appendTrafficEvent(...args) : fileStore.appendTrafficEvent(...args);
 }
 
+export async function appendTrafficEventsBatch(...args: Parameters<typeof fileStore.appendTrafficEventsBatch>) {
+  return isDatabaseMode() ? dbStore.appendTrafficEventsBatch(...args) : fileStore.appendTrafficEventsBatch(...args);
+}
+
 export async function listTrafficEvents(...args: Parameters<typeof fileStore.listTrafficEvents>) {
   return isDatabaseMode() ? dbStore.listTrafficEvents(...args) : fileStore.listTrafficEvents(...args);
 }

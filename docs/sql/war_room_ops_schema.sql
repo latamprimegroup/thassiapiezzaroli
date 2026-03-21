@@ -95,6 +95,19 @@ create table if not exists offers_lab_offers (
 );
 create index if not exists offers_lab_offers_status_idx
   on offers_lab_offers (status, updated_at desc);
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'offers_lab_offers_networking_brought_by_ck'
+  ) then
+    alter table offers_lab_offers
+    add constraint offers_lab_offers_networking_brought_by_ck
+    check (
+      traffic_source <> 'networking'
+      or length(trim(utm_brought_by)) > 0
+    ) not valid;
+  end if;
+end $$;
 
 create table if not exists offers_lab_traffic_events (
   id text primary key,
@@ -126,6 +139,19 @@ create table if not exists offers_lab_traffic_events (
 );
 create index if not exists offers_lab_traffic_events_offer_occ_idx
   on offers_lab_traffic_events (offer_id, occurred_at desc);
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'offers_lab_traffic_events_networking_brought_by_ck'
+  ) then
+    alter table offers_lab_traffic_events
+    add constraint offers_lab_traffic_events_networking_brought_by_ck
+    check (
+      traffic_source <> 'networking'
+      or length(trim(utm_brought_by)) > 0
+    ) not valid;
+  end if;
+end $$;
 
 create table if not exists offers_lab_sync_state (
   state_key text primary key,

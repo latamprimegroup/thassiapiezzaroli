@@ -67,6 +67,19 @@ async function ensureSchema() {
           on offers_lab_offers (status, updated_at desc);
         create index if not exists offers_lab_offers_niche_owner_idx
           on offers_lab_offers (niche, owner_id);
+        do $$
+        begin
+          if not exists (
+            select 1 from pg_constraint where conname = 'offers_lab_offers_networking_brought_by_ck'
+          ) then
+            alter table offers_lab_offers
+            add constraint offers_lab_offers_networking_brought_by_ck
+            check (
+              traffic_source <> 'networking'
+              or length(trim(utm_brought_by)) > 0
+            ) not valid;
+          end if;
+        end $$;
 
         create table if not exists offers_lab_traffic_events (
           id text primary key,
@@ -100,6 +113,19 @@ async function ensureSchema() {
           on offers_lab_traffic_events (offer_id, occurred_at desc);
         create index if not exists offers_lab_traffic_events_source_idx
           on offers_lab_traffic_events (traffic_source, occurred_at desc);
+        do $$
+        begin
+          if not exists (
+            select 1 from pg_constraint where conname = 'offers_lab_traffic_events_networking_brought_by_ck'
+          ) then
+            alter table offers_lab_traffic_events
+            add constraint offers_lab_traffic_events_networking_brought_by_ck
+            check (
+              traffic_source <> 'networking'
+              or length(trim(utm_brought_by)) > 0
+            ) not valid;
+          end if;
+        end $$;
 
         create table if not exists offers_lab_sync_state (
           state_key text primary key,
@@ -299,6 +325,92 @@ export async function appendTrafficEvent(event: TrafficEventRecord) {
       ],
     );
     return event;
+  });
+}
+
+export async function appendTrafficEventsBatch(events: TrafficEventRecord[]) {
+  if (events.length === 0) {
+    return { inserted: 0, attempted: 0 };
+  }
+  return withClient(async (client) => {
+    const payload = events.map((event) => ({
+      id: event.id,
+      offer_id: event.offerId,
+      event_type: event.eventType,
+      gateway: event.gateway,
+      traffic_source: event.trafficSource,
+      occurred_at: event.occurredAt,
+      utm_source: event.utmSource,
+      utm_campaign: event.utmCampaign,
+      utm_medium: event.utmMedium,
+      utm_content: event.utmContent,
+      utm_term: event.utmTerm,
+      campaign_name: event.campaignName,
+      campaign_id: event.campaignId,
+      content_name: event.contentName,
+      content_id: event.contentId,
+      term_name: event.termName,
+      term_id: event.termId,
+      utm_brought_by: event.utmBroughtBy,
+      device: event.device,
+      network: event.network,
+      keyword: event.keyword,
+      revenue: event.revenue,
+      spend: event.spend,
+      currency: event.currency,
+      raw_payload: event.rawPayload ?? {},
+      created_at: event.createdAt,
+    }));
+    const result = await client.query(
+      `
+      with source_rows as (
+        select *
+        from jsonb_to_recordset($1::jsonb) as x(
+          id text,
+          offer_id text,
+          event_type text,
+          gateway text,
+          traffic_source text,
+          occurred_at timestamptz,
+          utm_source text,
+          utm_campaign text,
+          utm_medium text,
+          utm_content text,
+          utm_term text,
+          campaign_name text,
+          campaign_id text,
+          content_name text,
+          content_id text,
+          term_name text,
+          term_id text,
+          utm_brought_by text,
+          device text,
+          network text,
+          keyword text,
+          revenue numeric,
+          spend numeric,
+          currency text,
+          raw_payload jsonb,
+          created_at timestamptz
+        )
+      ),
+      inserted as (
+        insert into offers_lab_traffic_events
+          (id, offer_id, event_type, gateway, traffic_source, occurred_at, utm_source, utm_campaign, utm_medium, utm_content, utm_term, campaign_name, campaign_id, content_name, content_id, term_name, term_id, utm_brought_by, device, network, keyword, revenue, spend, currency, raw_payload, created_at)
+        select
+          id, offer_id, event_type, gateway, traffic_source, occurred_at, utm_source, utm_campaign, utm_medium, utm_content, utm_term, campaign_name, campaign_id, content_name, content_id, term_name, term_id, utm_brought_by, device, network, keyword, revenue, spend, currency, raw_payload, created_at
+        from source_rows
+        on conflict (id) do nothing
+        returning id
+      )
+      select count(*)::int as inserted from inserted
+      `,
+      [JSON.stringify(payload)],
+    );
+    return {
+      inserted: Number(result.rows[0]?.inserted ?? 0),
+      attempted: events.length,
+    };
   });
 }
 

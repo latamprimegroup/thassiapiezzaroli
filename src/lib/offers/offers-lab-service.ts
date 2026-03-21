@@ -11,6 +11,7 @@ import type {
   TrafficSourceSummary,
 } from "@/lib/offers/types";
 import { normalizeGatewayPayload, normalizeTrafficSource } from "@/lib/offers/utm-normalization";
+import { captureServerError } from "@/lib/observability/error-monitoring";
 
 type UpsertOfferInput = {
   id?: string;
@@ -34,8 +35,36 @@ type DashboardFilters = {
   validatedOnly?: boolean;
 };
 
+declare global {
+  var __offersLabDashboardCache: Map<string, { expiresAtMs: number; value: OffersLabDashboard }> | undefined;
+}
+
 function nowIso() {
   return new Date().toISOString();
+}
+
+function nowMs() {
+  return Date.now();
+}
+
+function getCacheStore() {
+  if (!globalThis.__offersLabDashboardCache) {
+    globalThis.__offersLabDashboardCache = new Map<string, { expiresAtMs: number; value: OffersLabDashboard }>();
+  }
+  return globalThis.__offersLabDashboardCache;
+}
+
+function buildDashboardCacheKey(filters?: DashboardFilters) {
+  return JSON.stringify({
+    niche: filters?.niche ?? "",
+    ownerId: filters?.ownerId ?? "",
+    minRoas: typeof filters?.minRoas === "number" ? Number(filters.minRoas.toFixed(4)) : "",
+    validatedOnly: Boolean(filters?.validatedOnly),
+  });
+}
+
+function invalidateDashboardCache() {
+  getCacheStore().clear();
 }
 
 function toNumber(value: unknown, fallback = 0) {
@@ -74,6 +103,65 @@ function toTrafficSource(value: string | undefined) {
   return normalizeTrafficSource(value || "");
 }
 
+function resolveEventId(payload: Record<string, unknown>, normalizedOfferId: string, normalizedEventType: "click" | "sale") {
+  const directIdCandidates = [
+    payload.event_id,
+    payload.id,
+    payload.webhook_id,
+    payload.transaction_id,
+    payload.transactionId,
+    payload.order_id,
+    payload.orderId,
+    payload.sale_id,
+    payload.purchase_id,
+  ].map((value) => String(value ?? "").trim());
+
+  const direct = directIdCandidates.find(Boolean);
+  if (direct) {
+    return direct;
+  }
+  const utmSignature = [
+    String(payload.utm_source ?? "").trim(),
+    String(payload.utm_campaign ?? "").trim(),
+    String(payload.utm_content ?? "").trim(),
+    String(payload.utm_term ?? "").trim(),
+    String(payload.timestamp ?? payload.occurred_at ?? "").trim(),
+    String(payload.revenue ?? payload.amount ?? payload.valor_bruto ?? "").trim(),
+  ].join("|");
+  if (utmSignature.replace(/\|/g, "").length > 0) {
+    const signatureKey = Buffer.from(utmSignature).toString("base64url").slice(0, 24);
+    return `TE-${normalizedOfferId}-${normalizedEventType}-${signatureKey}`;
+  }
+  return `TE-${normalizedOfferId}-${normalizedEventType}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function isPaidSource(source: TrafficEventRecord["trafficSource"]) {
+  return source === "meta" || source === "google" || source === "tiktok" || source === "kwai";
+}
+
+async function warnIfUtmPatternWeak(event: TrafficEventRecord) {
+  if (!isPaidSource(event.trafficSource)) {
+    return;
+  }
+  if (event.campaignId && event.contentId) {
+    return;
+  }
+  await captureServerError({
+    route: "/offers-lab/utm-parser",
+    error: "UTM padrao Nome|ID incompleto para campanha ou criativo.",
+    context: {
+      offerId: event.offerId,
+      trafficSource: event.trafficSource,
+      campaign: event.utmCampaign,
+      content: event.utmContent,
+      campaignId: event.campaignId,
+      contentId: event.contentId,
+      eventId: event.id,
+    },
+    level: "warning",
+  });
+}
+
 async function notifyScaleReached(offer: OfferWithMetrics) {
   const message = [
     "OFFERS LAB: oferta validada para escala.",
@@ -100,11 +188,14 @@ async function notifyScaleReached(offer: OfferWithMetrics) {
     }).catch(() => undefined);
   }
 
-  await fetch(`${process.env.NEXT_PUBLIC_APP_URL ?? ""}/api/notify-squad`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message }),
-  }).catch(() => undefined);
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+  if (appUrl) {
+    await fetch(`${appUrl}/api/notify-squad`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message }),
+    }).catch(() => undefined);
+  }
 }
 
 async function ensureOfferExistsFromEvent(event: TrafficEventRecord) {
@@ -136,8 +227,9 @@ async function ensureOfferExistsFromEvent(event: TrafficEventRecord) {
 }
 
 function computeMetricsForOffer(offer: OfferRecord, events: TrafficEventRecord[]): OfferMetrics7d {
-  const revenue7d = events.reduce((acc, event) => acc + event.revenue, 0);
-  const spend7d = events.reduce((acc, event) => acc + event.spend, 0);
+  const saleEvents = events.filter((event) => event.eventType === "sale");
+  const revenue7d = saleEvents.reduce((acc, event) => acc + event.revenue, 0);
+  const spend7d = saleEvents.reduce((acc, event) => acc + event.spend, 0);
   const roas7d = spend7d > 0 ? revenue7d / spend7d : 0;
   const targetRoas = Math.max(offer.minRoasTarget, WAR_ROOM_OPS_CONSTANTS.offersLab.validation.minRoas);
   const validatedForScale =
@@ -282,10 +374,11 @@ export async function upsertOffer(input: UpsertOfferInput) {
     throw new Error("Nome da oferta e obrigatorio.");
   }
   await offersRepo.upsertOffer(record);
+  invalidateDashboardCache();
   return record;
 }
 
-export async function registerTrafficEvent(payload: Record<string, unknown>) {
+async function registerTrafficEventInternal(payload: Record<string, unknown>, options?: { invalidateCache?: boolean }) {
   const normalized = normalizeGatewayPayload(payload);
   if (!normalized.offerId) {
     throw new Error("offer_id obrigatorio para registrar traffic_event.");
@@ -294,9 +387,7 @@ export async function registerTrafficEvent(payload: Record<string, unknown>) {
     throw new Error("utm_brought_by obrigatorio para eventos de networking.");
   }
   const event: TrafficEventRecord = {
-    id:
-      String(payload.event_id || payload.id || "").trim() ||
-      `TE-${normalized.offerId}-${normalized.eventType}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    id: resolveEventId(payload, normalized.offerId, normalized.eventType),
     offerId: normalized.offerId,
     eventType: normalized.eventType,
     gateway: normalized.gateway,
@@ -325,10 +416,115 @@ export async function registerTrafficEvent(payload: Record<string, unknown>) {
   };
   await ensureOfferExistsFromEvent(event);
   await offersRepo.appendTrafficEvent(event);
+  await warnIfUtmPatternWeak(event);
+  if (options?.invalidateCache !== false) {
+    invalidateDashboardCache();
+  }
   return event;
 }
 
+export async function registerTrafficEvent(payload: Record<string, unknown>) {
+  return registerTrafficEventInternal(payload, { invalidateCache: true });
+}
+
+export async function registerTrafficEventsBatch(payloads: Record<string, unknown>[]) {
+  const maxBatch = WAR_ROOM_OPS_CONSTANTS.offersLab.maxBatchEventsPerRequest;
+  const cappedPayloads = payloads.slice(0, maxBatch);
+  const existingOffers = new Map((await offersRepo.listOffers()).map((offer) => [offer.id, offer]));
+  const toInsert: TrafficEventRecord[] = [];
+  const failures: Array<{ index: number; message: string }> = [];
+
+  for (let index = 0; index < cappedPayloads.length; index += 1) {
+    const payload = cappedPayloads[index];
+    try {
+      const normalized = normalizeGatewayPayload(payload);
+      if (!normalized.offerId) {
+        throw new Error("offer_id obrigatorio.");
+      }
+      if (normalized.trafficSource === "networking" && !normalized.utmBroughtBy) {
+        throw new Error("utm_brought_by obrigatorio para networking.");
+      }
+      const event: TrafficEventRecord = {
+        id: resolveEventId(payload, normalized.offerId, normalized.eventType),
+        offerId: normalized.offerId,
+        eventType: normalized.eventType,
+        gateway: normalized.gateway,
+        trafficSource: normalized.trafficSource,
+        occurredAt: normalized.occurredAt,
+        utmSource: normalized.utmSource,
+        utmCampaign: normalized.utmCampaign,
+        utmMedium: normalized.utmMedium,
+        utmContent: normalized.utmContent,
+        utmTerm: normalized.utmTerm,
+        campaignName: normalized.campaignName,
+        campaignId: normalized.campaignId,
+        contentName: normalized.contentName,
+        contentId: normalized.contentId,
+        termName: normalized.termName,
+        termId: normalized.termId,
+        utmBroughtBy: normalized.utmBroughtBy,
+        device: normalized.device,
+        network: normalized.network,
+        keyword: normalized.keyword,
+        revenue: normalized.revenue,
+        spend: normalized.spend,
+        currency: normalized.currency,
+        rawPayload: normalized.rawPayload,
+        createdAt: nowIso(),
+      };
+      if (!existingOffers.has(event.offerId)) {
+        const createdAt = nowIso();
+        const fallback: OfferRecord = {
+          id: event.offerId,
+          name: `Oferta ${event.offerId}`,
+          status: "teste",
+          niche: "nao-classificado",
+          ownerId: "squad-growth",
+          minRoasTarget: WAR_ROOM_OPS_CONSTANTS.offersLab.validation.minRoas,
+          trafficSource: event.trafficSource,
+          utmBroughtBy: event.utmBroughtBy,
+          bigIdea: "",
+          uniqueMechanism: "",
+          sophisticationLevel: 3,
+          hookVariations: [],
+          launchCandidate: false,
+          createdAt,
+          updatedAt: createdAt,
+          lastValidatedAt: "",
+        };
+        await offersRepo.upsertOffer(fallback);
+        existingOffers.set(fallback.id, fallback);
+      }
+      toInsert.push(event);
+      void warnIfUtmPatternWeak(event);
+    } catch (error) {
+      failures.push({
+        index,
+        message: error instanceof Error ? error.message : "Falha desconhecida.",
+      });
+    }
+  }
+  const insertion = await offersRepo.appendTrafficEventsBatch(toInsert);
+  const created = insertion.inserted;
+  const duplicates = Math.max(0, insertion.attempted - insertion.inserted);
+  const failed = failures.length;
+  invalidateDashboardCache();
+  return {
+    created,
+    failed,
+    duplicates,
+    failures,
+  };
+}
+
 export async function getOffersLabDashboard(filters?: DashboardFilters): Promise<OffersLabDashboard> {
+  const cacheKey = buildDashboardCacheKey(filters);
+  const cacheTtlMs = WAR_ROOM_OPS_CONSTANTS.offersLab.cacheTtlSeconds * 1000;
+  const cached = getCacheStore().get(cacheKey);
+  if (cached && cached.expiresAtMs > nowMs()) {
+    return cached.value;
+  }
+
   const windowStart = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const [offers, events7d, sync] = await Promise.all([
     offersRepo.listOffers(),
@@ -340,12 +536,17 @@ export async function getOffersLabDashboard(filters?: DashboardFilters): Promise
   const ids = new Set(filtered.map((offer) => offer.id));
   const sourceSummary = buildSourceSummary(events7d.filter((event) => ids.has(event.offerId)));
   const validatedOffers = filtered.filter((offer) => offer.validatedForScale);
-  return {
+  const dashboard: OffersLabDashboard = {
     offers: filtered,
     validatedOffers,
     sources: sourceSummary,
     sync,
   };
+  getCacheStore().set(cacheKey, {
+    value: dashboard,
+    expiresAtMs: nowMs() + cacheTtlMs,
+  });
+  return dashboard;
 }
 
 export async function syncOffersFromUtmify() {
@@ -387,24 +588,33 @@ export async function syncOffersFromUtmify() {
     }
     const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
     const rows = extractEventRowsFromUtmify(payload);
-    let syncedEvents = 0;
-    for (const row of rows) {
-      await registerTrafficEvent({
+    const batch = await registerTrafficEventsBatch(
+      rows.map((row) => ({
         ...row,
         gateway: row.gateway ?? "utmify",
         provider: "utmify",
         event_type: row.event_type ?? "sale",
-      });
-      syncedEvents += 1;
-    }
+      })),
+    );
+    const syncedEvents = batch.created;
     const state: OffersLabSyncState = {
       lastSyncAt: now,
       lastStatus: "ok",
-      lastMessage: `${syncedEvents} eventos sincronizados com UTMify.`,
+      lastMessage:
+        batch.failed > 0
+          ? `${syncedEvents} eventos sincronizados com UTMify (${batch.failed} falhas).`
+          : `${syncedEvents} eventos sincronizados com UTMify.`,
     };
     await offersRepo.writeSyncState(state);
     return { syncedEvents, state };
   } catch (error) {
+    await captureServerError({
+      route: "/api/offers-lab/sync",
+      error,
+      context: {
+        source: "syncOffersFromUtmify",
+      },
+    });
     const state: OffersLabSyncState = {
       lastSyncAt: now,
       lastStatus: "error",

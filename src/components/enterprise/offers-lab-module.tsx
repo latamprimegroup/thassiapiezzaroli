@@ -56,8 +56,13 @@ const EMPTY_DASHBOARD: OffersLabDashboard = {
   },
 };
 
+function SkeletonBlock({ className }: { className?: string }) {
+  return <div className={`animate-pulse rounded border border-white/10 bg-white/5 ${className || "h-20"}`} />;
+}
+
 export function OffersLabModule() {
   const [loading, setLoading] = useState(true);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState("");
@@ -104,7 +109,9 @@ export function OffersLabModule() {
   }, [checklist, form.trafficSource]);
 
   const fetchDashboard = useCallback(async () => {
-    setLoading(true);
+    if (!hasLoadedOnce) {
+      setLoading(true);
+    }
     setError("");
     const query = new URLSearchParams();
     if (filters.niche) {
@@ -119,19 +126,26 @@ export function OffersLabModule() {
     query.set("validatedOnly", String(filters.validatedOnly));
     const response = await fetch(`/api/offers-lab?${query.toString()}`, { cache: "no-store" }).catch(() => null);
     if (!response || !response.ok) {
-      setLoading(false);
+      if (!hasLoadedOnce) {
+        setLoading(false);
+      }
       setError("Falha ao carregar Offers Lab.");
       return;
     }
     const data = (await response.json().catch(() => null)) as ApiPayload | null;
     if (!data) {
-      setLoading(false);
+      if (!hasLoadedOnce) {
+        setLoading(false);
+      }
       setError("Resposta invalida do backend.");
       return;
     }
     setPayload(data);
-    setLoading(false);
-  }, [filters.niche, filters.ownerId, filters.minRoas, filters.validatedOnly]);
+    if (!hasLoadedOnce) {
+      setHasLoadedOnce(true);
+      setLoading(false);
+    }
+  }, [filters.niche, filters.ownerId, filters.minRoas, filters.validatedOnly, hasLoadedOnce]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -235,11 +249,15 @@ export function OffersLabModule() {
         <CardContent className="grid gap-3 md:grid-cols-4">
           <div className="rounded border border-white/10 bg-black/30 p-3 text-xs">
             <p className="text-slate-400">Ofertas monitoradas</p>
-            <p className="mt-1 text-lg font-semibold text-slate-100">{payload.data.offers.length}</p>
+            {loading ? <SkeletonBlock className="mt-2 h-8" /> : <p className="mt-1 text-lg font-semibold text-slate-100">{payload.data.offers.length}</p>}
           </div>
           <div className="rounded border border-white/10 bg-black/30 p-3 text-xs">
             <p className="text-slate-400">Validadas (&gt;=70k)</p>
-            <p className="mt-1 text-lg font-semibold text-[#10B981]">{payload.data.validatedOffers.length}</p>
+            {loading ? (
+              <SkeletonBlock className="mt-2 h-8" />
+            ) : (
+              <p className="mt-1 text-lg font-semibold text-[#10B981]">{payload.data.validatedOffers.length}</p>
+            )}
           </div>
           <div className="rounded border border-white/10 bg-black/30 p-3 text-xs">
             <p className="text-slate-400">Ultimo sync UTMify</p>
@@ -385,7 +403,13 @@ export function OffersLabModule() {
           <CardDescription className="text-xs">Atribuicao consolidada por canal normalizado.</CardDescription>
         </CardHeader>
         <CardContent>
-          {payload.data.sources.length === 0 ? (
+          {loading ? (
+            <div className="grid gap-2">
+              <SkeletonBlock className="h-10" />
+              <SkeletonBlock className="h-10" />
+              <SkeletonBlock className="h-10" />
+            </div>
+          ) : payload.data.sources.length === 0 ? (
             <div className="rounded border border-dashed border-white/15 p-3 text-xs text-slate-500">
               Nenhuma venda atribuida ainda no Offers Lab.
             </div>
@@ -468,7 +492,12 @@ export function OffersLabModule() {
           </div>
 
           {loading ? (
-            <div className="rounded border border-white/10 bg-black/30 p-3 text-xs text-slate-500">Carregando...</div>
+            <div className="grid gap-2">
+              <SkeletonBlock className="h-10" />
+              <SkeletonBlock className="h-10" />
+              <SkeletonBlock className="h-10" />
+              <SkeletonBlock className="h-10" />
+            </div>
           ) : payload.data.offers.length === 0 ? (
             <div className="rounded border border-dashed border-white/15 p-3 text-xs text-slate-500">
               Nenhuma oferta encontrada para os filtros atuais.

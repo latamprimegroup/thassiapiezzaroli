@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth/session";
+import { WAR_ROOM_OPS_CONSTANTS } from "@/lib/config/war-room-ops.constants";
 import { getOffersLabDashboard, syncOffersFromUtmify } from "@/lib/offers/offers-lab-service";
+import { captureServerError } from "@/lib/observability/error-monitoring";
 
 export const runtime = "nodejs";
 
@@ -27,27 +29,49 @@ export async function POST(request: Request) {
   if (!(await authorize(request))) {
     return NextResponse.json({ error: "Nao autorizado." }, { status: 401 });
   }
-  const result = await syncOffersFromUtmify();
-  const dashboard = await getOffersLabDashboard();
-  return NextResponse.json({
-    ok: true,
-    cronCadenceMinutes: 15,
-    sync: result.state,
-    syncedEvents: result.syncedEvents,
-    validatedOffers: dashboard.validatedOffers.length,
-  });
+  try {
+    const result = await syncOffersFromUtmify();
+    const dashboard = await getOffersLabDashboard();
+    return NextResponse.json({
+      ok: true,
+      cronCadenceMinutes: WAR_ROOM_OPS_CONSTANTS.offersLab.syncIntervalMinutes,
+      sync: result.state,
+      syncedEvents: result.syncedEvents,
+      validatedOffers: dashboard.validatedOffers.length,
+    });
+  } catch (error) {
+    await captureServerError({
+      route: "/api/offers-lab/sync",
+      error,
+      context: {
+        method: "POST",
+      },
+    });
+    return NextResponse.json({ error: "Falha no sync do Offers Lab." }, { status: 500 });
+  }
 }
 
 export async function GET(request: Request) {
   if (!(await authorize(request))) {
     return NextResponse.json({ error: "Nao autorizado." }, { status: 401 });
   }
-  const dashboard = await getOffersLabDashboard();
-  return NextResponse.json({
-    ok: true,
-    sync: dashboard.sync,
-    validatedOffers: dashboard.validatedOffers.length,
-    note: "Agende POST /api/offers-lab/sync a cada 15 minutos no scheduler da sua infraestrutura.",
-  });
+  try {
+    const dashboard = await getOffersLabDashboard();
+    return NextResponse.json({
+      ok: true,
+      sync: dashboard.sync,
+      validatedOffers: dashboard.validatedOffers.length,
+      note: `Agende POST /api/offers-lab/sync a cada ${WAR_ROOM_OPS_CONSTANTS.offersLab.syncIntervalMinutes} minutos no scheduler da sua infraestrutura.`,
+    });
+  } catch (error) {
+    await captureServerError({
+      route: "/api/offers-lab/sync",
+      error,
+      context: {
+        method: "GET",
+      },
+    });
+    return NextResponse.json({ error: "Falha ao ler estado de sync." }, { status: 500 });
+  }
 }
 

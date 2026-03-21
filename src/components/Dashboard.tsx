@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import type { LucideIcon } from "lucide-react";
 import {
   Binary,
@@ -27,7 +28,6 @@ import { CopyResearchModule } from "@/components/enterprise/copy-research-module
 import { CustomerExperienceModule } from "@/components/enterprise/customer-experience-module";
 import { EditorsProductionModule } from "@/components/enterprise/editors-production-module";
 import { FinanceComplianceModule } from "@/components/enterprise/finance-compliance-module";
-import { OffersLabModule } from "@/components/enterprise/offers-lab-module";
 import { SalesRecoveryModule } from "@/components/enterprise/sales-recovery-module";
 import { SquadSyncModule } from "@/components/enterprise/squad-sync-module";
 import { TestLaboratoryModule } from "@/components/enterprise/test-laboratory-module";
@@ -40,6 +40,25 @@ import { WAR_ROOM_OPS_CONSTANTS } from "@/lib/config/war-room-ops.constants";
 import { subscribeWarRoomRealtime } from "@/lib/realtime/war-room-realtime";
 import type { DemoUser } from "@/lib/auth/users";
 import type { SquadSyncCommandOrder, SquadSyncKpiSnapshot, TrafficSourceKey, WarRoomData } from "@/lib/war-room/types";
+
+const OffersLabModule = dynamic(
+  () => import("@/components/enterprise/offers-lab-module").then((mod) => mod.OffersLabModule),
+  {
+    loading: () => (
+      <Card className="border-white/10 bg-[#080808]">
+        <CardHeader>
+          <CardTitle className="text-base">Offers Lab</CardTitle>
+          <CardDescription>Carregando modulo de producao...</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="h-20 animate-pulse rounded border border-white/10 bg-white/5" />
+          <div className="h-28 animate-pulse rounded border border-white/10 bg-white/5" />
+          <div className="h-28 animate-pulse rounded border border-white/10 bg-white/5" />
+        </CardContent>
+      </Card>
+    ),
+  },
+);
 
 type DashboardProps = {
   data: WarRoomData;
@@ -141,6 +160,43 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
       if (unsubscribe) {
         unsubscribe();
       }
+    };
+  }, []);
+
+  useEffect(() => {
+    function reportClientError(payload: { message: string; stack?: string; route: string }) {
+      void fetch("/api/ops/errors", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...payload,
+          level: "error",
+        }),
+      }).catch(() => undefined);
+    }
+
+    function onError(event: ErrorEvent) {
+      reportClientError({
+        message: event.message || "Erro de runtime no cliente.",
+        stack: event.error?.stack,
+        route: window.location.pathname,
+      });
+    }
+
+    function onUnhandledRejection(event: PromiseRejectionEvent) {
+      const reason = event.reason;
+      reportClientError({
+        message: reason instanceof Error ? reason.message : "Promise rejection nao tratada.",
+        stack: reason instanceof Error ? reason.stack : "",
+        route: window.location.pathname,
+      });
+    }
+
+    window.addEventListener("error", onError);
+    window.addEventListener("unhandledrejection", onUnhandledRejection);
+    return () => {
+      window.removeEventListener("error", onError);
+      window.removeEventListener("unhandledrejection", onUnhandledRejection);
     };
   }, []);
 

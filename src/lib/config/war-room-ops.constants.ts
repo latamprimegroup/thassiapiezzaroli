@@ -156,6 +156,10 @@ export const WAR_ROOM_OPS_CONSTANTS = {
   },
   offersLab: {
     syncIntervalMinutes: 15,
+    cacheTtlSeconds: 30,
+    callbackMaxPayloadBytes: 1024 * 1024,
+    maxBatchEventsPerRequest: 500,
+    callbackRateLimitPerMinute: 1_500,
     validation: {
       minRevenue7d: 70_000,
       minRoas: 1.8,
