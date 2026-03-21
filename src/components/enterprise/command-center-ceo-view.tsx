@@ -5,6 +5,7 @@ import { AlertTriangle, ShieldAlert, TrendingUp, Zap } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { SectionId } from "@/lib/auth/rbac";
+import { computeEquityValuation, computeMarketSentimentTracker } from "@/lib/metrics/corporate-intelligence";
 import type { WarRoomData } from "@/lib/war-room/types";
 
 type CommandCenterCeoViewProps = {
@@ -41,6 +42,8 @@ type SectorCard = {
 export function CommandCenterCeoView({ data, onDrillDown, presentationMode }: CommandCenterCeoViewProps) {
   const mer = data.integrations.merCross.value;
   const netProfit = data.enterprise.ceoFinance.netProfit;
+  const equity = computeEquityValuation(data);
+  const sentiment = computeMarketSentimentTracker(data);
   const grossRevenue = data.integrations.gateway.consolidatedGrossRevenue;
   const merTrend = data.integrations.merCross.trend12h;
   const avgMer24h = merTrend.length > 0 ? merTrend.reduce((acc, v) => acc + v, 0) / merTrend.length : mer || 1;
@@ -199,8 +202,15 @@ export function CommandCenterCeoView({ data, onDrillDown, presentationMode }: Co
         message: `KILL SWITCH ATIVO: ${data.integrations.operations.killSwitch.reason}`,
       });
     }
+    if (sentiment.demandMoreSophisticated) {
+      events.push({
+        level: "warning",
+        icon: "alert",
+        message: "MERCADO VACINANDO PROMESSA DIRETA: migrar copy para mecanismo indireto (historia/segredo).",
+      });
+    }
     return events.slice(0, 8);
-  }, [blockedDomains, data.creativeFactory.tasks, data.integrations.operations.killSwitch, topRoi]);
+  }, [blockedDomains, data.creativeFactory.tasks, data.integrations.operations.killSwitch, sentiment.demandMoreSophisticated, topRoi]);
 
   return (
     <section className="war-fade-in space-y-4">
@@ -208,7 +218,7 @@ export function CommandCenterCeoView({ data, onDrillDown, presentationMode }: Co
         <CardHeader>
           <CardTitle className="text-base">THE COMMAND CENTER (CEO VIEW 10D)</CardTitle>
         </CardHeader>
-        <CardContent className={`grid gap-3 ${presentationMode ? "md:grid-cols-3" : "md:grid-cols-3 xl:grid-cols-3"}`}>
+        <CardContent className={`grid gap-3 ${presentationMode ? "md:grid-cols-4" : "md:grid-cols-4 xl:grid-cols-4"}`}>
           <div className={`rounded border p-3 ${mer < 2.5 ? "animate-pulse border-[#EA4335]/70 bg-[#EA4335]/10" : "border-[#10B981]/40 bg-[#10B981]/10"}`}>
             <p className="text-xs text-slate-300">MER Global (Real-time)</p>
             <p className="text-2xl font-semibold text-white">{mer.toFixed(2)}x</p>
@@ -225,6 +235,13 @@ export function CommandCenterCeoView({ data, onDrillDown, presentationMode }: Co
             <p className="text-[11px] text-slate-400">
               vs media 24h ({salesVelocityDeltaPct >= 0 ? "+" : ""}
               {salesVelocityDeltaPct.toFixed(1)}%)
+            </p>
+          </div>
+          <div className="rounded border border-[#10B981]/40 bg-[#10B981]/10 p-3">
+            <p className="text-xs text-slate-300">Valor de Mercado Estimado da Holding</p>
+            <p className="text-2xl font-semibold text-white">{currency(equity.estimatedValuation)}</p>
+            <p className="text-[11px] text-slate-400">
+              Equity 12m + sentimento {sentiment.demandMoreSophisticated ? "exige tese sofisticada" : "estavel"}
             </p>
           </div>
         </CardContent>

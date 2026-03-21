@@ -15,6 +15,7 @@ import {
 } from "@/lib/copy/big-idea-vault";
 import { suggestHookVariationsFromHistory } from "@/lib/copy/hook-suggestion-engine";
 import { safeDivide } from "@/lib/metrics/kpis";
+import { computeMarketSentimentTracker } from "@/lib/metrics/corporate-intelligence";
 import type { WarRoomData } from "@/lib/war-room/types";
 
 function shelfLifeColor(saturation: number) {
@@ -421,6 +422,7 @@ export function CopyResearchModule() {
     .sort((a, b) => b.realRoas - a.realRoas)
     .slice(0, 8);
   const hookSuggestions = useMemo(() => suggestHookVariationsFromHistory(data.liveAdsTracking, 6), [data.liveAdsTracking]);
+  const sentiment = useMemo(() => computeMarketSentimentTracker(data), [data]);
 
   async function copyNamingToClipboard() {
     if (!namingPreview.valid) {
@@ -471,6 +473,35 @@ export function CopyResearchModule() {
             <p className="mb-1 text-xs uppercase text-slate-400">Mecanismo Unico da Solucao</p>
             <p>{copyModule.uniqueMechanismSolution}</p>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Market Sentiment & Sophistication Tracker</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm">
+          <div className="grid gap-2 md:grid-cols-4">
+            <div className="rounded border border-white/10 bg-white/5 p-2 text-xs">
+              <p className="text-slate-400">Sofisticacao sugerida</p>
+              <p className="text-slate-100">Nivel {sentiment.level}/5</p>
+            </div>
+            <div className="rounded border border-white/10 bg-white/5 p-2 text-xs">
+              <p className="text-slate-400">CTR promessa direta</p>
+              <p className={sentiment.directTrend < 0 ? "text-[#EA4335]" : "text-slate-100"}>{sentiment.directCtr.toFixed(2)}%</p>
+            </div>
+            <div className="rounded border border-white/10 bg-white/5 p-2 text-xs">
+              <p className="text-slate-400">CTR mecanismo indireto</p>
+              <p className={sentiment.indirectTrend > 0 ? "text-[#10B981]" : "text-slate-100"}>{sentiment.indirectCtr.toFixed(2)}%</p>
+            </div>
+            <div className="rounded border border-white/10 bg-white/5 p-2 text-xs">
+              <p className="text-slate-400">Recomendacao</p>
+              <p className={sentiment.demandMoreSophisticated ? "text-[#FF9900]" : "text-[#10B981]"}>
+                {sentiment.demandMoreSophisticated ? "Migrar para indireto" : "Manter mix atual"}
+              </p>
+            </div>
+          </div>
+          <div className="rounded border border-white/10 bg-black/30 p-2 text-xs text-slate-200">{sentiment.recommendation}</div>
         </CardContent>
       </Card>
 
