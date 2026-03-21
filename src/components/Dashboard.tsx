@@ -314,12 +314,19 @@ export default function Dashboard({ data, users, session, initialSection }: Dash
 
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
+    let cancelled = false;
     void (async () => {
-      unsubscribe = await subscribeWarRoomRealtime(() => {
+      const realtimeUnsubscribe = await subscribeWarRoomRealtime(() => {
         void fetchLatestData();
       });
+      if (cancelled) {
+        realtimeUnsubscribe();
+        return;
+      }
+      unsubscribe = realtimeUnsubscribe;
     })();
     return () => {
+      cancelled = true;
       if (unsubscribe) {
         unsubscribe();
       }

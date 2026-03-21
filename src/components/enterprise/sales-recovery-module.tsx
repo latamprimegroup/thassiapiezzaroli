@@ -156,8 +156,11 @@ export function SalesRecoveryModule() {
       body: JSON.stringify(body),
     }).catch(() => null);
     setSaving(false);
-    if (!response?.ok) {
-      const data = (await response?.json().catch(() => null)) as { error?: string } | null;
+    if (!response) {
+      throw new Error("Falha de rede ao comunicar com o Sniper CRM.");
+    }
+    if (!response.ok) {
+      const data = (await response.json().catch(() => null)) as { error?: string } | null;
       throw new Error(data?.error || "Falha na operacao.");
     }
     return response.json().catch(() => null);
