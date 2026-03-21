@@ -116,8 +116,14 @@ function readSupabaseAuthSession(cookieList: Array<{ name: string; value: string
   }
 
   for (const accessToken of candidateTokens) {
+    if (!isSupabaseJwtSignatureValid(accessToken)) {
+      continue;
+    }
     const claims = parseJwtClaims(accessToken);
     if (!claims) {
+      continue;
+    }
+    if (!isJwtTimeWindowValid(claims)) {
       continue;
     }
     const roleCandidate = readRoleFromClaims(claims);
@@ -187,6 +193,59 @@ function parseJwtClaims(token: string): Record<string, unknown> | null {
   } catch {
     return null;
   }
+}
+
+function parseJwtHeader(token: string): Record<string, unknown> | null {
+  const header = token.split(".")[0];
+  if (!header) {
+    return null;
+  }
+  try {
+    return JSON.parse(Buffer.from(header, "base64url").toString("utf8")) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function isSupabaseJwtSignatureValid(token: string) {
+  const secret = process.env.SUPABASE_JWT_SECRET?.trim();
+  if (!secret) {
+    return false;
+  }
+  const parts = token.split(".");
+  if (parts.length !== 3) {
+    return false;
+  }
+  const [headerRaw, payloadRaw, signatureRaw] = parts;
+  const header = parseJwtHeader(token);
+  if (!header) {
+    return false;
+  }
+  const algorithm = typeof header.alg === "string" ? header.alg.toUpperCase() : "";
+  if (algorithm !== "HS256") {
+    return false;
+  }
+  const signedPayload = `${headerRaw}.${payloadRaw}`;
+  const expected = createHmac("sha256", secret).update(signedPayload).digest("base64url");
+  const expectedBuffer = Buffer.from(expected, "utf8");
+  const incomingBuffer = Buffer.from(signatureRaw, "utf8");
+  if (expectedBuffer.length !== incomingBuffer.length) {
+    return false;
+  }
+  return timingSafeEqual(expectedBuffer, incomingBuffer);
+}
+
+function isJwtTimeWindowValid(claims: Record<string, unknown>) {
+  const nowSec = Math.floor(Date.now() / 1000);
+  const exp = typeof claims.exp === "number" ? claims.exp : Number(claims.exp);
+  const nbf = typeof claims.nbf === "number" ? claims.nbf : Number(claims.nbf);
+  if (Number.isFinite(exp) && nowSec >= exp) {
+    return false;
+  }
+  if (Number.isFinite(nbf) && nowSec < nbf) {
+    return false;
+  }
+  return true;
 }
 
 function readRoleFromClaims(claims: Record<string, unknown>): UserRole | null {
