@@ -596,6 +596,7 @@ export async function moveChatStage(params: {
   if (!includeAll && chat.ownerUserId !== params.session.userId) {
     throw new Error("Nao autorizado para mover este lead.");
   }
+  const wasAlreadySold = chat.stage === "vendido";
   const updated = await updateSniperChatStage({
     chatId: params.chatId,
     stage: params.stage,
@@ -614,7 +615,7 @@ export async function moveChatStage(params: {
     note: `Kanban movido para ${params.stage}.`,
   });
 
-  if (params.stage === "vendido") {
+  if (params.stage === "vendido" && !wasAlreadySold) {
     const grossRevenue = Math.max(0, Number(params.grossRevenue ?? 0));
     const managerUserId = updated.profile.managerUserId || updated.ownerUserId;
     const managerUser = getDemoUserById(managerUserId);
@@ -667,6 +668,15 @@ export async function moveChatStage(params: {
         `Gestor trafego: ${managerName}`,
       ].join(" | "),
     );
+  } else if (params.stage === "vendido" && wasAlreadySold) {
+    await appendAudit({
+      chatId: updated.id,
+      actorUserId: params.session.userId,
+      actorUserName: user?.name ?? params.session.userId,
+      actorRole: params.session.role,
+      eventType: "sale_registered",
+      note: "Registro de venda ignorado por idempotencia (lead ja estava em vendido).",
+    });
   }
   return updated;
 }

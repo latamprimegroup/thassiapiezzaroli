@@ -131,14 +131,16 @@ export function CommandCenterModule({ actorName, actorRole }: CommandCenterModul
   useEffect(() => {
     let active = true;
     void (async () => {
-      const response = await fetch("/api/command-center/tasks", { cache: "no-store" });
-      if (!response.ok || !active) {
-        return;
-      }
-      const payload = (await response.json()) as { tasks?: DemandTask[] };
-      if (active && Array.isArray(payload.tasks) && payload.tasks.length > 0) {
-        setTasks(payload.tasks);
-      }
+      try {
+        const response = await fetch("/api/command-center/tasks", { cache: "no-store" });
+        if (!response.ok || !active) {
+          return;
+        }
+        const payload = (await response.json().catch(() => null)) as { tasks?: DemandTask[] } | null;
+        if (active && Array.isArray(payload?.tasks) && payload.tasks.length > 0) {
+          setTasks(payload.tasks);
+        }
+      } catch {}
     })();
     return () => {
       active = false;
@@ -453,8 +455,8 @@ export function CommandCenterModule({ actorName, actorRole }: CommandCenterModul
         note: `Aprovado por ${actorName} (${actorRole}).`,
         task: currentTask,
       }),
-    });
-    if (!response.ok) {
+    }).catch(() => null);
+    if (!response?.ok) {
       addActivity("COO", actorName, "falhou ao aprovar tarefa", taskId, "sem permissao ou task ausente");
       return;
     }

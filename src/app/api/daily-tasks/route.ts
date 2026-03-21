@@ -5,13 +5,18 @@ import { getDemoUserById } from "@/lib/auth/users";
 
 export const runtime = "nodejs";
 
+const DAILY_TASK_ADMIN_ROLES = new Set(["ceo", "techAdmin", "ctoDev", "financeManager", "cfo"]);
+
 export async function GET() {
   const session = await getSessionFromCookies();
   if (!session) {
     return NextResponse.json({ error: "Nao autenticado." }, { status: 401 });
   }
   const records = await listDailyTasks(120);
-  return NextResponse.json({ records });
+  const visibleRecords = DAILY_TASK_ADMIN_ROLES.has(session.role)
+    ? records
+    : records.filter((record) => record.userId === session.userId);
+  return NextResponse.json({ records: visibleRecords });
 }
 
 export async function POST(request: Request) {

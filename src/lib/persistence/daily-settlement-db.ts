@@ -349,7 +349,7 @@ export async function incrementDailySettlementSale(input: IncrementSaleInput) {
             nullif(daily_settlements.production_feedback, ''),
             nullif(excluded.production_feedback, '')
           ),
-          net_profit = ((daily_settlements.gross_revenue + excluded.gross_revenue) - daily_settlements.ad_spend - ((daily_settlements.gross_revenue + excluded.gross_revenue) * 0.15)),
+          net_profit = daily_settlements.net_profit,
           updated_at = excluded.updated_at
         returning *
         `,
@@ -368,8 +368,27 @@ export async function incrementDailySettlementSale(input: IncrementSaleInput) {
           now,
         ],
       );
+      const createdRecord = toRecord(created.rows[0] as Record<string, unknown>);
+      const correctedNetProfit = calculateEstimatedNetProfit({
+        grossRevenue: createdRecord.grossRevenue,
+        adSpend: createdRecord.adSpend,
+      }).netProfit;
+      if (Math.abs(correctedNetProfit - createdRecord.netProfit) > 0.0001) {
+        const corrected = await client.query(
+          `
+          update daily_settlements
+          set net_profit = $3,
+              updated_at = $4::timestamptz
+          where user_id = $1 and settlement_date = $2::date
+          returning *
+          `,
+          [input.userId, date, correctedNetProfit, now],
+        );
+        await client.query("commit");
+        return toRecord(corrected.rows[0] as Record<string, unknown>);
+      }
       await client.query("commit");
-      return toRecord(created.rows[0] as Record<string, unknown>);
+      return createdRecord;
     } catch (error) {
       await client.query("rollback");
       throw error;

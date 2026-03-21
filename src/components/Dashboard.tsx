@@ -238,7 +238,13 @@ export default function Dashboard({ data, users, session, initialSection }: Dash
 
   const permissions = rolePermissions[sessionState.role];
   const ActiveRoleIcon = permissions.icon;
-  const activeUser = users.find((user) => user.id === sessionState.userId) ?? users[0];
+  const activeUser =
+    users.find((user) => user.id === sessionState.userId) ??
+    users[0] ?? {
+      id: sessionState.userId,
+      name: "Operador",
+      role: sessionState.role,
+    };
   const onboardingStorageKey = useMemo(
     () => `war-room-onboarding:v1:${sessionState.userId}:${sessionState.role}`,
     [sessionState.role, sessionState.userId],
@@ -486,6 +492,8 @@ export default function Dashboard({ data, users, session, initialSection }: Dash
         router.push(switchPayload.redirectTo);
       }
       void fetchDailyTasks();
+    } catch {
+      addActivity(permissions.label, activeUser.name, "falhou ao trocar usuario", activeSection, "erro de rede ou sessao");
     } finally {
       setIsSwitchingUser(false);
     }

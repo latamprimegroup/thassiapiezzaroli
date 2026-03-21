@@ -8,17 +8,15 @@ export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   const demoSwitchEnabled = process.env.WAR_ROOM_ENABLE_DEMO_SWITCH_USER === "true";
-  if (process.env.NODE_ENV === "production" && !demoSwitchEnabled) {
+  if (!demoSwitchEnabled) {
     return NextResponse.json(
-      { error: "Switch de usuario desabilitado em producao." },
+      { error: "Switch de usuario desabilitado." },
       { status: 403 },
     );
   }
-  if (process.env.NODE_ENV === "production" && demoSwitchEnabled) {
-    const authorized = await isOpsAuthorized(request, ["ceo", "techAdmin", "ctoDev"]);
-    if (!authorized) {
-      return NextResponse.json({ error: "Nao autorizado para switch de usuario." }, { status: 401 });
-    }
+  const authorized = await isOpsAuthorized(request, ["ceo", "techAdmin", "ctoDev"]);
+  if (!authorized) {
+    return NextResponse.json({ error: "Nao autorizado para switch de usuario." }, { status: 401 });
   }
 
   const payload = (await request.json().catch(() => ({}))) as { userId?: string };

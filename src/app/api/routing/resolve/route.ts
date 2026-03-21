@@ -4,6 +4,7 @@ import { getSessionFromCookies } from "@/lib/auth/session";
 import { secureEquals } from "@/lib/security/secure-compare";
 
 export const runtime = "nodejs";
+const FORWARDED_QUERY_KEY_PATTERN = /^(utm_[a-z0-9_]+|fbclid|gclid|ttclid|wbraid|gbraid|sck|subid|campaign_id)$/i;
 
 export async function GET(request: Request) {
   const expectedApiKey = process.env.WAR_ROOM_WEBHOOK_API_KEY;
@@ -14,7 +15,7 @@ export async function GET(request: Request) {
     expectedApiKey && (secureEquals(apiKey, expectedApiKey) || secureEquals(bearer, expectedApiKey)),
   );
   const session = await getSessionFromCookies();
-  if (!session && !machineAuthorized && process.env.NODE_ENV === "production") {
+  if (!session && !machineAuthorized) {
     return NextResponse.json({ error: "Nao autorizado." }, { status: 401 });
   }
   const url = new URL(request.url);
@@ -29,7 +30,7 @@ export async function GET(request: Request) {
 
   const passthrough = new URLSearchParams();
   for (const [key, value] of url.searchParams.entries()) {
-    if (key === "offerId") {
+    if (key === "offerId" || !FORWARDED_QUERY_KEY_PATTERN.test(key)) {
       continue;
     }
     passthrough.set(key, value);

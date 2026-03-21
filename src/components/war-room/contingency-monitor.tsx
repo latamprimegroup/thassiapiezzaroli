@@ -33,20 +33,26 @@ export function ContingencyMonitor({ contingency }: ContingencyMonitorProps) {
     }
 
     hadCritical.current = true;
-
-    const context = new window.AudioContext();
-    const oscillator = context.createOscillator();
-    const gain = context.createGain();
-    oscillator.type = "square";
-    oscillator.frequency.value = 860;
-    gain.gain.value = 0.02;
-    oscillator.connect(gain);
-    gain.connect(context.destination);
-    oscillator.start();
-    oscillator.stop(context.currentTime + 0.18);
+    let context: AudioContext | null = null;
+    try {
+      context = new window.AudioContext();
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.type = "square";
+      oscillator.frequency.value = 860;
+      gain.gain.value = 0.02;
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start();
+      oscillator.stop(context.currentTime + 0.18);
+    } catch {
+      return;
+    }
 
     return () => {
-      void context.close();
+      if (context) {
+        void context.close();
+      }
     };
   }, [criticalCount]);
 

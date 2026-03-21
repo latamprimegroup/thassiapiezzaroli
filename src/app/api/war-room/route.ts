@@ -9,7 +9,9 @@ export const runtime = "nodejs";
 
 export async function GET() {
   const session = await getSessionFromCookies();
-  if (!session && process.env.NODE_ENV === "production") {
+  const requireSession =
+    process.env.WAR_ROOM_REQUIRE_SESSION === "true" || process.env.NODE_ENV === "production";
+  if (!session && requireSession) {
     return NextResponse.json({ error: "Nao autenticado." }, { status: 401 });
   }
   const role: UserRole = session?.role ?? "videoEditor";

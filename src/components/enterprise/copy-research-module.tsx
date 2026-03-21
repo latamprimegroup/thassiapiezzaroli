@@ -387,27 +387,34 @@ export function CopyResearchModule({
     if (!selectedIdea) {
       return;
     }
+    const escapeHtml = (value: string) =>
+      value
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
     const w = window.open("", "_blank", "noopener,noreferrer,width=900,height=700");
     if (!w) {
       return;
     }
     w.document.write(`
       <html>
-        <head><title>Briefing ${selectedIdea.id}</title></head>
+        <head><title>Briefing ${escapeHtml(selectedIdea.id)}</title></head>
         <body style="font-family: Arial, sans-serif; padding: 20px;">
-          <h1>Briefing de Edicao - ${selectedIdea.title}</h1>
-          <p><strong>The Hook:</strong> ${selectedIdea.hook}</p>
-          <p><strong>Mecanismo Unico:</strong> ${selectedIdea.uniqueMechanismSolution}</p>
-          <p><strong>Novidade Intelectual:</strong> ${selectedIdea.intellectualNovelty}</p>
-          <p><strong>Emocao-Alvo:</strong> ${selectedIdea.primaryEmotion}</p>
+          <h1>Briefing de Edicao - ${escapeHtml(selectedIdea.title)}</h1>
+          <p><strong>The Hook:</strong> ${escapeHtml(selectedIdea.hook)}</p>
+          <p><strong>Mecanismo Unico:</strong> ${escapeHtml(selectedIdea.uniqueMechanismSolution)}</p>
+          <p><strong>Novidade Intelectual:</strong> ${escapeHtml(selectedIdea.intellectualNovelty)}</p>
+          <p><strong>Emocao-Alvo:</strong> ${escapeHtml(selectedIdea.primaryEmotion)}</p>
           <p><strong>Provas:</strong></p>
           <ul>
-            <li>${selectedIdea.proofSocialUrl}</li>
-            <li>${selectedIdea.proofScientificUrl}</li>
-            <li>${selectedIdea.proofHistoricalUrl}</li>
+            <li>${escapeHtml(selectedIdea.proofSocialUrl)}</li>
+            <li>${escapeHtml(selectedIdea.proofScientificUrl)}</li>
+            <li>${escapeHtml(selectedIdea.proofHistoricalUrl)}</li>
           </ul>
           <p><strong>Lead (Markdown):</strong></p>
-          <pre style="white-space: pre-wrap;">${script.replaceAll("<", "&lt;")}</pre>
+          <pre style="white-space: pre-wrap;">${escapeHtml(script)}</pre>
         </body>
       </html>
     `);

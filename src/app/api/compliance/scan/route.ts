@@ -36,7 +36,7 @@ function isPrivateIpv6(hostname: string) {
 function isHostAllowed(hostname: string) {
   const allowedHosts = parseAllowedHosts();
   if (allowedHosts.length === 0) {
-    return process.env.NODE_ENV !== "production";
+    return process.env.WAR_ROOM_ALLOW_INSECURE_DEV_SCANNER === "true" && process.env.NODE_ENV !== "production";
   }
   return allowedHosts.some((allowedHost) => hostname === allowedHost || hostname.endsWith(`.${allowedHost}`));
 }

@@ -110,19 +110,23 @@ export function TechCroModule() {
     if (!AudioContextImpl) {
       return;
     }
-    const context = new AudioContextImpl();
-    const oscillator = context.createOscillator();
-    const gain = context.createGain();
-    oscillator.type = "square";
-    oscillator.frequency.value = 760;
-    gain.gain.value = 0.02;
-    oscillator.connect(gain);
-    gain.connect(context.destination);
-    oscillator.start();
-    oscillator.stop(context.currentTime + 0.18);
-    oscillator.onended = () => {
-      void context.close();
-    };
+    try {
+      const context = new AudioContextImpl();
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.type = "square";
+      oscillator.frequency.value = 760;
+      gain.gain.value = 0.02;
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start();
+      oscillator.stop(context.currentTime + 0.18);
+      oscillator.onended = () => {
+        void context.close();
+      };
+    } catch {
+      // Ignora falhas de AudioContext para nao quebrar UX.
+    }
   }, [fortress.siren.active, intelligence.gatewayHealth.alert, intelligence.gatewayHealth.currentApproval, tech.lcpSeconds]);
 
   useEffect(() => {

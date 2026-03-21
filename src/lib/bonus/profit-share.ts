@@ -6,6 +6,8 @@ import type {
   MonthlyBonusPayoutRow,
   MonthlyProfitRow,
 } from "@/lib/bonus/types";
+import { fromCents, toCents } from "@/lib/metrics/money";
+import { toDateKeyInBusinessTimezone } from "@/lib/time/war-room-clock";
 
 export const DEFAULT_LADDER_RULES: CommissionLadderRule[] = [
   { id: "tier-2pct", minNetProfit: 0, commissionPct: 2, bonusFixed: 0 },
@@ -37,9 +39,8 @@ export function createDefaultBonusSettings(managerRules: ManagerCommissionRule[]
 }
 
 export function monthKeyFromDate(value: Date | string) {
-  const date = typeof value === "string" ? new Date(value) : value;
-  const safe = Number.isNaN(date.getTime()) ? new Date() : date;
-  return `${safe.getFullYear()}-${String(safe.getMonth() + 1).padStart(2, "0")}`;
+  const dateKey = toDateKeyInBusinessTimezone(value);
+  return dateKey.slice(0, 7);
 }
 
 export function monthRangeFromKey(monthKey?: string) {
@@ -48,13 +49,16 @@ export function monthRangeFromKey(monthKey?: string) {
   const [yearRaw, monthRaw] = key.split("-");
   const year = Number(yearRaw);
   const month = Number(monthRaw);
-  const start = new Date(year, month - 1, 1);
-  const end = new Date(year, month, 0);
-  const dateOnly = (value: Date) => value.toISOString().slice(0, 10);
+  const normalizedYear = Number.isFinite(year) ? year : Number(fallback.slice(0, 4));
+  const normalizedMonth = Number.isFinite(month) && month >= 1 && month <= 12 ? month : Number(fallback.slice(5, 7));
+  const normalizedKey = `${normalizedYear}-${String(normalizedMonth).padStart(2, "0")}`;
+  const endDay = new Date(Date.UTC(normalizedYear, normalizedMonth, 0)).getUTCDate();
+  const startDate = `${normalizedYear}-${String(normalizedMonth).padStart(2, "0")}-01`;
+  const endDate = `${normalizedYear}-${String(normalizedMonth).padStart(2, "0")}-${String(endDay).padStart(2, "0")}`;
   return {
-    monthKey: key,
-    startDate: dateOnly(start),
-    endDate: dateOnly(end),
+    monthKey: normalizedKey,
+    startDate,
+    endDate,
   };
 }
 
@@ -80,8 +84,9 @@ export function resolveCommissionForProfit(params: {
   const tierPct = tier?.commissionPct ?? 0;
   const bonusFixed = tier?.bonusFixed ?? 0;
   const commissionPctApplied = Math.max(overridePct, tierPct);
-  const commissionValue = netProfit > 0 ? (netProfit * commissionPctApplied) / 100 : 0;
-  const payoutValue = commissionValue + (netProfit > 0 ? bonusFixed : 0);
+  const commissionValue =
+    netProfit > 0 ? fromCents(Math.round((toCents(netProfit) * commissionPctApplied) / 100)) : 0;
+  const payoutValue = netProfit > 0 ? fromCents(toCents(commissionValue) + toCents(bonusFixed)) : 0;
   return {
     commissionPctApplied,
     bonusFixedApplied: netProfit > 0 ? bonusFixed : 0,

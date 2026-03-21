@@ -90,7 +90,11 @@ export function FinanceComplianceModule() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ urls }),
-      });
+      }).catch(() => null);
+      if (!response) {
+        addActivity("Finance", "Compliance AI", "falhou scanner de compliance", "ofertas", "falha de rede");
+        return;
+      }
       const payload = (await response.json().catch(() => null)) as { results?: ComplianceScanResult[] } | null;
       if (response.ok && payload?.results) {
         setScanResults(payload.results);
@@ -98,6 +102,8 @@ export function FinanceComplianceModule() {
       } else {
         addActivity("Finance", "Compliance AI", "falhou scanner de compliance", "ofertas", "erro de endpoint");
       }
+    } catch {
+      addActivity("Finance", "Compliance AI", "falhou scanner de compliance", "ofertas", "erro inesperado");
     } finally {
       setIsScanning(false);
     }
