@@ -1,5 +1,11 @@
 import { WAR_ROOM_OPS_CONSTANTS } from "@/lib/config/war-room-ops.constants";
-import { listDeadLetterEvents } from "@/lib/persistence/war-room-ops-store";
+import {
+  listDeadLetterEvents,
+  listOpsIncidents,
+  getOpsIncidentMetrics,
+  resolveOpsIncidentByKey,
+  upsertOpsIncident,
+} from "@/lib/persistence/war-room-ops-store";
 import { safeDivide } from "@/lib/metrics/kpis";
 import { getOpsJobStats } from "@/lib/persistence/war-room-ops-store";
 
@@ -34,6 +40,29 @@ type ObservabilitySnapshot = {
     estimatedMttrMinutes: number;
   };
   slos: SloItem[];
+  incidentCenter: {
+    openCount: number;
+    resolvedCount: number;
+    breachedOpenCount: number;
+    mttrBySquad: Array<{
+      squad: "techCro" | "trafficMedia" | "copyResearch" | "ceoFinance" | "platform";
+      incidents: number;
+      mttrMinutes: number;
+    }>;
+    recent: Array<{
+      id: string;
+      squad: "techCro" | "trafficMedia" | "copyResearch" | "ceoFinance" | "platform";
+      severity: "warning" | "critical";
+      status: "open" | "resolved";
+      title: string;
+      description: string;
+      startedAt: string;
+      resolvedAt: string;
+      slaTargetMinutes: number;
+      slaBreached: boolean;
+      resolutionMinutes: number;
+    }>;
+  };
   overallStatus: SloStatus;
 };
 
@@ -50,6 +79,30 @@ function toStatus(score: { pass: boolean; warning?: boolean }): SloStatus {
 function maxStatus(a: SloStatus, b: SloStatus): SloStatus {
   const rank: Record<SloStatus, number> = { pass: 0, warning: 1, breach: 2 };
   return rank[a] >= rank[b] ? a : b;
+}
+
+async function syncSloIncident(params: {
+  key: string;
+  status: SloStatus;
+  title: string;
+  description: string;
+  squad: "techCro" | "trafficMedia" | "copyResearch" | "ceoFinance" | "platform";
+  source: string;
+  slaTargetMinutes: number;
+}) {
+  if (params.status === "pass") {
+    await resolveOpsIncidentByKey(params.key);
+    return;
+  }
+  await upsertOpsIncident({
+    key: params.key,
+    squad: params.squad,
+    severity: params.status === "breach" ? "critical" : "warning",
+    title: params.title,
+    description: params.description,
+    source: params.source,
+    slaTargetMinutes: params.slaTargetMinutes,
+  });
 }
 
 export async function getWarRoomObservabilitySnapshot(): Promise<ObservabilitySnapshot> {
@@ -111,6 +164,51 @@ export async function getWarRoomObservabilitySnapshot(): Promise<ObservabilitySn
     },
   ];
 
+  await Promise.all([
+    syncSloIncident({
+      key: "slo:queueDrain",
+      status: queueDrainStatus,
+      title: "Queue Drain acima do SLO",
+      description: `Tempo de drenagem estimado ${estimatedDrainMinutes.toFixed(1)} min.`,
+      squad: "techCro",
+      source: "ops-observability",
+      slaTargetMinutes: WAR_ROOM_OPS_CONSTANTS.observability.incidents.squadSlaMinutes.techCro,
+    }),
+    syncSloIncident({
+      key: "slo:errorRate",
+      status: errorRateStatus,
+      title: "Error Rate acima do SLO",
+      description: `Taxa de erro atual ${errorRatePct.toFixed(2)}%.`,
+      squad: "trafficMedia",
+      source: "ops-observability",
+      slaTargetMinutes: WAR_ROOM_OPS_CONSTANTS.observability.incidents.squadSlaMinutes.trafficMedia,
+    }),
+    syncSloIncident({
+      key: "slo:mttr",
+      status: mttrStatus,
+      title: "MTTR estimado acima do alvo",
+      description: `MTTR estimado ${estimatedMttrMinutes} minutos.`,
+      squad: "techCro",
+      source: "ops-observability",
+      slaTargetMinutes: WAR_ROOM_OPS_CONSTANTS.observability.incidents.squadSlaMinutes.techCro,
+    }),
+    syncSloIncident({
+      key: "pipeline:deadletter",
+      status:
+        deadLetters.length >= WAR_ROOM_OPS_CONSTANTS.observability.incidents.deadLetterIncidentThreshold
+          ? "breach"
+          : "pass",
+      title: "Dead-letter events detectados",
+      description: `${deadLetters.length} eventos em DLQ aguardando tratamento.`,
+      squad: "platform",
+      source: "ops-observability",
+      slaTargetMinutes: WAR_ROOM_OPS_CONSTANTS.observability.incidents.squadSlaMinutes.platform,
+    }),
+  ]);
+
+  const incidentMetrics = await getOpsIncidentMetrics(WAR_ROOM_OPS_CONSTANTS.observability.incidents.historyRetentionDays);
+  const recentIncidents = await listOpsIncidents({ limit: WAR_ROOM_OPS_CONSTANTS.observability.incidents.maxRecentItems });
+
   const overallStatus = slos.reduce<SloStatus>((acc, item) => maxStatus(acc, item.status), "pass");
 
   return {
@@ -127,6 +225,25 @@ export async function getWarRoomObservabilitySnapshot(): Promise<ObservabilitySn
       estimatedMttrMinutes,
     },
     slos,
+    incidentCenter: {
+      openCount: incidentMetrics.openCount,
+      resolvedCount: incidentMetrics.resolvedCount,
+      breachedOpenCount: incidentMetrics.breachedOpenCount,
+      mttrBySquad: incidentMetrics.mttrBySquad,
+      recent: recentIncidents.map((incident) => ({
+        id: incident.id,
+        squad: incident.squad,
+        severity: incident.severity,
+        status: incident.status,
+        title: incident.title,
+        description: incident.description,
+        startedAt: incident.startedAt,
+        resolvedAt: incident.resolvedAt,
+        slaTargetMinutes: incident.slaTargetMinutes,
+        slaBreached: incident.slaBreached,
+        resolutionMinutes: incident.resolutionMinutes,
+      })),
+    },
     overallStatus,
   };
 }

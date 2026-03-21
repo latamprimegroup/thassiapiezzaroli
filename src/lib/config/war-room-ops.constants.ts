@@ -72,6 +72,18 @@ export const WAR_ROOM_OPS_CONSTANTS = {
       },
       channels: ["slack", "whatsapp", "push"] as const,
     },
+    incidents: {
+      historyRetentionDays: 30,
+      maxRecentItems: 25,
+      deadLetterIncidentThreshold: 1,
+      squadSlaMinutes: {
+        techCro: 20,
+        trafficMedia: 30,
+        copyResearch: 90,
+        ceoFinance: 45,
+        platform: 30,
+      },
+    },
   },
   vault: {
     checkIntervalMinutes: 30,

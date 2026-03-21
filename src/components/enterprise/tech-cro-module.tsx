@@ -32,6 +32,29 @@ type OpsObservabilitySnapshot = {
     status: "pass" | "warning" | "breach";
     note: string;
   }>;
+  incidentCenter: {
+    openCount: number;
+    resolvedCount: number;
+    breachedOpenCount: number;
+    mttrBySquad: Array<{
+      squad: "techCro" | "trafficMedia" | "copyResearch" | "ceoFinance" | "platform";
+      incidents: number;
+      mttrMinutes: number;
+    }>;
+    recent: Array<{
+      id: string;
+      squad: "techCro" | "trafficMedia" | "copyResearch" | "ceoFinance" | "platform";
+      severity: "warning" | "critical";
+      status: "open" | "resolved";
+      title: string;
+      description: string;
+      startedAt: string;
+      resolvedAt: string;
+      slaTargetMinutes: number;
+      slaBreached: boolean;
+      resolutionMinutes: number;
+    }>;
+  };
   overallStatus: "pass" | "warning" | "breach";
 };
 
@@ -128,6 +151,25 @@ export function TechCroModule() {
     return <Badge variant="danger">BREACH</Badge>;
   }
 
+  async function resolveIncident(incidentId: string) {
+    const response = await fetch("/api/ops/incidents", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ incidentId, note: "Resolvido via painel Tech/CRO." }),
+    }).catch(() => null);
+    if (!response?.ok) {
+      return;
+    }
+    const refresh = await fetch("/api/ops/observability", { cache: "no-store" }).catch(() => null);
+    if (!refresh?.ok) {
+      return;
+    }
+    const payload = (await refresh.json().catch(() => null)) as { snapshot?: OpsObservabilitySnapshot } | null;
+    if (payload?.snapshot) {
+      setOpsObservability(payload.snapshot);
+    }
+  }
+
   return (
     <section className="war-fade-in space-y-4">
       <Card>
@@ -197,9 +239,81 @@ export function TechCroModule() {
                   </div>
                 ))}
               </div>
+              <div className="rounded-md border border-white/10 bg-white/5 p-2 text-xs">
+                <p className="text-slate-300">
+                  Incidentes abertos: {opsObservability.incidentCenter.openCount} | Resolvidos:{" "}
+                  {opsObservability.incidentCenter.resolvedCount} | SLA breached:{" "}
+                  {opsObservability.incidentCenter.breachedOpenCount}
+                </p>
+              </div>
               <p className="text-[11px] text-slate-500">
                 Snapshot: {new Date(opsObservability.generatedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
               </p>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Incident Center (Historico + MTTR por Squad)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {!opsObservability ? (
+            <div className="rounded-md border border-white/10 bg-white/5 p-3 text-xs text-slate-400">
+              Carregando incident center...
+            </div>
+          ) : (
+            <>
+              <div className="grid gap-2 md:grid-cols-5">
+                {opsObservability.incidentCenter.mttrBySquad.map((row) => (
+                  <div key={row.squad} className="rounded-md border border-white/10 bg-white/5 p-2 text-xs">
+                    <p className="text-slate-300">{row.squad}</p>
+                    <p className="text-slate-100">{row.mttrMinutes.toFixed(1)} min MTTR</p>
+                    <p className="text-[11px] text-slate-500">{row.incidents} resolvidos</p>
+                  </div>
+                ))}
+              </div>
+              <div className="space-y-2">
+                {opsObservability.incidentCenter.recent.length === 0 ? (
+                  <div className="rounded-md border border-white/10 bg-white/5 p-2 text-xs text-slate-400">
+                    Sem incidentes registrados no periodo.
+                  </div>
+                ) : (
+                  opsObservability.incidentCenter.recent.slice(0, 10).map((incident) => (
+                    <div key={incident.id} className="rounded-md border border-white/10 bg-white/5 p-2 text-xs">
+                      <div className="mb-1 flex items-center justify-between gap-2">
+                        <p className="text-slate-100">{incident.title}</p>
+                        <div className="flex items-center gap-1">
+                          <Badge variant={incident.severity === "critical" ? "danger" : "warning"}>
+                            {incident.severity.toUpperCase()}
+                          </Badge>
+                          <Badge variant={incident.status === "open" ? "sky" : "success"}>
+                            {incident.status.toUpperCase()}
+                          </Badge>
+                          {incident.slaBreached && <Badge variant="danger">SLA BREACHED</Badge>}
+                        </div>
+                      </div>
+                      <p className="text-slate-300">{incident.description}</p>
+                      <p className="mt-1 text-[11px] text-slate-500">
+                        Squad: {incident.squad} | Inicio:{" "}
+                        {new Date(incident.startedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                        {incident.resolvedAt
+                          ? ` | Resolvido em ${incident.resolutionMinutes} min`
+                          : ` | SLA alvo ${incident.slaTargetMinutes} min`}
+                      </p>
+                      {incident.status === "open" && (
+                        <button
+                          onClick={() => void resolveIncident(incident.id)}
+                          className="mt-1 rounded border border-white/20 px-2 py-1 text-[11px] text-slate-300 hover:bg-white/10"
+                        >
+                          Resolver incidente
+                        </button>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
             </>
           )}
         </CardContent>

@@ -2,22 +2,12 @@ import { NextResponse } from "next/server";
 import { processOpsJobQueue } from "@/lib/ops/war-room-ops-worker";
 import { getOpsJobStats } from "@/lib/persistence/war-room-ops-store";
 import { WAR_ROOM_OPS_CONSTANTS } from "@/lib/config/war-room-ops.constants";
+import { isOpsAuthorized } from "@/app/api/ops/_auth";
 
 export const runtime = "nodejs";
 
-function isAuthorized(request: Request) {
-  const expected = process.env.WAR_ROOM_WEBHOOK_API_KEY;
-  if (!expected) {
-    return true;
-  }
-  const apiKey = request.headers.get("x-api-key");
-  const authHeader = request.headers.get("authorization");
-  const bearer = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
-  return apiKey === expected || bearer === expected;
-}
-
 export async function GET(request: Request) {
-  if (!isAuthorized(request)) {
+  if (!(await isOpsAuthorized(request))) {
     return NextResponse.json({ error: "Nao autorizado." }, { status: 401 });
   }
   const result = await processOpsJobQueue(WAR_ROOM_OPS_CONSTANTS.queue.worker.defaultBatchSize);
@@ -25,7 +15,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!isAuthorized(request)) {
+  if (!(await isOpsAuthorized(request))) {
     return NextResponse.json({ error: "Nao autorizado." }, { status: 401 });
   }
   const body = (await request.json().catch(() => ({}))) as { limit?: number };
@@ -37,7 +27,7 @@ export async function POST(request: Request) {
 }
 
 export async function HEAD(request: Request) {
-  if (!isAuthorized(request)) {
+  if (!(await isOpsAuthorized(request))) {
     return new NextResponse(null, { status: 401 });
   }
   const stats = await getOpsJobStats();

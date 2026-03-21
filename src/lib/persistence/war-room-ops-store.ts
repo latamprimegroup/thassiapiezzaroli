@@ -32,6 +32,9 @@ export type TaskApprovalRecord = {
 
 export type OpsJobType = "webhook_ingest";
 export type OpsJobStatus = "pending" | "processing" | "completed" | "failed" | "dead_letter";
+export type OpsIncidentSquad = "techCro" | "trafficMedia" | "copyResearch" | "ceoFinance" | "platform";
+export type OpsIncidentSeverity = "warning" | "critical";
+export type OpsIncidentStatus = "open" | "resolved";
 
 export type OpsJobRecord = {
   id: string;
@@ -47,9 +50,29 @@ export type OpsJobRecord = {
   payload: Record<string, unknown>;
 };
 
+export type OpsIncidentRecord = {
+  id: string;
+  key: string;
+  squad: OpsIncidentSquad;
+  severity: OpsIncidentSeverity;
+  status: OpsIncidentStatus;
+  title: string;
+  description: string;
+  source: string;
+  startedAt: string;
+  lastSeenAt: string;
+  resolvedAt: string;
+  resolutionMinutes: number;
+  resolutionNote: string;
+  resolvedBy: string;
+  slaTargetMinutes: number;
+  slaBreached: boolean;
+};
+
 type OpsStorePayload = {
   webhookEvents: WebhookEventRecord[];
   jobs: OpsJobRecord[];
+  incidents: OpsIncidentRecord[];
   commandCenter: {
     tasks: DemandTask[];
     approvals: TaskApprovalRecord[];
@@ -70,6 +93,7 @@ function defaultStore(): OpsStorePayload {
   return {
     webhookEvents: [],
     jobs: [],
+    incidents: [],
     commandCenter: {
       tasks: [],
       approvals: [],
@@ -89,6 +113,7 @@ async function readStore(): Promise<OpsStorePayload> {
     return {
       webhookEvents: Array.isArray(parsed.webhookEvents) ? parsed.webhookEvents : [],
       jobs: Array.isArray(parsed.jobs) ? parsed.jobs : [],
+      incidents: Array.isArray(parsed.incidents) ? parsed.incidents : [],
       commandCenter: {
         tasks: Array.isArray(parsed.commandCenter?.tasks) ? parsed.commandCenter.tasks : [],
         approvals: Array.isArray(parsed.commandCenter?.approvals) ? parsed.commandCenter.approvals : [],
@@ -319,5 +344,164 @@ export async function getOpsJobStats() {
     failedJobs,
     processedToday,
     lastRunAt: latest?.updatedAt ?? "",
+  };
+}
+
+function shouldSlaBeBreached(startedAt: string, slaTargetMinutes: number) {
+  const startedMs = new Date(startedAt).getTime();
+  if (!Number.isFinite(startedMs) || slaTargetMinutes <= 0) {
+    return false;
+  }
+  return Date.now() - startedMs > slaTargetMinutes * 60_000;
+}
+
+export async function upsertOpsIncident(params: {
+  key: string;
+  squad: OpsIncidentSquad;
+  severity: OpsIncidentSeverity;
+  title: string;
+  description: string;
+  source: string;
+  slaTargetMinutes: number;
+}) {
+  return withStoreMutation((store) => {
+    const now = nowIso();
+    const existingOpenIndex = store.incidents.findIndex((incident) => incident.key === params.key && incident.status === "open");
+    if (existingOpenIndex >= 0) {
+      const current = store.incidents[existingOpenIndex];
+      store.incidents[existingOpenIndex] = {
+        ...current,
+        severity: params.severity,
+        title: params.title,
+        description: params.description,
+        source: params.source,
+        slaTargetMinutes: params.slaTargetMinutes,
+        lastSeenAt: now,
+        slaBreached: shouldSlaBeBreached(current.startedAt, params.slaTargetMinutes),
+      };
+      return store.incidents[existingOpenIndex];
+    }
+
+    const incident: OpsIncidentRecord = {
+      id: `INC-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      key: params.key,
+      squad: params.squad,
+      severity: params.severity,
+      status: "open",
+      title: params.title,
+      description: params.description,
+      source: params.source,
+      startedAt: now,
+      lastSeenAt: now,
+      resolvedAt: "",
+      resolutionMinutes: 0,
+      resolutionNote: "",
+      resolvedBy: "",
+      slaTargetMinutes: params.slaTargetMinutes,
+      slaBreached: false,
+    };
+    store.incidents.unshift(incident);
+    const retentionMs = WAR_ROOM_OPS_CONSTANTS.observability.incidents.historyRetentionDays * 24 * 60 * 60 * 1000;
+    store.incidents = store.incidents
+      .filter((row) => {
+        const reference = row.status === "resolved" ? row.resolvedAt : row.startedAt;
+        const refMs = new Date(reference).getTime();
+        return !Number.isFinite(refMs) || Date.now() - refMs <= retentionMs;
+      })
+      .slice(0, 5000);
+    return incident;
+  });
+}
+
+export async function resolveOpsIncidentByKey(key: string, note = "Resolvido automaticamente pelo sistema.", resolvedBy = "war-room-automation") {
+  return withStoreMutation((store) => {
+    const now = nowIso();
+    const index = store.incidents.findIndex((incident) => incident.key === key && incident.status === "open");
+    if (index < 0) {
+      return null;
+    }
+    const current = store.incidents[index];
+    const startedMs = new Date(current.startedAt).getTime();
+    const resolutionMinutes = Number.isFinite(startedMs) ? Math.max(0, Math.round((Date.now() - startedMs) / 60_000)) : 0;
+    store.incidents[index] = {
+      ...current,
+      status: "resolved",
+      resolvedAt: now,
+      resolutionMinutes,
+      resolutionNote: note,
+      resolvedBy,
+      slaBreached: current.slaBreached || shouldSlaBeBreached(current.startedAt, current.slaTargetMinutes),
+      lastSeenAt: now,
+    };
+    return store.incidents[index];
+  });
+}
+
+export async function resolveOpsIncidentById(incidentId: string, note = "Resolvido manualmente.", resolvedBy = "operator") {
+  return withStoreMutation((store) => {
+    const now = nowIso();
+    const index = store.incidents.findIndex((incident) => incident.id === incidentId && incident.status === "open");
+    if (index < 0) {
+      return null;
+    }
+    const current = store.incidents[index];
+    const startedMs = new Date(current.startedAt).getTime();
+    const resolutionMinutes = Number.isFinite(startedMs) ? Math.max(0, Math.round((Date.now() - startedMs) / 60_000)) : 0;
+    store.incidents[index] = {
+      ...current,
+      status: "resolved",
+      resolvedAt: now,
+      resolutionMinutes,
+      resolutionNote: note,
+      resolvedBy,
+      slaBreached: current.slaBreached || shouldSlaBeBreached(current.startedAt, current.slaTargetMinutes),
+      lastSeenAt: now,
+    };
+    return store.incidents[index];
+  });
+}
+
+export async function listOpsIncidents(params?: { limit?: number; status?: OpsIncidentStatus }) {
+  const store = await readStore();
+  const limit = params?.limit ?? WAR_ROOM_OPS_CONSTANTS.observability.incidents.maxRecentItems;
+  const status = params?.status;
+  return store.incidents
+    .filter((incident) => (status ? incident.status === status : true))
+    .sort((a, b) => {
+      const aRef = a.status === "resolved" ? a.resolvedAt : a.lastSeenAt;
+      const bRef = b.status === "resolved" ? b.resolvedAt : b.lastSeenAt;
+      return bRef.localeCompare(aRef);
+    })
+    .slice(0, limit);
+}
+
+export async function getOpsIncidentMetrics(days = WAR_ROOM_OPS_CONSTANTS.observability.incidents.historyRetentionDays) {
+  const store = await readStore();
+  const sinceMs = Date.now() - days * 24 * 60 * 60 * 1000;
+  const inWindow = store.incidents.filter((incident) => {
+    const ref = incident.status === "resolved" ? incident.resolvedAt : incident.startedAt;
+    const refMs = new Date(ref).getTime();
+    return Number.isFinite(refMs) && refMs >= sinceMs;
+  });
+  const open = inWindow.filter((incident) => incident.status === "open");
+  const resolved = inWindow.filter((incident) => incident.status === "resolved");
+  const breachedOpen = open.filter((incident) => incident.slaBreached || shouldSlaBeBreached(incident.startedAt, incident.slaTargetMinutes)).length;
+
+  const squads: OpsIncidentSquad[] = ["techCro", "trafficMedia", "copyResearch", "ceoFinance", "platform"];
+  const mttrBySquad = squads.map((squad) => {
+    const rows = resolved.filter((incident) => incident.squad === squad && incident.resolutionMinutes > 0);
+    const avg = rows.length > 0 ? rows.reduce((acc, row) => acc + row.resolutionMinutes, 0) / rows.length : 0;
+    return {
+      squad,
+      incidents: rows.length,
+      mttrMinutes: Number(avg.toFixed(1)),
+    };
+  });
+
+  return {
+    openCount: open.length,
+    resolvedCount: resolved.length,
+    breachedOpenCount: breachedOpen,
+    mttrBySquad,
   };
 }
