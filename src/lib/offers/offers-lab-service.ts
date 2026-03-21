@@ -311,9 +311,13 @@ async function notifyScaleReached(offer: OfferWithMetrics) {
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
   if (appUrl) {
+    const internalApiKey = process.env.WAR_ROOM_WEBHOOK_API_KEY || process.env.OFFERS_LAB_API_KEY;
     await fetch(`${appUrl}/api/notify-squad`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(internalApiKey ? { "x-api-key": internalApiKey } : {}),
+      },
       body: JSON.stringify({ message }),
     }).catch(() => undefined);
   }

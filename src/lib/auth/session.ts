@@ -36,6 +36,11 @@ function getSessionSecret() {
   return process.env.WAR_ROOM_SESSION_SECRET ?? "war-room-session-dev-secret";
 }
 
+function isWeakSessionSecret(secret: string) {
+  const minLength = Math.max(12, Number(process.env.WAR_ROOM_MIN_SECRET_LENGTH ?? 24) || 24);
+  return !secret || secret === "war-room-session-dev-secret" || secret.length < minLength;
+}
+
 function sign(value: string) {
   return createHmac("sha256", getSessionSecret()).update(value).digest("base64url");
 }
@@ -71,11 +76,18 @@ function decode(token: string): SessionPayload | null {
 }
 
 export function createSessionToken(userId: string, role: UserRole) {
+  const secret = getSessionSecret();
+  if (process.env.NODE_ENV === "production" && isWeakSessionSecret(secret)) {
+    throw new Error("WAR_ROOM_SESSION_SECRET fraco/ausente em producao.");
+  }
   return encode({ userId, role, issuedAt: Date.now() });
 }
 
 export function readSessionToken(token: string | undefined) {
   if (!token) {
+    return null;
+  }
+  if (process.env.NODE_ENV === "production" && isWeakSessionSecret(getSessionSecret())) {
     return null;
   }
   return decode(token);

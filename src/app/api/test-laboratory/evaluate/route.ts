@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { evaluateCreativeTest } from "@/lib/metrics/test-laboratory";
 import { evaluateExperimentStats } from "@/lib/metrics/experiment-stats";
+import { getSessionFromCookies } from "@/lib/auth/session";
+import { rolePermissions } from "@/lib/auth/rbac";
+import { isOpsAuthorized } from "@/app/api/ops/_auth";
 
 export const runtime = "nodejs";
 
@@ -24,6 +27,17 @@ type EvaluatePayload = {
 };
 
 export async function POST(request: Request) {
+  const session = await getSessionFromCookies();
+  const canUseTestLab = Boolean(
+    session && (session.role === "ceo" || rolePermissions[session.role]?.allowedSections.includes("testLaboratory")),
+  );
+  const hasApiAuthorization = canUseTestLab
+    ? false
+    : await isOpsAuthorized(request, ["ceo", "techAdmin", "ctoDev", "headTraffic", "trafficSenior", "mediaBuyer"]);
+  if (!canUseTestLab && !hasApiAuthorization) {
+    return NextResponse.json({ error: "Nao autorizado para Test Laboratory." }, { status: 401 });
+  }
+
   const payload = (await request.json().catch(() => ({}))) as EvaluatePayload;
 
   if (!Number.isFinite(payload.targetCpa)) {

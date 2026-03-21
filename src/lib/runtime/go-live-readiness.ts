@@ -63,6 +63,16 @@ export async function evaluateGoLiveReadiness(): Promise<GoLiveReadinessSnapshot
   });
 
   const requireHmacInProd = process.env.WAR_ROOM_REQUIRE_HMAC_IN_PROD === "true";
+  const sessionSecretStrong = hasStrongSecret(process.env.WAR_ROOM_SESSION_SECRET, minSecretLength);
+  checks.push({
+    id: "session_secret",
+    label: "Segredo de sessao forte",
+    status: sessionSecretStrong ? "pass" : prod ? "fail" : "warn",
+    detail: sessionSecretStrong
+      ? `WAR_ROOM_SESSION_SECRET com >= ${minSecretLength} caracteres.`
+      : `WAR_ROOM_SESSION_SECRET ausente/fraco (minimo recomendado: ${minSecretLength}).`,
+  });
+
   const providerSecrets = [
     process.env.UTMIFY_WEBHOOK_SECRET,
     process.env.APPMAX_WEBHOOK_SECRET,
