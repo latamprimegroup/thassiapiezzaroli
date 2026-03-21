@@ -40,7 +40,8 @@ function readRequestOrigin(request: NextRequest) {
 function hasApiCredentials(request: NextRequest) {
   const apiKey = request.headers.get("x-api-key");
   const authHeader = request.headers.get("authorization");
-  return Boolean(apiKey || (authHeader && authHeader.startsWith("Bearer ")));
+  const bearer = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+  return Boolean(apiKey || bearer);
 }
 
 export function proxy(request: NextRequest) {

@@ -43,7 +43,11 @@ function sanitizeSignature(signature: string) {
 
 function verifyHmacSignature(provider: ProviderName, rawBody: string, incomingSignature: string) {
   const secret = getProviderSecret(provider);
+  const requireHmacInProd = process.env.NODE_ENV === "production" && process.env.WAR_ROOM_REQUIRE_HMAC_IN_PROD !== "false";
   if (!secret) {
+    if (requireHmacInProd) {
+      return false;
+    }
     return true;
   }
   if (!incomingSignature) {

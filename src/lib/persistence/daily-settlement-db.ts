@@ -329,6 +329,28 @@ export async function incrementDailySettlementSale(input: IncrementSaleInput) {
         ) values (
           $1::uuid, $2, $3, $4, $5::date, $6, 0, 1, $7, 0, 0, 0, 0, $8, $9, $10, $11, $12::timestamptz, $12::timestamptz
         )
+        on conflict (user_id, settlement_date) do update set
+          user_name = excluded.user_name,
+          user_role = excluded.user_role,
+          niche = excluded.niche,
+          sales_count = daily_settlements.sales_count + 1,
+          gross_revenue = daily_settlements.gross_revenue + excluded.gross_revenue,
+          winning_creative_id = case
+            when excluded.winning_creative_id is null or excluded.winning_creative_id = '' then daily_settlements.winning_creative_id
+            else excluded.winning_creative_id
+          end,
+          audience_insight = concat_ws(
+            E'\n',
+            nullif(daily_settlements.audience_insight, ''),
+            nullif(excluded.audience_insight, '')
+          ),
+          production_feedback = concat_ws(
+            E'\n',
+            nullif(daily_settlements.production_feedback, ''),
+            nullif(excluded.production_feedback, '')
+          ),
+          net_profit = ((daily_settlements.gross_revenue + excluded.gross_revenue) - daily_settlements.ad_spend - ((daily_settlements.gross_revenue + excluded.gross_revenue) * 0.15)),
+          updated_at = excluded.updated_at
         returning *
         `,
         [

@@ -6,7 +6,10 @@ import { redirect } from "next/navigation";
 export const runtime = "nodejs";
 
 export default async function AdminRoutePage() {
-  const payload = await loadDashboardPageData();
+  const payload = await loadDashboardPageData({ requireSession: true });
+  if (!payload) {
+    redirect("/auth-required");
+  }
   if (!canAccessAppRoute(payload.role, "admin")) {
     redirect(defaultRouteForRole(payload.role));
   }

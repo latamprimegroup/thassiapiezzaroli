@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { rolePermissions } from "@/lib/auth/rbac";
 import { getSessionFromCookies } from "@/lib/auth/session";
 import { persistCommandCenterTasks } from "@/lib/command-center/command-center-persistence";
 import { getWarRoomData } from "@/lib/war-room/get-war-room-data";
@@ -45,10 +46,30 @@ const tasksPayloadSchema = z.object({
   tasks: z.array(demandTaskSchema).min(1).max(5000),
 });
 
+const COMMAND_CENTER_WRITE_ROLES = new Set([
+  "ceo",
+  "techAdmin",
+  "ctoDev",
+  "financeManager",
+  "cfo",
+  "headTraffic",
+  "trafficSenior",
+  "copySenior",
+  "cco",
+  "productionEditor",
+  "productionDesigner",
+  "closer",
+  "sdr",
+  "cxManager",
+]);
+
 export async function GET() {
   const session = await getSessionFromCookies();
   if (!session) {
     return NextResponse.json({ error: "Sessao invalida." }, { status: 401 });
+  }
+  if (!rolePermissions[session.role].allowedSections.includes("commandCenter")) {
+    return NextResponse.json({ error: "Sem permissao para Command Center." }, { status: 403 });
   }
   const data = await getWarRoomData();
   return NextResponse.json({ tasks: data.commandCenter.tasks });
@@ -58,6 +79,9 @@ export async function POST(request: Request) {
   const session = await getSessionFromCookies();
   if (!session) {
     return NextResponse.json({ error: "Sessao invalida." }, { status: 401 });
+  }
+  if (!COMMAND_CENTER_WRITE_ROLES.has(session.role)) {
+    return NextResponse.json({ error: "Sem permissao de escrita no Command Center." }, { status: 403 });
   }
 
   const payload = (await request.json().catch(() => ({}))) as unknown;
