@@ -274,7 +274,10 @@ export async function failOpsJob(jobId: string, errorMessage: string) {
     }
     const current = store.jobs[index];
     const shouldDeadLetter = current.attempts >= current.maxAttempts;
-    const backoffMinutes = Math.min(60, 2 ** Math.max(1, current.attempts));
+    const backoffMinutes = Math.min(
+      WAR_ROOM_OPS_CONSTANTS.queue.webhook.maxBackoffMinutes,
+      WAR_ROOM_OPS_CONSTANTS.queue.webhook.retryBaseMinutes ** Math.max(1, current.attempts),
+    );
     store.jobs[index] = {
       ...current,
       status: shouldDeadLetter ? "dead_letter" : "pending",

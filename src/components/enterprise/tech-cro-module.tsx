@@ -1,14 +1,39 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Sparkline } from "@/components/ui/sparkline";
 import { HealthCheck } from "@/components/war-room/health-check";
 import { useWarRoom } from "@/context/war-room-context";
+import { WAR_ROOM_OPS_CONSTANTS } from "@/lib/config/war-room-ops.constants";
 import { computeIntelligenceEngine, ELITE_BENCHMARKS } from "@/lib/metrics/intelligence-engine";
 
 const percent = (value: number) => `${value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+
+type OpsObservabilitySnapshot = {
+  generatedAt: string;
+  queue: {
+    depth: number;
+    failedJobs: number;
+    processedToday: number;
+    deadLetterEvents: number;
+    estimatedDrainMinutes: number;
+  };
+  reliability: {
+    errorRatePct: number;
+    estimatedMttrMinutes: number;
+  };
+  slos: Array<{
+    id: "queueDrain" | "errorRate" | "mttr";
+    label: string;
+    target: string;
+    current: string;
+    status: "pass" | "warning" | "breach";
+    note: string;
+  }>;
+  overallStatus: "pass" | "warning" | "breach";
+};
 
 export function TechCroModule() {
   const { data } = useWarRoom();
@@ -17,6 +42,7 @@ export function TechCroModule() {
   const apiStatus = data.integrations.apiStatus;
   const fortress = data.integrations.fortress;
   const audioGuardRef = useRef<string>("");
+  const [opsObservability, setOpsObservability] = useState<OpsObservabilitySnapshot | null>(null);
 
   useEffect(() => {
     const shouldAlert = tech.lcpSeconds > 1.5 || intelligence.gatewayHealth.alert || fortress.siren.active;
@@ -49,6 +75,27 @@ export function TechCroModule() {
     };
   }, [fortress.siren.active, intelligence.gatewayHealth.alert, intelligence.gatewayHealth.currentApproval, tech.lcpSeconds]);
 
+  useEffect(() => {
+    let active = true;
+    async function loadObservability() {
+      const response = await fetch("/api/ops/observability", { cache: "no-store" }).catch(() => null);
+      if (!response?.ok || !active) {
+        return;
+      }
+      const payload = (await response.json().catch(() => null)) as { snapshot?: OpsObservabilitySnapshot } | null;
+      if (!payload?.snapshot || !active) {
+        return;
+      }
+      setOpsObservability(payload.snapshot);
+    }
+    void loadObservability();
+    const timer = window.setInterval(loadObservability, WAR_ROOM_OPS_CONSTANTS.performance.dashboardRefreshMs);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, []);
+
   function renderProviderStatus(
     label: string,
     status: "online" | "syncing" | "error",
@@ -69,6 +116,16 @@ export function TechCroModule() {
         {errorMessage ? <p className="text-[11px] text-rose-300">{errorMessage}</p> : null}
       </div>
     );
+  }
+
+  function renderSloStatus(status: "pass" | "warning" | "breach") {
+    if (status === "pass") {
+      return <Badge variant="success">PASS</Badge>;
+    }
+    if (status === "warning") {
+      return <Badge variant="warning">WARNING</Badge>;
+    }
+    return <Badge variant="danger">BREACH</Badge>;
   }
 
   return (
@@ -105,6 +162,45 @@ export function TechCroModule() {
             apiStatus.yampi.trend12h,
             apiStatus.yampi.lastSync,
             apiStatus.yampi.errorMessage,
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Observability Command (SLO/MTTR)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {!opsObservability ? (
+            <div className="rounded-md border border-white/10 bg-white/5 p-3 text-xs text-slate-400">
+              Carregando snapshot de observabilidade...
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between rounded-md border border-white/10 bg-white/5 p-2 text-xs">
+                <p className="text-slate-300">
+                  Queue {opsObservability.queue.depth} | Failed {opsObservability.queue.failedJobs} | DLQ{" "}
+                  {opsObservability.queue.deadLetterEvents}
+                </p>
+                {renderSloStatus(opsObservability.overallStatus)}
+              </div>
+              <div className="grid gap-2 md:grid-cols-3">
+                {opsObservability.slos.map((slo) => (
+                  <div key={slo.id} className="rounded-md border border-white/10 bg-white/5 p-2 text-xs">
+                    <div className="mb-1 flex items-center justify-between">
+                      <p className="text-slate-200">{slo.label}</p>
+                      {renderSloStatus(slo.status)}
+                    </div>
+                    <p className="text-slate-400">Target: {slo.target}</p>
+                    <p className="text-slate-300">Atual: {slo.current}</p>
+                    <p className="mt-1 text-[11px] text-slate-500">{slo.note}</p>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[11px] text-slate-500">
+                Snapshot: {new Date(opsObservability.generatedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+              </p>
+            </>
           )}
         </CardContent>
       </Card>
