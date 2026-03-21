@@ -7,6 +7,7 @@ export type SectionId =
   | "ceoFinance"
   | "copyResearch"
   | "trafficAttribution"
+  | "testLaboratory"
   | "commandCenter"
   | "squadSync"
   | "editorsProduction"
@@ -37,6 +38,7 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
       "ceoFinance",
       "copyResearch",
       "trafficAttribution",
+      "testLaboratory",
       "commandCenter",
       "squadSync",
       "editorsProduction",
@@ -56,7 +58,7 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     label: "Media Buyer",
     description: "Leilao, CPA e acionamento de squads",
     icon: SatelliteDish,
-    allowedSections: ["trafficAttribution", "commandCenter", "squadSync", "techCro", "editorsProduction"],
+    allowedSections: ["trafficAttribution", "testLaboratory", "commandCenter", "squadSync", "techCro", "editorsProduction"],
     canViewSensitiveFinancials: false,
     canViewRoasReal: true,
     canApproveScaleCampaigns: false,
@@ -71,7 +73,7 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     label: "Copywriter / Creative Director",
     description: "Engajamento, backlog e retencao",
     icon: PenSquare,
-    allowedSections: ["copyResearch", "trafficAttribution", "commandCenter", "squadSync", "editorsProduction"],
+    allowedSections: ["copyResearch", "trafficAttribution", "testLaboratory", "commandCenter", "squadSync", "editorsProduction"],
     canViewSensitiveFinancials: false,
     canViewRoasReal: true,
     canApproveScaleCampaigns: false,
@@ -86,7 +88,7 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     label: "Video Editor",
     description: "Performance por criativo e novas versoes",
     icon: Clapperboard,
-    allowedSections: ["trafficAttribution", "commandCenter", "squadSync", "editorsProduction"],
+    allowedSections: ["trafficAttribution", "testLaboratory", "commandCenter", "squadSync", "editorsProduction"],
     canViewSensitiveFinancials: false,
     canViewRoasReal: false,
     canApproveScaleCampaigns: false,

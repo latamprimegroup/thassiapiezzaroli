@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { LucideIcon } from "lucide-react";
-import { Binary, BrainCircuit, ClipboardList, Clapperboard, Lock, MessageSquare, SatelliteDish, Wallet } from "lucide-react";
+import { Binary, BrainCircuit, ClipboardList, Clapperboard, FlaskConical, Lock, MessageSquare, SatelliteDish, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { CeoFinanceModule } from "@/components/enterprise/ceo-finance-module";
@@ -10,6 +10,7 @@ import { CommandCenterModule } from "@/components/enterprise/command-center-modu
 import { CopyResearchModule } from "@/components/enterprise/copy-research-module";
 import { EditorsProductionModule } from "@/components/enterprise/editors-production-module";
 import { SquadSyncModule } from "@/components/enterprise/squad-sync-module";
+import { TestLaboratoryModule } from "@/components/enterprise/test-laboratory-module";
 import { TechCroModule } from "@/components/enterprise/tech-cro-module";
 import { TrafficAttributionModule } from "@/components/enterprise/traffic-attribution-module";
 import { ActionableInsights } from "@/components/war-room/actionable-insights";
@@ -38,6 +39,7 @@ const sections: Section[] = [
   { id: "ceoFinance", label: "CEO & Financeiro", subtitle: "Soberania de Caixa", icon: Wallet },
   { id: "copyResearch", label: "Copy & Pesquisa", subtitle: "The Brain", icon: BrainCircuit },
   { id: "trafficAttribution", label: "Trafego & Atribuicao", subtitle: "The Engine", icon: SatelliteDish },
+  { id: "testLaboratory", label: "Test Laboratory", subtitle: "Scaling Pipeline", icon: FlaskConical },
   { id: "commandCenter", label: "Command Center", subtitle: "Demandas 9D", icon: ClipboardList },
   { id: "squadSync", label: "Squad Sync", subtitle: "Hub de Demanda", icon: MessageSquare },
   { id: "editorsProduction", label: "Editores & Producao", subtitle: "The Retention", icon: Clapperboard },
@@ -358,6 +360,9 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
             )}
             {activeSection === "copyResearch" && isSectionAllowed && <CopyResearchModule />}
             {activeSection === "trafficAttribution" && isSectionAllowed && <TrafficAttributionModule />}
+            {activeSection === "testLaboratory" && isSectionAllowed && (
+              <TestLaboratoryModule actorName={activeUser.name} actorRole={sessionState.role} />
+            )}
             {activeSection === "commandCenter" && isSectionAllowed && (
               <CommandCenterModule actorName={activeUser.name} actorRole={sessionState.role} />
             )}
