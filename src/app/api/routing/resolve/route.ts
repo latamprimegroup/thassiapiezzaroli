@@ -1,15 +1,18 @@
 import { NextResponse } from "next/server";
 import { resolveTrafficRoute } from "@/lib/routing/traffic-router";
 import { getSessionFromCookies } from "@/lib/auth/session";
+import { secureEquals } from "@/lib/security/secure-compare";
 
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   const expectedApiKey = process.env.WAR_ROOM_WEBHOOK_API_KEY;
-  const apiKey = request.headers.get("x-api-key");
+  const apiKey = request.headers.get("x-api-key")?.trim();
   const authHeader = request.headers.get("authorization");
   const bearer = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
-  const machineAuthorized = Boolean(expectedApiKey && (apiKey === expectedApiKey || bearer === expectedApiKey));
+  const machineAuthorized = Boolean(
+    expectedApiKey && (secureEquals(apiKey, expectedApiKey) || secureEquals(bearer, expectedApiKey)),
+  );
   const session = await getSessionFromCookies();
   if (!session && !machineAuthorized && process.env.NODE_ENV === "production") {
     return NextResponse.json({ error: "Nao autorizado." }, { status: 401 });

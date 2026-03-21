@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { processFirstContactWebhook } from "@/lib/sniper-crm/sniper-crm-service";
 import { checkRateLimit, readRequestIp } from "@/lib/security/rate-limit";
+import { secureEquals } from "@/lib/security/secure-compare";
 
 export const runtime = "nodejs";
 
@@ -14,10 +15,10 @@ function isAuthorized(request: Request) {
   if (!expected) {
     return process.env.NODE_ENV !== "production";
   }
-  const apiKey = request.headers.get("x-api-key");
+  const apiKey = request.headers.get("x-api-key")?.trim();
   const authHeader = request.headers.get("authorization");
   const bearer = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
-  return apiKey === expected || bearer === expected;
+  return secureEquals(apiKey, expected) || secureEquals(bearer, expected);
 }
 
 export async function POST(request: Request) {

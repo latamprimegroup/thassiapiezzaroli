@@ -3,6 +3,7 @@ import { getSessionFromCookies } from "@/lib/auth/session";
 import { WAR_ROOM_OPS_CONSTANTS } from "@/lib/config/war-room-ops.constants";
 import { getOffersLabDashboard, syncOffersFromUtmify } from "@/lib/offers/offers-lab-service";
 import { captureServerError } from "@/lib/observability/error-monitoring";
+import { secureEquals } from "@/lib/security/secure-compare";
 
 export const runtime = "nodejs";
 
@@ -11,10 +12,10 @@ function isApiKeyAuthorized(request: Request) {
   if (!expected) {
     return false;
   }
-  const apiKey = request.headers.get("x-api-key");
+  const apiKey = request.headers.get("x-api-key")?.trim();
   const authorization = request.headers.get("authorization");
   const bearer = authorization?.startsWith("Bearer ") ? authorization.slice(7).trim() : "";
-  return apiKey === expected || bearer === expected;
+  return secureEquals(apiKey, expected) || secureEquals(bearer, expected);
 }
 
 async function authorize(request: Request) {
