@@ -64,6 +64,7 @@ export function TechCroModule() {
   const intelligence = computeIntelligenceEngine(data);
   const apiStatus = data.integrations.apiStatus;
   const fortress = data.integrations.fortress;
+  const killSwitch = data.integrations.operations.killSwitch;
   const audioGuardRef = useRef<string>("");
   const [opsObservability, setOpsObservability] = useState<OpsObservabilitySnapshot | null>(null);
 
@@ -347,6 +348,42 @@ export function TechCroModule() {
               </p>
             </div>
           ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Kill Switch Algoritmico (MER + Domain Health)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm">
+          {!killSwitch ? (
+            <p className="text-slate-400">Kill switch ainda nao inicializado.</p>
+          ) : (
+            <>
+              <p>
+                Status:{" "}
+                <span className={killSwitch.active ? "text-[#EA4335]" : "text-[#10B981]"}>
+                  {killSwitch.active ? "ATIVO" : "EM MONITORAMENTO"}
+                </span>{" "}
+                | Janela pico {killSwitch.peakWindow}
+              </p>
+              <p className="text-xs text-slate-300">
+                Regra: MER &lt; {killSwitch.merThreshold.toFixed(1)} por {killSwitch.requiredDurationMinutes} min.
+              </p>
+              <p className="text-xs text-slate-400">{killSwitch.reason}</p>
+              {killSwitch.belowThresholdSince ? (
+                <p className="text-xs text-slate-400">
+                  Abaixo do limiar desde: {new Date(killSwitch.belowThresholdSince).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                </p>
+              ) : null}
+              {killSwitch.autoTrafficBlocked ? (
+                <Badge variant="danger">AUTO-BLOCK DE TRAFEGO ATIVO</Badge>
+              ) : (
+                <Badge variant="success">Trafego liberado</Badge>
+              )}
+              <p className="text-[11px] text-slate-500">Alertas enviados para heads: {killSwitch.alertsSent}</p>
+            </>
+          )}
         </CardContent>
       </Card>
 

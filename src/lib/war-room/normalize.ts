@@ -88,6 +88,19 @@ function toStatus(value: unknown, fallback: "ok" | "warning" | "blocked") {
   return value === "ok" || value === "warning" || value === "blocked" ? value : fallback;
 }
 
+function toAwarenessStage(
+  value: unknown,
+  fallback: "unaware" | "problem_aware" | "solution_aware" | "product_aware" | "most_aware",
+) {
+  return value === "unaware" ||
+    value === "problem_aware" ||
+    value === "solution_aware" ||
+    value === "product_aware" ||
+    value === "most_aware"
+    ? value
+    : fallback;
+}
+
 function deriveLegacyLiveRows(value: unknown): WarRoomData["liveAdsTracking"] {
   const input = toObject(value);
   const adsInput = toObject(input.ads);
@@ -1379,6 +1392,141 @@ export function normalizeWarRoomData(
       },
     },
   };
+
+  const customerInput = toObject(input.customerCentrality);
+  const fallbackCustomer = fallback.customerCentrality;
+  if (fallbackCustomer) {
+    const leadsInput = Array.isArray(customerInput.leads) ? customerInput.leads : fallbackCustomer.leads;
+    normalized.customerCentrality = {
+      leads: (leadsInput as unknown[]).map((item, index) => {
+        const row = toObject(item);
+        const fallbackLead = fallbackCustomer.leads[index % fallbackCustomer.leads.length];
+        return {
+          leadId: toString(row.leadId, fallbackLead.leadId),
+          awarenessStage: toAwarenessStage(row.awarenessStage, fallbackLead.awarenessStage),
+          lastVslId: toString(row.lastVslId, fallbackLead.lastVslId),
+          watchSeconds: toNumber(row.watchSeconds, fallbackLead.watchSeconds),
+          watchCompletionPct: toNumber(row.watchCompletionPct, fallbackLead.watchCompletionPct),
+          openedEmails7d: toNumber(row.openedEmails7d, fallbackLead.openedEmails7d),
+          clickedEmails7d: toNumber(row.clickedEmails7d, fallbackLead.clickedEmails7d),
+          purchases: toNumber(row.purchases, fallbackLead.purchases),
+          currentLtv: toNumber(row.currentLtv, fallbackLead.currentLtv),
+          predictedLtv90d: toNumber(row.predictedLtv90d, fallbackLead.predictedLtv90d),
+          lastTouchAt: toString(row.lastTouchAt, fallbackLead.lastTouchAt),
+        };
+      }),
+      awarenessDistribution: (
+        Array.isArray(customerInput.awarenessDistribution)
+          ? (customerInput.awarenessDistribution as unknown[])
+          : fallbackCustomer.awarenessDistribution
+      ).map((item, index) => {
+        const row = toObject(item);
+        const fallbackStage = fallbackCustomer.awarenessDistribution[index % fallbackCustomer.awarenessDistribution.length];
+        return {
+          stage: toAwarenessStage(row.stage, fallbackStage.stage),
+          leads: toNumber(row.leads, fallbackStage.leads),
+          avgPredictedLtv90d: toNumber(row.avgPredictedLtv90d, fallbackStage.avgPredictedLtv90d),
+        };
+      }),
+    };
+  }
+
+  const bigIdeaInput = Array.isArray(enterpriseCopyInput.bigIdeaVault)
+    ? (enterpriseCopyInput.bigIdeaVault as unknown[])
+    : fallback.enterprise.copyResearch.bigIdeaVault;
+  normalized.enterprise.copyResearch.bigIdeaVault = normalized.enterprise.copyResearch.bigIdeaVault.map((idea, index) => {
+    const row = toObject(bigIdeaInput[index]);
+    const fallbackIdea = fallback.enterprise.copyResearch.bigIdeaVault[index % fallback.enterprise.copyResearch.bigIdeaVault.length];
+    const level = toNumber(row.marketSophisticationLevel, toNumber(fallbackIdea.marketSophisticationLevel, 3));
+    return {
+      ...idea,
+      uniqueMechanism: toString(
+        row.uniqueMechanism,
+        toString(fallbackIdea.uniqueMechanism, "Mecanismo nao informado para este ativo."),
+      ),
+      marketSophisticationLevel: Math.min(5, Math.max(1, Math.round(level))) as 1 | 2 | 3 | 4 | 5,
+      assetValue: toNumber(row.assetValue, toNumber(fallbackIdea.assetValue, 0)),
+    };
+  });
+
+  const multiTenantInput = toObject(enterpriseInput.multiTenant);
+  const fallbackMultiTenant = fallback.enterprise.multiTenant;
+  if (fallbackMultiTenant) {
+    const squadsInput = Array.isArray(multiTenantInput.squads) ? multiTenantInput.squads : fallbackMultiTenant.squads;
+    normalized.enterprise.multiTenant = {
+      squads: (squadsInput as unknown[]).map((item, index) => {
+        const row = toObject(item);
+        const fallbackSquad = fallbackMultiTenant.squads[index % fallbackMultiTenant.squads.length];
+        const id = row.id;
+        return {
+          id: id === "copy" || id === "media" || id === "tech" ? id : fallbackSquad.id,
+          name: toString(row.name, fallbackSquad.name),
+          head: toString(row.head, fallbackSquad.head),
+          cost: toNumber(row.cost, fallbackSquad.cost),
+          revenue: toNumber(row.revenue, fallbackSquad.revenue),
+          profit: toNumber(row.profit, fallbackSquad.profit),
+          marginPct: toNumber(row.marginPct, fallbackSquad.marginPct),
+          efficiencyScore: toNumber(row.efficiencyScore, fallbackSquad.efficiencyScore),
+        };
+      }),
+      bestSquadId: (() => {
+        const id = multiTenantInput.bestSquadId;
+        return id === "copy" || id === "media" || id === "tech" ? id : fallbackMultiTenant.bestSquadId;
+      })(),
+      lastCalculatedAt: toString(multiTenantInput.lastCalculatedAt, fallbackMultiTenant.lastCalculatedAt),
+    };
+  }
+
+  const fallbackBackEndLtv = fallback.integrations.fortress.backEndLtv;
+  const backEndLtvInput = toObject(toObject(toObject(integrationsInput.fortress).backEndLtv));
+  normalized.integrations.fortress.backEndLtv.upsellTree = (
+    Array.isArray(backEndLtvInput.upsellTree) ? (backEndLtvInput.upsellTree as unknown[]) : fallbackBackEndLtv.upsellTree ?? []
+  ).map((item, index) => {
+    const row = toObject(item);
+    const fallbackTree = (fallbackBackEndLtv.upsellTree ?? [])[index % Math.max((fallbackBackEndLtv.upsellTree ?? []).length, 1)] ??
+      {
+        fromProduct: "Core Offer",
+        toProduct: "Upsell",
+        buyersFrom: 1,
+        buyersTo: 0,
+        attachRate: 0,
+        benchmarkAttachRate: 20,
+        status: "warning" as const,
+      };
+    const status = row.status;
+    return {
+      fromProduct: toString(row.fromProduct, fallbackTree.fromProduct),
+      toProduct: toString(row.toProduct, fallbackTree.toProduct),
+      buyersFrom: toNumber(row.buyersFrom, fallbackTree.buyersFrom),
+      buyersTo: toNumber(row.buyersTo, fallbackTree.buyersTo),
+      attachRate: toNumber(row.attachRate, fallbackTree.attachRate),
+      benchmarkAttachRate: toNumber(row.benchmarkAttachRate, fallbackTree.benchmarkAttachRate),
+      status: status === "healthy" || status === "warning" ? status : fallbackTree.status,
+    };
+  });
+  normalized.integrations.fortress.backEndLtv.attachRateAlerts = toStringArray(
+    backEndLtvInput.attachRateAlerts,
+    fallbackBackEndLtv.attachRateAlerts ?? [],
+  );
+
+  const fallbackKillSwitch = fallback.integrations.operations.killSwitch;
+  const killSwitchInput = toObject(toObject(integrationsInput.operations).killSwitch);
+  if (fallbackKillSwitch) {
+    normalized.integrations.operations.killSwitch = {
+      active: typeof killSwitchInput.active === "boolean" ? Boolean(killSwitchInput.active) : fallbackKillSwitch.active,
+      merThreshold: toNumber(killSwitchInput.merThreshold, fallbackKillSwitch.merThreshold),
+      requiredDurationMinutes: toNumber(killSwitchInput.requiredDurationMinutes, fallbackKillSwitch.requiredDurationMinutes),
+      belowThresholdSince: toString(killSwitchInput.belowThresholdSince, fallbackKillSwitch.belowThresholdSince),
+      triggeredAt: toString(killSwitchInput.triggeredAt, fallbackKillSwitch.triggeredAt),
+      alertsSent: toNumber(killSwitchInput.alertsSent, fallbackKillSwitch.alertsSent),
+      autoTrafficBlocked:
+        typeof killSwitchInput.autoTrafficBlocked === "boolean"
+          ? Boolean(killSwitchInput.autoTrafficBlocked)
+          : fallbackKillSwitch.autoTrafficBlocked,
+      reason: toString(killSwitchInput.reason, fallbackKillSwitch.reason),
+      peakWindow: toString(killSwitchInput.peakWindow, fallbackKillSwitch.peakWindow),
+    };
+  }
 
   return normalized;
 }

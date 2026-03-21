@@ -13,6 +13,7 @@ import {
   type BigIdeaEmotion,
   type LeadType,
 } from "@/lib/copy/big-idea-vault";
+import { suggestHookVariationsFromHistory } from "@/lib/copy/hook-suggestion-engine";
 import { safeDivide } from "@/lib/metrics/kpis";
 import type { WarRoomData } from "@/lib/war-room/types";
 
@@ -48,6 +49,9 @@ type BigIdeaVaultRecord = {
   approvedByHead: boolean;
   archived: boolean;
   saturationPct: number;
+  uniqueMechanismAsset: string;
+  marketSophisticationLevel: 1 | 2 | 3 | 4 | 5;
+  assetValue: number;
 };
 
 type SwipeRecord = {
@@ -104,6 +108,9 @@ function buildInitialBigIdeas(data: WarRoomData): BigIdeaVaultRecord[] {
       approvedByHead: false,
       archived: false,
       saturationPct: idea.saturation,
+      uniqueMechanismAsset: idea.uniqueMechanism ?? "Mecanismo ainda nao consolidado no IP Asset Management.",
+      marketSophisticationLevel: idea.marketSophisticationLevel ?? 3,
+      assetValue: idea.assetValue ?? 0,
     };
   });
 }
@@ -379,6 +386,7 @@ export function CopyResearchModule() {
     hookVariation: namingDraft.hookVariation,
     uniqueId: namingDraft.uniqueId,
   });
+  const hookSuggestions = useMemo(() => suggestHookVariationsFromHistory(data.liveAdsTracking, 6), [data.liveAdsTracking]);
 
   async function copyNamingToClipboard() {
     if (!namingPreview.valid) {
@@ -456,6 +464,9 @@ export function CopyResearchModule() {
                 <p className="text-xs text-slate-400">
                   ROAS {idea.roasCurrent.toFixed(2)} | ID vinculado: {idea.linkedCreativeId}
                 </p>
+                <p className="text-xs text-[#FFB347]">
+                  IP Asset: Nivel S{idea.marketSophisticationLevel} | Valor estimado {idea.assetValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}
+                </p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   <Button type="button" className="h-6 px-2 text-[11px]" onClick={() => setSelectedIdeaId(idea.id)}>
                     Abrir dossie
@@ -487,6 +498,25 @@ export function CopyResearchModule() {
               </div>
             ))}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Engine de Variacoes de Gancho (Historico de Hook Rate)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {hookSuggestions.map((item) => (
+            <div key={`${item.sourceCreativeId}-${item.suggestion}`} className="rounded-md border border-white/10 bg-white/5 p-2 text-xs">
+              <p className="text-slate-100">
+                Base: {item.sourceCreativeId} ({item.sourceHookRate.toFixed(2)}% hook)
+              </p>
+              <p className="text-[#FFB347]">{item.suggestion}</p>
+            </div>
+          ))}
+          <p className="text-[11px] text-slate-500">
+            Sugestoes geradas automaticamente a partir dos criativos com maior Hook Rate historico.
+          </p>
         </CardContent>
       </Card>
 
@@ -672,7 +702,43 @@ export function CopyResearchModule() {
                   className="w-full rounded border border-white/10 bg-slate-900/70 px-2 py-1.5 text-sm"
                 />
               </label>
+              <label className="space-y-1 text-xs text-slate-300">
+                <span>Nivel de Sofisticacao de Mercado (1-5)</span>
+                <select
+                  value={selectedIdea.marketSophisticationLevel}
+                  onChange={(event) =>
+                    patchSelectedIdea((idea) => ({
+                      ...idea,
+                      marketSophisticationLevel: Math.min(5, Math.max(1, Number(event.target.value) || 1)) as 1 | 2 | 3 | 4 | 5,
+                    }))
+                  }
+                  className="w-full rounded border border-white/10 bg-slate-900/70 px-2 py-1.5 text-sm"
+                >
+                  <option value={1}>1</option>
+                  <option value={2}>2</option>
+                  <option value={3}>3</option>
+                  <option value={4}>4</option>
+                  <option value={5}>5</option>
+                </select>
+              </label>
             </div>
+            <label className="space-y-1 text-xs text-slate-300">
+              <span>Mecanismo Unico (IP Asset)</span>
+              <textarea
+                value={selectedIdea.uniqueMechanismAsset}
+                onChange={(event) => patchSelectedIdea((idea) => ({ ...idea, uniqueMechanismAsset: event.target.value }))}
+                className="min-h-20 w-full rounded border border-white/10 bg-slate-900/70 p-2 text-sm"
+              />
+            </label>
+            <label className="space-y-1 text-xs text-slate-300">
+              <span>Valuation da Big Idea (ativo financeiro)</span>
+              <input
+                type="number"
+                value={Math.round(selectedIdea.assetValue)}
+                onChange={(event) => patchSelectedIdea((idea) => ({ ...idea, assetValue: Math.max(0, Number(event.target.value) || 0) }))}
+                className="w-full rounded border border-white/10 bg-slate-900/70 px-2 py-1.5 text-sm"
+              />
+            </label>
             <div className="grid gap-3 md:grid-cols-2">
               <label className="space-y-1 text-xs text-slate-300">
                 <span>Mecanismo do Problema</span>

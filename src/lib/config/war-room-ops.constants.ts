@@ -36,6 +36,15 @@ export const WAR_ROOM_OPS_CONSTANTS = {
       operationalCritical: 2.5,
       scale: 4.0,
     },
+    killSwitch: {
+      merCritical: 1.8,
+      peakStartHour: 8,
+      peakEndHour: 23,
+      durationMinutes: 120,
+    },
+    upsell: {
+      attachRateBenchmarkPct: 20,
+    },
     pixel: {
       maxDiscrepancyPct: 20,
     },

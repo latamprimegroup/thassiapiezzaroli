@@ -15,6 +15,7 @@ export function TrafficAttributionModule() {
   const { data, updateTrafficCpa, addActivity } = useWarRoom();
   const squads = data.enterprise.trafficAttribution.squads;
   const intelligence = computeIntelligenceEngine(data);
+  const killSwitch = data.integrations.operations.killSwitch;
   const maxCpa = Math.max(1, ...intelligence.validatedAssets.map((asset) => asset.effectiveCpa));
 
   function renderSquad(source: Source, label: string) {
@@ -41,6 +42,14 @@ export function TrafficAttributionModule() {
 
   return (
     <section className="war-fade-in space-y-4">
+      {killSwitch?.autoTrafficBlocked && (
+        <Card className="border-rose-300/40 bg-rose-500/10">
+          <CardContent className="p-3 text-sm text-rose-100">
+            Auto-block ativo: trafego pausado por contingencia ({killSwitch.reason}).
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Squad Command (Meta, Google, Native)</CardTitle>

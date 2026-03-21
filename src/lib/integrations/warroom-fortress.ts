@@ -12,6 +12,9 @@ type VaultRuntimeState = {
   domains: VaultDomainSnapshot[];
   lastVaultHash: string;
   lastSirenActive: boolean;
+  merBelowThresholdSinceMs: number;
+  killSwitchTriggeredAtMs: number;
+  killSwitchAlertsSent: number;
 };
 
 const CHECK_INTERVAL_MS = WAR_ROOM_OPS_CONSTANTS.vault.checkIntervalMinutes * 60 * 1000;
@@ -146,6 +149,9 @@ function getRuntimeState(): VaultRuntimeState {
       domains: [],
       lastVaultHash: "",
       lastSirenActive: false,
+      merBelowThresholdSinceMs: 0,
+      killSwitchTriggeredAtMs: 0,
+      killSwitchAlertsSent: 0,
     };
   }
   if (typeof globalThis.__warRoomVaultRuntimeState.lastVaultHash !== "string") {
@@ -153,6 +159,15 @@ function getRuntimeState(): VaultRuntimeState {
   }
   if (typeof globalThis.__warRoomVaultRuntimeState.lastSirenActive !== "boolean") {
     globalThis.__warRoomVaultRuntimeState.lastSirenActive = false;
+  }
+  if (typeof globalThis.__warRoomVaultRuntimeState.merBelowThresholdSinceMs !== "number") {
+    globalThis.__warRoomVaultRuntimeState.merBelowThresholdSinceMs = 0;
+  }
+  if (typeof globalThis.__warRoomVaultRuntimeState.killSwitchTriggeredAtMs !== "number") {
+    globalThis.__warRoomVaultRuntimeState.killSwitchTriggeredAtMs = 0;
+  }
+  if (typeof globalThis.__warRoomVaultRuntimeState.killSwitchAlertsSent !== "number") {
+    globalThis.__warRoomVaultRuntimeState.killSwitchAlertsSent = 0;
   }
   return globalThis.__warRoomVaultRuntimeState;
 }
@@ -175,6 +190,49 @@ async function sendPushAlert(message: string) {
       at: new Date().toISOString(),
     }),
   }).catch(() => undefined);
+}
+
+async function sendHeadsAlert(message: string) {
+  const endpoints = [
+    process.env.WAR_ROOM_HEADS_WEBHOOK_URL,
+    process.env.SLACK_WEBHOOK_URL,
+    process.env.TELEGRAM_WEBHOOK_URL,
+  ].filter((value): value is string => Boolean(value && value.trim().length > 0));
+
+  await Promise.all(
+    endpoints.map((url) =>
+      fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: message,
+          message,
+          source: "war-room-kill-switch",
+          at: new Date().toISOString(),
+        }),
+      }).catch(() => undefined),
+    ),
+  );
+
+  const telegramBot = process.env.TELEGRAM_BOT_TOKEN;
+  const telegramChatId = process.env.TELEGRAM_CHAT_ID;
+  if (telegramBot && telegramChatId) {
+    const url = `https://api.telegram.org/bot${encodeURIComponent(telegramBot)}/sendMessage`;
+    await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: telegramChatId,
+        text: message,
+      }),
+    }).catch(() => undefined);
+  }
+}
+
+function isPeakHours(now: Date) {
+  const hour = now.getHours();
+  return hour >= WAR_ROOM_OPS_CONSTANTS.thresholds.killSwitch.peakStartHour &&
+    hour < WAR_ROOM_OPS_CONSTANTS.thresholds.killSwitch.peakEndHour;
 }
 
 async function runDomainChecks(base: WarRoomData): Promise<VaultDomainSnapshot[]> {
@@ -316,6 +374,64 @@ export async function applyFortressLayer(input: WarRoomData): Promise<WarRoomDat
     );
     runtimeState.lastSirenActive = next.integrations.fortress.siren.active;
   }
+
+  const now = new Date();
+  const merThreshold = WAR_ROOM_OPS_CONSTANTS.thresholds.killSwitch.merCritical;
+  const requiredDurationMinutes = WAR_ROOM_OPS_CONSTANTS.thresholds.killSwitch.durationMinutes;
+  const peak = isPeakHours(now);
+  const merCriticalNow =
+    peak && next.integrations.merCross.value > 0 && next.integrations.merCross.value < merThreshold;
+  if (merCriticalNow) {
+    runtimeState.merBelowThresholdSinceMs = runtimeState.merBelowThresholdSinceMs || nowMs;
+  } else {
+    runtimeState.merBelowThresholdSinceMs = 0;
+    runtimeState.killSwitchTriggeredAtMs = 0;
+    runtimeState.killSwitchAlertsSent = 0;
+  }
+  const breachedDurationMs = runtimeState.merBelowThresholdSinceMs > 0 ? nowMs - runtimeState.merBelowThresholdSinceMs : 0;
+  const killSwitchByMer = merCriticalNow && breachedDurationMs >= requiredDurationMinutes * 60 * 1000;
+  if (killSwitchByMer && runtimeState.killSwitchTriggeredAtMs === 0) {
+    runtimeState.killSwitchTriggeredAtMs = nowMs;
+  }
+  const autoTrafficBlocked = killSwitchByMer || next.integrations.fortress.vault.overallStatus === "blocked";
+  if (autoTrafficBlocked) {
+    next.integrations.attribution.validatedAssets = next.integrations.attribution.validatedAssets.map((asset) => ({
+      ...asset,
+      status: "pause",
+      note:
+        next.integrations.fortress.vault.overallStatus === "blocked"
+          ? "Domain Health Monitor acionado: dominio em blacklist/risco. Trafego bloqueado automaticamente."
+          : "Kill Switch ativo: MER critico em horario de pico por >2h.",
+    }));
+  }
+  if (killSwitchByMer && runtimeState.killSwitchAlertsSent === 0) {
+    const message = `[WAR ROOM KILL SWITCH] MER ${next.integrations.merCross.value.toFixed(2)}x abaixo de ${merThreshold.toFixed(
+      1,
+    )} por mais de ${requiredDurationMinutes}min no pico. Trafego pausado automaticamente para preservar caixa.`;
+    await sendHeadsAlert(message);
+    runtimeState.killSwitchAlertsSent = 1;
+  }
+  next.integrations.operations.killSwitch = {
+    active: killSwitchByMer,
+    merThreshold,
+    requiredDurationMinutes,
+    belowThresholdSince:
+      runtimeState.merBelowThresholdSinceMs > 0 ? new Date(runtimeState.merBelowThresholdSinceMs).toISOString() : "",
+    triggeredAt: runtimeState.killSwitchTriggeredAtMs > 0 ? new Date(runtimeState.killSwitchTriggeredAtMs).toISOString() : "",
+    alertsSent: runtimeState.killSwitchAlertsSent,
+    autoTrafficBlocked,
+    reason:
+      next.integrations.fortress.vault.overallStatus === "blocked"
+        ? "Domain Health Monitor detectou blacklist/risco critico e bloqueou trafego."
+        : killSwitchByMer
+          ? "MER critico sustentado em horario de pico. Kill Switch algoritmico ativo."
+          : peak
+            ? "Monitorando MER em janela de pico."
+            : "Fora da janela de pico. Kill Switch preventivo em espera.",
+    peakWindow: `${String(WAR_ROOM_OPS_CONSTANTS.thresholds.killSwitch.peakStartHour).padStart(2, "0")}:00-${String(
+      WAR_ROOM_OPS_CONSTANTS.thresholds.killSwitch.peakEndHour,
+    ).padStart(2, "0")}:00`,
+  };
 
   next.integrations.fortress.executiveBriefing = buildExecutiveBriefing(next);
   return next;

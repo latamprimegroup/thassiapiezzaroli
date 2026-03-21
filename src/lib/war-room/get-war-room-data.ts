@@ -4,6 +4,7 @@ import { processDueWebhookRetries } from "@/lib/integrations/warroom-webhook-ser
 import { applyFortressLayer } from "@/lib/integrations/warroom-fortress";
 import { processOpsJobQueue } from "@/lib/ops/war-room-ops-worker";
 import { mergeCommandCenterFromStore } from "@/lib/command-center/command-center-persistence";
+import { enrichCustomerCentrality } from "@/lib/metrics/customer-centrality";
 import { mockWarRoomData } from "./mock-data";
 import { normalizeWarRoomData } from "./normalize";
 import { loadWarRoomFromApi } from "./source-api";
@@ -44,7 +45,8 @@ export async function getWarRoomData(): Promise<WarRoomData> {
     await runPullSyncForGatewayAttribution();
     const base = await loadBySource(source);
     const withIntegrations = mergeWarRoomWithIntegrations(base);
-    const withFortress = await applyFortressLayer(withIntegrations);
+    const withCentrality = enrichCustomerCentrality(withIntegrations);
+    const withFortress = await applyFortressLayer(withCentrality);
     const withOps = await enrichWarRoomOperations(withFortress);
     return mergeCommandCenterFromStore(withOps);
   } catch (error) {
@@ -60,7 +62,8 @@ export async function getWarRoomData(): Promise<WarRoomData> {
       `Fallback (erro em ${source})`,
     );
     const withIntegrations = mergeWarRoomWithIntegrations(fallback);
-    const withFortress = await applyFortressLayer(withIntegrations);
+    const withCentrality = enrichCustomerCentrality(withIntegrations);
+    const withFortress = await applyFortressLayer(withCentrality);
     const withOps = await enrichWarRoomOperations(withFortress);
     return mergeCommandCenterFromStore(withOps);
   }

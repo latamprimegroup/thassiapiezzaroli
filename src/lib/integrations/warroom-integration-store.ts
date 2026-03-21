@@ -387,6 +387,51 @@ export function mergeWarRoomWithIntegrations(base: WarRoomData): WarRoomData {
       status: state.kiwify.upsellTakeRates.upsell3 >= 8 ? ("scale" as const) : ("attention" as const),
     },
   ];
+  const attachBenchmark = WAR_ROOM_OPS_CONSTANTS.thresholds.upsell.attachRateBenchmarkPct;
+  const upsellTree = [
+    {
+      fromProduct: "Core Offer",
+      toProduct: "Order Bump",
+      buyersFrom: Math.max(1, realPurchases),
+      buyersTo: Math.round(realPurchases * safeDivide(next.integrations.gateway.kiwifyUpsellTakeRates.upsell1, 100)),
+      attachRate: next.integrations.gateway.kiwifyUpsellTakeRates.upsell1,
+      benchmarkAttachRate: attachBenchmark,
+      status:
+        next.integrations.gateway.kiwifyUpsellTakeRates.upsell1 >= attachBenchmark
+          ? ("healthy" as const)
+          : ("warning" as const),
+    },
+    {
+      fromProduct: "Order Bump",
+      toProduct: "Upsell 1",
+      buyersFrom: Math.max(1, Math.round(realPurchases * safeDivide(next.integrations.gateway.kiwifyUpsellTakeRates.upsell1, 100))),
+      buyersTo: Math.round(realPurchases * safeDivide(next.integrations.gateway.kiwifyUpsellTakeRates.upsell2, 100)),
+      attachRate: next.integrations.gateway.kiwifyUpsellTakeRates.upsell2,
+      benchmarkAttachRate: attachBenchmark,
+      status:
+        next.integrations.gateway.kiwifyUpsellTakeRates.upsell2 >= attachBenchmark
+          ? ("healthy" as const)
+          : ("warning" as const),
+    },
+    {
+      fromProduct: "Upsell 1",
+      toProduct: "Upsell 2",
+      buyersFrom: Math.max(1, Math.round(realPurchases * safeDivide(next.integrations.gateway.kiwifyUpsellTakeRates.upsell2, 100))),
+      buyersTo: Math.round(realPurchases * safeDivide(next.integrations.gateway.kiwifyUpsellTakeRates.upsell3, 100)),
+      attachRate: next.integrations.gateway.kiwifyUpsellTakeRates.upsell3,
+      benchmarkAttachRate: attachBenchmark,
+      status:
+        next.integrations.gateway.kiwifyUpsellTakeRates.upsell3 >= attachBenchmark
+          ? ("healthy" as const)
+          : ("warning" as const),
+    },
+  ];
+  const attachRateAlerts = upsellTree
+    .filter((item) => item.attachRate < attachBenchmark)
+    .map(
+      (item) =>
+        `Attach Rate ${item.fromProduct} -> ${item.toProduct} em ${item.attachRate.toFixed(2)}% (benchmark ${attachBenchmark}%).`,
+    );
   const defaultCpa = safeDivide(
     next.liveAdsTracking.reduce((acc, row) => acc + row.cpa, 0),
     next.liveAdsTracking.length || 1,
@@ -582,6 +627,8 @@ export function mergeWarRoomWithIntegrations(base: WarRoomData): WarRoomData {
       },
       backEndLtv: {
         upsellFlowMap,
+        upsellTree,
+        attachRateAlerts,
         revenueBySource: {
           paidTraffic: paidTrafficRevenue,
           crmEmail: crmEmailRevenue,
@@ -707,6 +754,60 @@ export function mergeWarRoomWithIntegrations(base: WarRoomData): WarRoomData {
     };
   }
 
+  const adSpendForSquads =
+    next.integrations.merCross.totalSpend > 0 ? next.integrations.merCross.totalSpend : next.enterprise.ceoFinance.adSpend;
+  const squadRevenue = {
+    copy: consolidatedNet * 0.22 + crmTotal * 0.18,
+    media: paidTrafficRevenue * 0.88,
+    tech: Math.max(0, consolidatedNet - (consolidatedNet * 0.22 + crmTotal * 0.18) - paidTrafficRevenue * 0.88),
+  };
+  const squadCost = {
+    copy: adSpendForSquads * 0.08 + 90_000,
+    media: adSpendForSquads * 0.62,
+    tech: adSpendForSquads * 0.06 + 70_000,
+  };
+  const toMargin = (revenue: number, cost: number) => safeDivide(revenue - cost, revenue || 1) * 100;
+  const toEfficiency = (revenue: number, cost: number) =>
+    Math.max(1, Math.min(99, safeDivide(revenue, cost || 1) * 35 + toMargin(revenue, cost) * 0.45));
+  const multiTenantSquads = [
+    {
+      id: "copy" as const,
+      name: "Copy Subsidiaria",
+      head: "Head Copy - Ana",
+      cost: squadCost.copy,
+      revenue: squadRevenue.copy,
+      profit: squadRevenue.copy - squadCost.copy,
+      marginPct: toMargin(squadRevenue.copy, squadCost.copy),
+      efficiencyScore: toEfficiency(squadRevenue.copy, squadCost.copy),
+    },
+    {
+      id: "media" as const,
+      name: "Midia Subsidiaria",
+      head: "Head Midia - Caio",
+      cost: squadCost.media,
+      revenue: squadRevenue.media,
+      profit: squadRevenue.media - squadCost.media,
+      marginPct: toMargin(squadRevenue.media, squadCost.media),
+      efficiencyScore: toEfficiency(squadRevenue.media, squadCost.media),
+    },
+    {
+      id: "tech" as const,
+      name: "Tech/CRO Subsidiaria",
+      head: "Head Tech - Bruno",
+      cost: squadCost.tech,
+      revenue: squadRevenue.tech,
+      profit: squadRevenue.tech - squadCost.tech,
+      marginPct: toMargin(squadRevenue.tech, squadCost.tech),
+      efficiencyScore: toEfficiency(squadRevenue.tech, squadCost.tech),
+    },
+  ];
+  const bestSquad = [...multiTenantSquads].sort((a, b) => b.efficiencyScore - a.efficiencyScore)[0]?.id ?? "media";
+  next.enterprise.multiTenant = {
+    squads: multiTenantSquads,
+    bestSquadId: bestSquad,
+    lastCalculatedAt: nowLabel(),
+  };
+
   const taxes = (next.integrations.gateway.consolidatedGrossRevenue * next.integrations.gateway.taxRatePct) / 100;
   const adSpend = next.integrations.merCross.totalSpend > 0 ? next.integrations.merCross.totalSpend : next.enterprise.ceoFinance.adSpend;
   const fixedCosts = next.integrations.gateway.fixedCosts;
@@ -739,6 +840,19 @@ export function mergeWarRoomWithIntegrations(base: WarRoomData): WarRoomData {
   if (next.integrations.fortress.pixelSync.status === "unhealthy") {
     next.integrations.apiStatus.utmify.status = "error";
     next.integrations.apiStatus.utmify.errorMessage = `Divergencia de Pixel/CAPI acima de ${WAR_ROOM_OPS_CONSTANTS.thresholds.pixel.maxDiscrepancyPct}%.`;
+  }
+
+  if (attachRateAlerts.length > 0) {
+    const attachOrder: WarRoomData["squadSync"]["commandOrders"][number] = {
+      id: `ORD-ATTACH-${Date.now()}`,
+      audience: "copywriters",
+      status: "failing",
+      title: "Attach Rate abaixo do benchmark",
+      diagnosis: attachRateAlerts.join(" | "),
+      action: "Reforcar mecanismo de transicao e provas de valor no trecho de upsell.",
+      createdAt: nowLabel(),
+    };
+    next.squadSync.commandOrders = [attachOrder, ...next.squadSync.commandOrders].slice(0, 25);
   }
 
   return next;

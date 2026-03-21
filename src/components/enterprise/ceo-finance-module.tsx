@@ -25,6 +25,10 @@ export function CeoFinanceModule({ canViewSensitiveFinancials }: CeoFinanceModul
   const appmaxApproval = data.integrations.gateway.appmaxCardApprovalRate;
   const merCross = data.integrations.merCross;
   const fortress = data.integrations.fortress;
+  const centrality = data.customerCentrality;
+  const multiTenant = data.enterprise.multiTenant;
+  const upsellTree = fortress.backEndLtv.upsellTree ?? [];
+  const attachRateAlerts = fortress.backEndLtv.attachRateAlerts ?? [];
   const [simAdSpend, setSimAdSpend] = useState(fortress.scaleSimulator.defaultAdSpend);
   const [simCpaGrowthPct, setSimCpaGrowthPct] = useState(15);
   const [mechanismQuery, setMechanismQuery] = useState("INSULINA");
@@ -305,6 +309,110 @@ export function CeoFinanceModule({ canViewSensitiveFinancials }: CeoFinanceModul
               </div>
             ))}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Customer Centrality (Lead Timeline de Consciencia)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          {!centrality || centrality.leads.length === 0 ? (
+            <p className="text-slate-400">Sem leads enriquecidos no momento.</p>
+          ) : (
+            <>
+              <div className="grid gap-2 md:grid-cols-5">
+                {centrality.awarenessDistribution.map((row) => (
+                  <div key={row.stage} className="rounded border border-white/10 bg-white/5 p-2 text-xs">
+                    <p className="text-slate-300">{row.stage}</p>
+                    <p className="text-slate-100">{row.leads} leads</p>
+                    <p className="text-[#10B981]">{currency(row.avgPredictedLtv90d)}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="space-y-2">
+                {centrality.leads.slice(0, 6).map((lead) => (
+                  <div key={lead.leadId} className="rounded border border-white/10 bg-white/5 p-2 text-xs">
+                    <p className="text-slate-200">
+                      {lead.leadId} | {lead.awarenessStage} | VSL {lead.lastVslId}
+                    </p>
+                    <p className="text-slate-400">
+                      Watch {lead.watchSeconds}s ({lead.watchCompletionPct.toFixed(1)}%) | Emails {lead.openedEmails7d}/7d | Clicks{" "}
+                      {lead.clickedEmails7d}/7d
+                    </p>
+                    <p className="text-[#10B981]">
+                      LTV atual {currency(lead.currentLtv)} -&gt; LTV90 preditivo {currency(lead.predictedLtv90d)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Multi-Tenant Squad Dashboard (P&L por Head)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm">
+          {!multiTenant ? (
+            <p className="text-slate-400">P&L por squad indisponivel.</p>
+          ) : (
+            <>
+              {multiTenant.squads.map((squad) => (
+                <div key={squad.id} className="rounded border border-white/10 bg-white/5 p-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-slate-100">
+                      {squad.name} ({squad.head})
+                    </p>
+                    {multiTenant.bestSquadId === squad.id ? <Badge variant="success">Mais eficiente</Badge> : null}
+                  </div>
+                  <p className="text-xs text-slate-300">
+                    Custo {currency(squad.cost)} | Receita {currency(squad.revenue)} | Lucro {currency(squad.profit)}
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    Margem {squad.marginPct.toFixed(2)}% | Score de eficiencia {squad.efficiencyScore.toFixed(1)}
+                  </p>
+                </div>
+              ))}
+              <p className="text-[11px] text-slate-500">Snapshot: {multiTenant.lastCalculatedAt}</p>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Upsell Tree Mapper (Attach Rate)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm">
+          {upsellTree.length === 0 ? (
+            <p className="text-slate-400">Mapa de upsell indisponivel.</p>
+          ) : (
+            upsellTree.map((edge) => (
+              <div key={`${edge.fromProduct}-${edge.toProduct}`} className="rounded border border-white/10 bg-white/5 p-2 text-xs">
+                <p className="text-slate-100">
+                  {edge.fromProduct} -&gt; {edge.toProduct}
+                </p>
+                <p className="text-slate-300">
+                  Buyers: {edge.buyersFrom} -&gt; {edge.buyersTo} | Attach Rate: {edge.attachRate.toFixed(2)}%
+                </p>
+                <p className={edge.status === "healthy" ? "text-[#10B981]" : "text-[#EA4335]"}>
+                  Benchmark {edge.benchmarkAttachRate.toFixed(0)}% | {edge.status.toUpperCase()}
+                </p>
+              </div>
+            ))
+          )}
+          {attachRateAlerts.length > 0 ? (
+            <div className="rounded border border-[#EA4335]/40 bg-[#EA4335]/10 p-2 text-xs text-rose-100">
+              {attachRateAlerts.map((alert) => (
+                <p key={alert}>{alert}</p>
+              ))}
+            </div>
+          ) : (
+            <Badge variant="success">Attach rates acima do benchmark de 20%</Badge>
+          )}
         </CardContent>
       </Card>
 

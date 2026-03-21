@@ -12,6 +12,8 @@ export type FinancialImpact = "low" | "medium" | "high" | "critical";
 export type VaultStatus = "ok" | "warning" | "blocked";
 export type PixelSyncStatus = "healthy" | "unhealthy" | "no_data";
 export type CreativeFormat = "VSL" | "UGC" | "ADVERT" | "REELS";
+export type AwarenessStage = "unaware" | "problem_aware" | "solution_aware" | "product_aware" | "most_aware";
+export type TenantSquad = "copy" | "media" | "tech";
 
 export type SquadSyncKpiSnapshot = {
   hookRate: number;
@@ -271,6 +273,16 @@ export type WarRoomData = {
           estimatedRevenue: number;
           status: "scale" | "attention";
         }>;
+        upsellTree?: Array<{
+          fromProduct: string;
+          toProduct: string;
+          buyersFrom: number;
+          buyersTo: number;
+          attachRate: number;
+          benchmarkAttachRate: number;
+          status: "healthy" | "warning";
+        }>;
+        attachRateAlerts?: string[];
         revenueBySource: {
           paidTraffic: number;
           crmEmail: number;
@@ -346,6 +358,17 @@ export type WarRoomData = {
         processedToday: number;
         lastRunAt: string;
       };
+      killSwitch?: {
+        active: boolean;
+        merThreshold: number;
+        requiredDurationMinutes: number;
+        belowThresholdSince: string;
+        triggeredAt: string;
+        alertsSent: number;
+        autoTrafficBlocked: boolean;
+        reason: string;
+        peakWindow: string;
+      };
     };
   };
   contingency: {
@@ -398,6 +421,9 @@ export type WarRoomData = {
         title: string;
         saturation: number;
         expiresAt: string;
+        uniqueMechanism?: string;
+        marketSophisticationLevel?: 1 | 2 | 3 | 4 | 5;
+        assetValue?: number;
       }>;
       avatarDossier: Array<{
         pain: string;
@@ -419,6 +445,20 @@ export type WarRoomData = {
         active: boolean;
       }>;
       scriptEditor: string;
+    };
+    multiTenant?: {
+      squads: Array<{
+        id: TenantSquad;
+        name: string;
+        head: string;
+        cost: number;
+        revenue: number;
+        profit: number;
+        marginPct: number;
+        efficiencyScore: number;
+      }>;
+      bestSquadId: TenantSquad;
+      lastCalculatedAt: string;
     };
     trafficAttribution: {
       squads: Record<
@@ -475,6 +515,26 @@ export type WarRoomData = {
         clickRate: number;
       }>;
     };
+  };
+  customerCentrality?: {
+    leads: Array<{
+      leadId: string;
+      awarenessStage: AwarenessStage;
+      lastVslId: string;
+      watchSeconds: number;
+      watchCompletionPct: number;
+      openedEmails7d: number;
+      clickedEmails7d: number;
+      purchases: number;
+      currentLtv: number;
+      predictedLtv90d: number;
+      lastTouchAt: string;
+    }>;
+    awarenessDistribution: Array<{
+      stage: AwarenessStage;
+      leads: number;
+      avgPredictedLtv90d: number;
+    }>;
   };
   activityLog: Array<{
     id: string;
