@@ -7,7 +7,7 @@ import { isOpsAuthorized } from "@/app/api/ops/_auth";
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
-  if (!(await isOpsAuthorized(request))) {
+  if (!(await isOpsAuthorized(request, ["ceo", "techAdmin", "ctoDev"]))) {
     return NextResponse.json({ error: "Nao autorizado." }, { status: 401 });
   }
   const result = await processOpsJobQueue(WAR_ROOM_OPS_CONSTANTS.queue.worker.defaultBatchSize);
@@ -15,7 +15,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!(await isOpsAuthorized(request))) {
+  if (!(await isOpsAuthorized(request, ["ceo", "techAdmin", "ctoDev"]))) {
     return NextResponse.json({ error: "Nao autorizado." }, { status: 401 });
   }
   const body = (await request.json().catch(() => ({}))) as { limit?: number };
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
 }
 
 export async function HEAD(request: Request) {
-  if (!(await isOpsAuthorized(request))) {
+  if (!(await isOpsAuthorized(request, ["ceo", "techAdmin", "ctoDev"]))) {
     return new NextResponse(null, { status: 401 });
   }
   const stats = await getOpsJobStats();

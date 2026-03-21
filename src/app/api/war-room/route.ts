@@ -9,6 +9,9 @@ export const runtime = "nodejs";
 
 export async function GET() {
   const session = await getSessionFromCookies();
+  if (!session && process.env.NODE_ENV === "production") {
+    return NextResponse.json({ error: "Nao autenticado." }, { status: 401 });
+  }
   const role: UserRole = session?.role ?? "videoEditor";
   const fallbackUser = demoUsers.find((user) => user.role === role) ?? demoUsers[0];
   const currentUser = getDemoUserById(session?.userId ?? "") ?? fallbackUser;

@@ -95,7 +95,9 @@ export function readSessionToken(token: string | undefined) {
 
 export async function getSessionFromCookies() {
   const cookieStore = await cookies();
-  const supabaseSession = readSupabaseAuthSession(cookieStore.getAll());
+  const trustSupabaseJwtClaims =
+    process.env.WAR_ROOM_TRUST_SUPABASE_JWT_CLAIMS === "true" || process.env.NODE_ENV !== "production";
+  const supabaseSession = trustSupabaseJwtClaims ? readSupabaseAuthSession(cookieStore.getAll()) : null;
   if (supabaseSession) {
     return supabaseSession;
   }

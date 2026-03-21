@@ -39,6 +39,17 @@ type ListParams = {
 };
 
 type UpsertInput = Omit<DailySettlementRecord, "id" | "netProfit" | "createdAt" | "updatedAt">;
+type IncrementSaleInput = {
+  userId: string;
+  userName: string;
+  userRole: UserRole;
+  date: string;
+  niche: string;
+  grossRevenueIncrement: number;
+  winningCreativeId: string;
+  audienceInsightAppend: string;
+  productionFeedbackAppend: string;
+};
 
 const STORE_PATH = path.join(process.cwd(), ".war-room", "daily-settlements.json");
 
@@ -173,6 +184,69 @@ export async function upsertDailySettlement(input: UpsertInput) {
       ...input,
       id: randomUUID(),
       date,
+      netProfit: net,
+      createdAt: now,
+      updatedAt: now,
+    });
+    payload.items.unshift(created);
+    payload.items = payload.items.slice(0, 5000);
+    return created;
+  });
+}
+
+export async function incrementDailySettlementSale(input: IncrementSaleInput) {
+  return withMutation((payload) => {
+    const now = new Date().toISOString();
+    const date = toDateOnlyIso(input.date);
+    const grossIncrement = Math.max(0, safeNumber(input.grossRevenueIncrement));
+    const existingIndex = payload.items.findIndex((item) => item.userId === input.userId && item.date === date);
+    if (existingIndex >= 0) {
+      const current = payload.items[existingIndex];
+      const nextGrossRevenue = current.grossRevenue + grossIncrement;
+      const nextSalesCount = current.salesCount + 1;
+      const nextAudienceInsight = [current.audienceInsight, input.audienceInsightAppend].filter(Boolean).join("\n").trim();
+      const nextProductionFeedback = [current.productionFeedback, input.productionFeedbackAppend].filter(Boolean).join("\n").trim();
+      const net = calculateEstimatedNetProfit({
+        grossRevenue: nextGrossRevenue,
+        adSpend: current.adSpend,
+      }).netProfit;
+      const updated: DailySettlementRecord = normalizeRecord({
+        ...current,
+        userName: input.userName || current.userName,
+        userRole: input.userRole || current.userRole,
+        niche: input.niche || current.niche,
+        grossRevenue: nextGrossRevenue,
+        salesCount: nextSalesCount,
+        winningCreativeId: input.winningCreativeId || current.winningCreativeId,
+        audienceInsight: nextAudienceInsight || current.audienceInsight,
+        productionFeedback: nextProductionFeedback || current.productionFeedback,
+        netProfit: net,
+        updatedAt: now,
+      });
+      payload.items[existingIndex] = updated;
+      return updated;
+    }
+    const net = calculateEstimatedNetProfit({
+      grossRevenue: grossIncrement,
+      adSpend: 0,
+    }).netProfit;
+    const created: DailySettlementRecord = normalizeRecord({
+      id: randomUUID(),
+      userId: input.userId,
+      userName: input.userName,
+      userRole: input.userRole,
+      date,
+      niche: input.niche || "geral",
+      adSpend: 0,
+      salesCount: 1,
+      grossRevenue: grossIncrement,
+      ctr: 0,
+      cpc: 0,
+      cpm: 0,
+      checkoutRate: 0,
+      winningCreativeId: input.winningCreativeId || "CRM-WHATSAPP",
+      audienceInsight: input.audienceInsightAppend || "Venda recuperada via Sniper CRM.",
+      productionFeedback: input.productionFeedbackAppend || "Venda recuperada via Sniper CRM.",
       netProfit: net,
       createdAt: now,
       updatedAt: now,

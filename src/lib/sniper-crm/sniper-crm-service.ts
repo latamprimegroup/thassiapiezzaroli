@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { UserRole } from "@/lib/auth/rbac";
 import { getDemoUserById } from "@/lib/auth/users";
 import { toDateOnlyIso } from "@/lib/metrics/daily-settlement";
-import { getDailySettlementByUserDate, upsertDailySettlement } from "@/lib/persistence/daily-settlement-repository";
+import { incrementDailySettlementSale } from "@/lib/persistence/daily-settlement-repository";
 import {
   appendSniperAttributionEvent,
   appendSniperAuditLog,
@@ -563,27 +563,18 @@ async function registerSaleInDailySettlement(params: {
   leadId: string;
 }) {
   const date = toDateOnlyIso(new Date());
-  const existing = await getDailySettlementByUserDate(params.managerUserId, date);
-  const audienceInsightBase = existing?.audienceInsight || "";
-  const productionFeedbackBase = existing?.productionFeedback || "";
-  const audienceInsight = `${audienceInsightBase}\n[Sniper CRM] Venda WhatsApp confirmada no chat ${params.chatId} (lead ${params.leadId}).`.trim();
-  const productionFeedback = `${productionFeedbackBase}\n[Sniper CRM] Criativo ${params.creativeId} converteu venda via closer. Replicar variação.`.trim();
-  return upsertDailySettlement({
+  const audienceInsight = `[Sniper CRM] Venda WhatsApp confirmada no chat ${params.chatId} (lead ${params.leadId}).`;
+  const productionFeedback = `[Sniper CRM] Criativo ${params.creativeId} converteu venda via closer. Replicar variacao.`;
+  return incrementDailySettlementSale({
     userId: params.managerUserId,
     userName: params.managerUserName,
     userRole: params.managerRole,
     date,
-    niche: params.niche || existing?.niche || "geral",
-    adSpend: existing?.adSpend ?? 0,
-    salesCount: (existing?.salesCount ?? 0) + 1,
-    grossRevenue: (existing?.grossRevenue ?? 0) + params.grossRevenue,
-    ctr: existing?.ctr ?? 0,
-    cpc: existing?.cpc ?? 0,
-    cpm: existing?.cpm ?? 0,
-    checkoutRate: existing?.checkoutRate ?? 0,
-    winningCreativeId: params.creativeId || existing?.winningCreativeId || "CRM-WHATSAPP",
-    audienceInsight: audienceInsight || "Feedback automatico do Sniper CRM.",
-    productionFeedback: productionFeedback || "Feedback automatico do Sniper CRM.",
+    niche: params.niche || "geral",
+    grossRevenueIncrement: params.grossRevenue,
+    winningCreativeId: params.creativeId || "CRM-WHATSAPP",
+    audienceInsightAppend: audienceInsight,
+    productionFeedbackAppend: productionFeedback,
   });
 }
 

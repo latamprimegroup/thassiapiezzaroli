@@ -13,6 +13,17 @@ type ListParams = {
 };
 
 type UpsertInput = Omit<DailySettlementRecord, "id" | "netProfit" | "createdAt" | "updatedAt">;
+type IncrementSaleInput = {
+  userId: string;
+  userName: string;
+  userRole: UserRole;
+  date: string;
+  niche: string;
+  grossRevenueIncrement: number;
+  winningCreativeId: string;
+  audienceInsightAppend: string;
+  productionFeedbackAppend: string;
+};
 
 declare global {
   var __dailySettlementDbPool: Pool | undefined;
@@ -242,6 +253,105 @@ export async function upsertDailySettlement(input: UpsertInput) {
       ],
     );
     return toRecord(result.rows[0] as Record<string, unknown>);
+  });
+}
+
+export async function incrementDailySettlementSale(input: IncrementSaleInput) {
+  return withClient(async (client) => {
+    const now = new Date().toISOString();
+    const date = toDateOnlyIso(input.date);
+    const grossIncrement = Math.max(0, Number(input.grossRevenueIncrement || 0));
+    await client.query("begin");
+    try {
+      const locked = await client.query(
+        `
+        select *
+        from daily_settlements
+        where user_id = $1 and settlement_date = $2::date
+        for update
+        `,
+        [input.userId, date],
+      );
+      if (locked.rows[0]) {
+        const row = toRecord(locked.rows[0] as Record<string, unknown>);
+        const nextGrossRevenue = row.grossRevenue + grossIncrement;
+        const nextSalesCount = row.salesCount + 1;
+        const nextAudienceInsight = [row.audienceInsight, input.audienceInsightAppend].filter(Boolean).join("\n").trim();
+        const nextProductionFeedback = [row.productionFeedback, input.productionFeedbackAppend].filter(Boolean).join("\n").trim();
+        const nextNet = calculateEstimatedNetProfit({
+          grossRevenue: nextGrossRevenue,
+          adSpend: row.adSpend,
+        }).netProfit;
+        const updated = await client.query(
+          `
+          update daily_settlements
+          set user_name = $3,
+              user_role = $4,
+              niche = $5,
+              sales_count = $6,
+              gross_revenue = $7,
+              winning_creative_id = $8,
+              audience_insight = $9,
+              production_feedback = $10,
+              net_profit = $11,
+              updated_at = $12::timestamptz
+          where user_id = $1 and settlement_date = $2::date
+          returning *
+          `,
+          [
+            input.userId,
+            date,
+            input.userName || row.userName,
+            input.userRole || row.userRole,
+            input.niche || row.niche,
+            nextSalesCount,
+            nextGrossRevenue,
+            input.winningCreativeId || row.winningCreativeId,
+            nextAudienceInsight || row.audienceInsight,
+            nextProductionFeedback || row.productionFeedback,
+            nextNet,
+            now,
+          ],
+        );
+        await client.query("commit");
+        return toRecord(updated.rows[0] as Record<string, unknown>);
+      }
+
+      const net = calculateEstimatedNetProfit({
+        grossRevenue: grossIncrement,
+        adSpend: 0,
+      }).netProfit;
+      const created = await client.query(
+        `
+        insert into daily_settlements (
+          id, user_id, user_name, user_role, settlement_date, niche, ad_spend, sales_count, gross_revenue, ctr, cpc, cpm,
+          checkout_rate, winning_creative_id, audience_insight, production_feedback, net_profit, created_at, updated_at
+        ) values (
+          $1::uuid, $2, $3, $4, $5::date, $6, 0, 1, $7, 0, 0, 0, 0, $8, $9, $10, $11, $12::timestamptz, $12::timestamptz
+        )
+        returning *
+        `,
+        [
+          randomUUID(),
+          input.userId,
+          input.userName,
+          input.userRole,
+          date,
+          input.niche || "geral",
+          grossIncrement,
+          input.winningCreativeId || "CRM-WHATSAPP",
+          input.audienceInsightAppend || "Venda recuperada via Sniper CRM.",
+          input.productionFeedbackAppend || "Venda recuperada via Sniper CRM.",
+          net,
+          now,
+        ],
+      );
+      await client.query("commit");
+      return toRecord(created.rows[0] as Record<string, unknown>);
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    }
   });
 }
 

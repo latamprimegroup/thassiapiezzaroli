@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { processFirstContactWebhook } from "@/lib/sniper-crm/sniper-crm-service";
+import { checkRateLimit, readRequestIp } from "@/lib/security/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -22,6 +23,15 @@ function isAuthorized(request: Request) {
 export async function POST(request: Request) {
   if (!isAuthorized(request)) {
     return NextResponse.json({ error: "Nao autorizado." }, { status: 401 });
+  }
+  const ip = readRequestIp(request);
+  const limit = await checkRateLimit({
+    key: `sniper-contacted-webhook:${ip}`,
+    limit: 80,
+    windowMs: 60_000,
+  });
+  if (!limit.allowed) {
+    return NextResponse.json({ error: "Rate limit excedido." }, { status: 429 });
   }
   const body = (await request.json().catch(() => ({}))) as unknown;
   const parsed = payloadSchema.safeParse(body);

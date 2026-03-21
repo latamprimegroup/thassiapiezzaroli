@@ -27,3 +27,7 @@ export async function upsertDailySettlement(...args: Parameters<typeof fileStore
   return isDatabaseMode() ? dbStore.upsertDailySettlement(...args) : fileStore.upsertDailySettlement(...args);
 }
 
+export async function incrementDailySettlementSale(...args: Parameters<typeof fileStore.incrementDailySettlementSale>) {
+  return isDatabaseMode() ? dbStore.incrementDailySettlementSale(...args) : fileStore.incrementDailySettlementSale(...args);
+}
+

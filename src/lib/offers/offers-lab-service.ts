@@ -22,6 +22,7 @@ import type {
 } from "@/lib/offers/types";
 import { normalizeGatewayPayload, normalizeTrafficSource } from "@/lib/offers/utm-normalization";
 import { captureServerError } from "@/lib/observability/error-monitoring";
+import { rollingDaysStartIsoByBusinessDay } from "@/lib/time/war-room-clock";
 
 type UpsertOfferInput = {
   id?: string;
@@ -855,7 +856,7 @@ export async function getOffersLabDashboard(filters?: DashboardFilters): Promise
     return cached.value;
   }
 
-  const windowStart = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const windowStart = rollingDaysStartIsoByBusinessDay(7);
   const dashboardEventLimit = resolveOffersDashboardEventLimit();
   const [offers, events7d, sync, aliases, recentQuarantine, openQuarantine, predictiveModel] = await Promise.all([
     offersRepo.listOffers(),

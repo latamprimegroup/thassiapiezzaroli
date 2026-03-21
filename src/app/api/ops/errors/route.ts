@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth/session";
 import { captureServerError } from "@/lib/observability/error-monitoring";
 import { listSilentErrors } from "@/lib/observability/error-monitoring-store";
+import { checkRateLimit, readRequestIp } from "@/lib/security/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -17,6 +18,20 @@ function isApiKeyAuthorized(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const session = await getSessionFromCookies();
+  const allowedBySession = Boolean(session);
+  if (!allowedBySession && !isApiKeyAuthorized(request)) {
+    return NextResponse.json({ error: "Nao autorizado." }, { status: 401 });
+  }
+  const ip = readRequestIp(request);
+  const limit = await checkRateLimit({
+    key: `ops-errors:${ip}`,
+    limit: 90,
+    windowMs: 60_000,
+  });
+  if (!limit.allowed) {
+    return NextResponse.json({ error: "Rate limit excedido." }, { status: 429 });
+  }
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
   await captureServerError({
     route: typeof body.route === "string" ? body.route : "/client",
