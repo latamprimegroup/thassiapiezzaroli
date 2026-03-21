@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ShieldAlert, TrendingUp, Zap } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,7 +39,14 @@ type SectorCard = {
   lines: string[];
 };
 
+type ApiHubStatusPayload = {
+  mode: "auto" | "manual";
+  updatedAt: string;
+  providers: Array<{ provider: string; status: "api" | "manual" | "missing" }>;
+};
+
 export function CommandCenterCeoView({ data, onDrillDown, presentationMode }: CommandCenterCeoViewProps) {
+  const [apiHubStatus, setApiHubStatus] = useState<ApiHubStatusPayload | null>(null);
   const mer = data.integrations.merCross.value;
   const netProfit = data.enterprise.ceoFinance.netProfit;
   const equity = computeEquityValuation(data);
@@ -212,6 +219,24 @@ export function CommandCenterCeoView({ data, onDrillDown, presentationMode }: Co
     return events.slice(0, 8);
   }, [blockedDomains, data.creativeFactory.tasks, data.integrations.operations.killSwitch, sentiment.demandMoreSophisticated, topRoi]);
 
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      const response = await fetch("/api/admin/api-hub?view=status", { cache: "no-store" }).catch(() => null);
+      if (!response?.ok || !active) {
+        return;
+      }
+      const payload = (await response.json().catch(() => null)) as ApiHubStatusPayload | null;
+      if (!payload || !active) {
+        return;
+      }
+      setApiHubStatus(payload);
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   return (
     <section className="war-fade-in space-y-4">
       <Card className="border-white/10 bg-[#050505]">
@@ -246,6 +271,40 @@ export function CommandCenterCeoView({ data, onDrillDown, presentationMode }: Co
           </div>
         </CardContent>
       </Card>
+
+      {apiHubStatus && (
+        <Card className="border-white/10 bg-[#050505]">
+          <CardHeader>
+            <CardTitle className="text-sm">Saúde do Sistema (API vs Manual)</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-xs">
+            <p className="text-slate-300">
+              Modo operacional:{" "}
+              <span className={apiHubStatus.mode === "auto" ? "text-[#10B981]" : "text-[#FF9900]"}>
+                {apiHubStatus.mode === "auto" ? "API" : "MANUAL"}
+              </span>
+            </p>
+            <div className="grid gap-1 md:grid-cols-5">
+              {apiHubStatus.providers.map((provider) => (
+                <div key={provider.provider} className="rounded border border-white/10 bg-white/5 p-2">
+                  <p className="uppercase text-slate-400">{provider.provider}</p>
+                  <p
+                    className={
+                      provider.status === "api"
+                        ? "text-[#10B981]"
+                        : provider.status === "manual"
+                          ? "text-[#FF9900]"
+                          : "text-[#EA4335]"
+                    }
+                  >
+                    {provider.status.toUpperCase()}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className={`grid gap-4 ${presentationMode ? "2xl:grid-cols-[1fr_340px]" : "2xl:grid-cols-[1fr_360px]"}`}>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">

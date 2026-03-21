@@ -122,7 +122,19 @@ function statusLabel(status: "fresh" | "fatiguing" | "saturated") {
   return "Saturated";
 }
 
-export function CopyResearchModule() {
+type CopyResearchModuleProps = {
+  canUseUtmLinkBuilder: boolean;
+  canViewRetentionByVsl: boolean;
+  canApproveScripts: boolean;
+  actorName: string;
+};
+
+export function CopyResearchModule({
+  canUseUtmLinkBuilder,
+  canViewRetentionByVsl,
+  canApproveScripts,
+  actorName,
+}: CopyResearchModuleProps) {
   const { data, addActivity, registerCreativeNaming } = useWarRoom();
   const copyModule = data.enterprise.copyResearch;
   const [script, setScript] = useState(copyModule.scriptEditor);
@@ -155,6 +167,12 @@ export function CopyResearchModule() {
     howWeDifferentiate: "",
   });
   const [selectedCloneCreativeId, setSelectedCloneCreativeId] = useState("");
+  const [utmDraft, setUtmDraft] = useState({
+    baseUrl: "https://oferta.exemplo/vsl",
+    source: "meta",
+    hookVariation: "H01",
+    extraVariation: "",
+  });
   const [namingDraft, setNamingDraft] = useState(() => ({
     product: "LP9D",
     bigIdea: deriveBigIdeaCode(buildInitialBigIdeas(data)[0]?.title ?? "IDEIA"),
@@ -304,7 +322,7 @@ export function CopyResearchModule() {
   }
 
   async function approveIdeaAndDispatch() {
-    if (!selectedIdea || !canDispatch) {
+    if (!selectedIdea || !canDispatch || !canApproveScripts) {
       return;
     }
     patchSelectedIdea((idea) => ({ ...idea, approvedByHead: true }));
@@ -423,6 +441,52 @@ export function CopyResearchModule() {
     .slice(0, 8);
   const hookSuggestions = useMemo(() => suggestHookVariationsFromHistory(data.liveAdsTracking, 6), [data.liveAdsTracking]);
   const sentiment = useMemo(() => computeMarketSentimentTracker(data), [data]);
+  const retentionByVsl = useMemo(
+    () =>
+      data.liveAdsTracking
+        .map((row) => ({
+          id: row.id,
+          holdRate15s: safeDivide(row.views15s, Math.max(1, row.views3s)) * 100,
+          hookRate: safeDivide(row.views3s, Math.max(1, row.impressions)) * 100,
+          vslEfficiency: safeDivide(row.ic, Math.max(1, row.lp)) * 100,
+        }))
+        .sort((a, b) => b.holdRate15s - a.holdRate15s)
+        .slice(0, 8),
+    [data.liveAdsTracking],
+  );
+  const scriptApprovalQueue = useMemo(
+    () =>
+      ideasWithSaturation
+        .filter((idea) => !idea.approvedByHead && !idea.archived)
+        .map((idea) => ({
+          id: idea.id,
+          title: idea.title,
+          score: computeBigIdeaHealthScore({
+            hook: idea.hook,
+            uniqueMechanism: idea.uniqueMechanismSolution,
+            intellectualNovelty: idea.intellectualNovelty,
+            nomenclature: idea.nomenclature,
+            proofSocialUrl: idea.proofSocialUrl,
+            proofScientificUrl: idea.proofScientificUrl,
+            proofHistoricalUrl: idea.proofHistoricalUrl,
+            swipeReferenceUrl: idea.swipeReferenceUrl,
+            whatToSteal: idea.whatToSteal,
+            whatToBeat: idea.whatToBeat,
+          }),
+        }))
+        .slice(0, 6),
+    [ideasWithSaturation],
+  );
+  const utmPreview = useMemo(() => {
+    const chosenIdea = selectedIdea ?? ideasWithSaturation[0];
+    const ideaCode = chosenIdea ? deriveBigIdeaCode(chosenIdea.title) : "IDEIA";
+    const variationToken = sanitizeNamingToken(utmDraft.extraVariation || utmDraft.hookVariation || "H01");
+    const linkedId = chosenIdea?.linkedCreativeId || "ID0000";
+    const source = sanitizeNamingToken(utmDraft.source || "meta").toLowerCase();
+    const baseUrl = utmDraft.baseUrl.trim();
+    const separator = baseUrl.includes("?") ? "&" : "?";
+    return `${baseUrl}${separator}utm_source=${source}&utm_campaign=${ideaCode}|${chosenIdea?.id || "BIG_IDEA"}&utm_content=${variationToken}|${linkedId}&utm_term=${sanitizeNamingToken(chosenIdea?.nomenclature || "MECANISMO")}|${linkedId}`;
+  }, [ideasWithSaturation, selectedIdea, utmDraft.baseUrl, utmDraft.extraVariation, utmDraft.hookVariation, utmDraft.source]);
 
   async function copyNamingToClipboard() {
     if (!namingPreview.valid) {
@@ -456,6 +520,26 @@ export function CopyResearchModule() {
     registerCreativeNaming(entry);
     setNamingDraft((prev) => ({ ...prev, uniqueId: nextUniqueId([entry, ...data.enterprise.copyResearch.namingRegistry]) }));
     addActivity("Ops", "Naming Builder", "registrou DNA universal", entry.dnaName, entry.linkedCreativeId);
+  }
+
+  async function copyUtmLink() {
+    if (!canUseUtmLinkBuilder) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(utmPreview);
+      addActivity("Copy", actorName, "copiou link UTM pre-aprovado", selectedIdea?.id ?? "N/A", utmPreview);
+    } catch {
+      addActivity("Copy", actorName, "falhou ao copiar link UTM", selectedIdea?.id ?? "N/A", "clipboard");
+    }
+  }
+
+  function approveFromQueue(ideaId: string) {
+    if (!canApproveScripts) {
+      return;
+    }
+    setIdeas((prev) => prev.map((idea) => (idea.id === ideaId ? { ...idea, approvedByHead: true } : idea)));
+    addActivity("Head Copy", actorName, "aprovou roteiro para producao", ideaId, "fila de aprovacao senior");
   }
 
   return (
@@ -504,6 +588,106 @@ export function CopyResearchModule() {
           <div className="rounded border border-white/10 bg-black/30 p-2 text-xs text-slate-200">{sentiment.recommendation}</div>
         </CardContent>
       </Card>
+
+      {canUseUtmLinkBuilder && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Daily Tool - Gerador de Links UTM pré-aprovadas</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid gap-2 md:grid-cols-2">
+              <input
+                value={utmDraft.baseUrl}
+                onChange={(event) => setUtmDraft((prev) => ({ ...prev, baseUrl: event.target.value }))}
+                placeholder="https://oferta.exemplo/vsl"
+                className="rounded border border-white/10 bg-slate-900/70 px-2 py-1.5 text-xs"
+              />
+              <select
+                value={utmDraft.source}
+                onChange={(event) => setUtmDraft((prev) => ({ ...prev, source: event.target.value }))}
+                className="rounded border border-white/10 bg-slate-900/70 px-2 py-1.5 text-xs"
+              >
+                <option value="meta">Meta</option>
+                <option value="google">Google</option>
+                <option value="tiktok">TikTok</option>
+                <option value="kwai">Kwai</option>
+              </select>
+              <input
+                value={utmDraft.hookVariation}
+                onChange={(event) => setUtmDraft((prev) => ({ ...prev, hookVariation: event.target.value }))}
+                placeholder="H01"
+                className="rounded border border-white/10 bg-slate-900/70 px-2 py-1.5 text-xs"
+              />
+              <input
+                value={utmDraft.extraVariation}
+                onChange={(event) => setUtmDraft((prev) => ({ ...prev, extraVariation: event.target.value }))}
+                placeholder="Variacao opcional"
+                className="rounded border border-white/10 bg-slate-900/70 px-2 py-1.5 text-xs"
+              />
+            </div>
+            <div className="rounded border border-white/15 bg-black/40 p-2 font-mono text-[11px] text-[#FFD39A]">
+              {utmPreview}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" className="h-8 px-3 text-xs" onClick={copyUtmLink}>
+                Copiar link para Tráfego
+              </Button>
+              <Button
+                type="button"
+                className="h-8 px-3 text-xs"
+                onClick={() =>
+                  addActivity("Copy", actorName, "gerou link UTM para gestor", selectedIdea?.id ?? "N/A", utmPreview)
+                }
+              >
+                Registrar envio para Gestor
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {canViewRetentionByVsl && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Visão Sênior - Taxa de Retenção por VSL</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-xs">
+            {retentionByVsl.map((row) => (
+              <div key={row.id} className="rounded border border-white/10 bg-white/5 p-2">
+                <p className="text-slate-100">{row.id}</p>
+                <p className="text-slate-300">
+                  Hook {row.hookRate.toFixed(2)}% | Hold 15s {row.holdRate15s.toFixed(2)}% | IC {row.vslEfficiency.toFixed(2)}%
+                </p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {canApproveScripts && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Visão Sênior - Aprovação de Roteiros</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-xs">
+            {scriptApprovalQueue.length === 0 ? (
+              <p className="rounded border border-white/10 bg-white/5 p-2 text-slate-400">Sem roteiros pendentes.</p>
+            ) : (
+              scriptApprovalQueue.map((item) => (
+                <div key={item.id} className="rounded border border-white/10 bg-white/5 p-2">
+                  <div className="mb-1 flex items-center justify-between">
+                    <p className="text-slate-100">{item.title}</p>
+                    <Badge variant={item.score >= 70 ? "success" : "warning"}>{item.score}/100</Badge>
+                  </div>
+                  <Button type="button" className="h-7 px-2 text-[11px]" onClick={() => approveFromQueue(item.id)}>
+                    Aprovar roteiro
+                  </Button>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
@@ -929,7 +1113,12 @@ export function CopyResearchModule() {
               >
                 Enviar para Revisao do Head
               </Button>
-              <Button type="button" className="h-8 px-3 text-xs" onClick={approveIdeaAndDispatch} disabled={!canDispatch}>
+              <Button
+                type="button"
+                className="h-8 px-3 text-xs"
+                onClick={approveIdeaAndDispatch}
+                disabled={!canDispatch || !canApproveScripts}
+              >
                 Aprovar Big Idea e enviar para Squads
               </Button>
               <Button type="button" className="h-8 px-3 text-xs" onClick={exportBriefingPdf}>

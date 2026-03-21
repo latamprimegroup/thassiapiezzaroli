@@ -84,7 +84,7 @@ export function sanitizeWarRoomDataForRole(input: WarRoomData, role: UserRole): 
     }));
   }
 
-  if (role === "videoEditor") {
+  if (role === "videoEditor" || role === "productionEditor" || role === "productionDesigner") {
     data.globalOverview.revenue = 0;
     data.globalOverview.trafficSources = data.globalOverview.trafficSources.map((source) => ({
       ...source,

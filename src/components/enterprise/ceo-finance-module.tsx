@@ -10,13 +10,21 @@ import { computeIntelligenceEngine, ELITE_BENCHMARKS } from "@/lib/metrics/intel
 
 type CeoFinanceModuleProps = {
   canViewSensitiveFinancials: boolean;
+  canEditBoardroomInputs: boolean;
+  canViewSystemHealthMode: boolean;
+  actorName: string;
 };
 
 const currency = (value: number) => value.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 const percent = (value: number) => `${value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
 
-export function CeoFinanceModule({ canViewSensitiveFinancials }: CeoFinanceModuleProps) {
-  const { data, addActivity } = useWarRoom();
+export function CeoFinanceModule({
+  canViewSensitiveFinancials,
+  canEditBoardroomInputs,
+  canViewSystemHealthMode,
+  actorName,
+}: CeoFinanceModuleProps) {
+  const { data, addActivity, updateBoardroomFinanceConfig } = useWarRoom();
   const f = data.enterprise.ceoFinance;
   const intelligence = computeIntelligenceEngine(data);
   const contingencyItems = [...data.contingency.domains, ...data.contingency.adAccounts, ...data.contingency.fanpages];
@@ -32,6 +40,8 @@ export function CeoFinanceModule({ canViewSensitiveFinancials }: CeoFinanceModul
   const [simAdSpend, setSimAdSpend] = useState(fortress.scaleSimulator.defaultAdSpend);
   const [simCpaGrowthPct, setSimCpaGrowthPct] = useState(15);
   const [mechanismQuery, setMechanismQuery] = useState("INSULINA");
+  const [fixedCostsInput, setFixedCostsInput] = useState(data.integrations.gateway.fixedCosts);
+  const [taxRateInput, setTaxRateInput] = useState(data.integrations.gateway.taxRatePct);
 
   const cohortMax = Math.max(f.ltvCohorts.d30, f.ltvCohorts.d60, f.ltvCohorts.d90, 1);
   const cohorts = [
@@ -122,6 +132,64 @@ export function CeoFinanceModule({ canViewSensitiveFinancials }: CeoFinanceModul
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">The Boardroom - Custos Fixos, Impostos e Saúde de Dados</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          {canViewSystemHealthMode && (
+            <div className="rounded border border-white/10 bg-white/5 p-2 text-xs">
+              <p className="text-slate-300">
+                Fonte de dados operacional:{" "}
+                {Object.values(data.integrations.apiStatus).every((provider) => provider.status === "online") ? (
+                  <span className="text-[#10B981]">API</span>
+                ) : (
+                  <span className="text-[#FF9900]">MIX API/MANUAL</span>
+                )}
+              </p>
+            </div>
+          )}
+          <div className="grid gap-2 md:grid-cols-3">
+            <label className="rounded border border-white/10 bg-white/5 p-2 text-xs">
+              <span className="text-slate-400">Custos fixos (R$)</span>
+              <input
+                type="number"
+                value={Math.round(fixedCostsInput)}
+                disabled={!canEditBoardroomInputs}
+                onChange={(event) => setFixedCostsInput(Math.max(0, Number(event.target.value) || 0))}
+                className="mt-1 h-8 w-full rounded border border-white/15 bg-slate-900/70 px-2"
+              />
+            </label>
+            <label className="rounded border border-white/10 bg-white/5 p-2 text-xs">
+              <span className="text-slate-400">Impostos (%)</span>
+              <input
+                type="number"
+                value={taxRateInput}
+                disabled={!canEditBoardroomInputs}
+                onChange={(event) => setTaxRateInput(Math.max(0, Number(event.target.value) || 0))}
+                className="mt-1 h-8 w-full rounded border border-white/15 bg-slate-900/70 px-2"
+              />
+            </label>
+            <div className="flex items-end">
+              <button
+                type="button"
+                disabled={!canEditBoardroomInputs}
+                onClick={() => {
+                  updateBoardroomFinanceConfig({
+                    fixedCosts: fixedCostsInput,
+                    taxRatePct: taxRateInput,
+                  });
+                  addActivity("Financeiro", actorName, "atualizou boardroom", "custos/impostos", `${fixedCostsInput}|${taxRateInput}%`);
+                }}
+                className="h-8 w-full rounded border border-[#FF9900]/40 bg-[#FF9900]/20 px-2 text-xs text-[#FFD39A] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Aplicar no Boardroom
+              </button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

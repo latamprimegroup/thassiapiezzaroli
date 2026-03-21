@@ -7,6 +7,7 @@ import type { SquadSyncCommandOrder, SquadSyncKpiSnapshot, TrafficSourceKey, War
 type WarRoomContextValue = {
   data: WarRoomData;
   updateTrafficCpa: (source: TrafficSourceKey, newValue: number) => void;
+  updateBoardroomFinanceConfig: (payload: { fixedCosts: number; taxRatePct: number }) => void;
   addActivity: (actorRole: string, actorName: string, action: string, entity: string, reason: string) => void;
   applySquadSyncFeedback: (payload: {
     creativeId: string;
@@ -34,6 +35,8 @@ export function useWarRoom() {
 export function recalculateEnterpriseFinance(data: WarRoomData): WarRoomData {
   const base = data.enterprise.ceoFinance;
   const squads = data.enterprise.trafficAttribution.squads;
+  const fixedCosts = Math.max(0, data.integrations.gateway.fixedCosts || 0);
+  const taxRatePct = Math.max(0, data.integrations.gateway.taxRatePct || 0);
 
   const pressureMeta = safeDivide(squads.meta.currentCpa, squads.meta.targetCpa);
   const pressureGoogle = safeDivide(squads.google.currentCpa, squads.google.targetCpa);
@@ -41,10 +44,13 @@ export function recalculateEnterpriseFinance(data: WarRoomData): WarRoomData {
   const pressure = (pressureMeta + pressureGoogle + pressureNative) / 3 || 1;
 
   const adjustedAdSpend = base.adSpend * pressure;
-  const netProfit = Math.max(0, base.grossRevenue - adjustedAdSpend - base.gatewayFees - base.nfseTaxes);
+  const nfseTaxes = base.grossRevenue * (taxRatePct / 100);
+  const netProfit = Math.max(0, base.grossRevenue - adjustedAdSpend - base.gatewayFees - nfseTaxes - fixedCosts);
   const mer = safeDivide(base.grossRevenue, adjustedAdSpend);
   const paybackDays = Math.max(1, Math.round(safeDivide(adjustedAdSpend, safeDivide(base.grossRevenue, 30))));
 
+  data.enterprise.ceoFinance.nfseTaxes = nfseTaxes;
+  data.enterprise.ceoFinance.taxProvision = nfseTaxes;
   data.enterprise.ceoFinance.netProfit = netProfit;
   data.enterprise.ceoFinance.mer = mer;
   data.enterprise.ceoFinance.paybackDays = paybackDays;

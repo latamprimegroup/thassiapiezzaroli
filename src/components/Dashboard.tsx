@@ -59,6 +59,19 @@ const OffersLabModule = dynamic(
     ),
   },
 );
+const ApiHubModule = dynamic(() => import("@/components/enterprise/api-hub-module").then((mod) => mod.ApiHubModule), {
+  loading: () => (
+    <Card className="border-white/10 bg-[#080808]">
+      <CardHeader>
+        <CardTitle className="text-base">API Hub</CardTitle>
+        <CardDescription>Carregando painel secreto...</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="h-24 animate-pulse rounded border border-white/10 bg-white/5" />
+      </CardContent>
+    </Card>
+  ),
+});
 
 type DashboardProps = {
   data: WarRoomData;
@@ -74,11 +87,13 @@ type Section = {
   label: string;
   subtitle: string;
   icon: LucideIcon;
+  secret?: boolean;
 };
 
 const sections: Section[] = [
   { id: "commandCenterCeo", label: "The Command Center", subtitle: "CEO View 10D", icon: LayoutDashboard },
   { id: "offersLab", label: "Offers Lab", subtitle: "Production & Validation", icon: FlaskConical },
+  { id: "apiHub", label: "API Hub", subtitle: "Tech Admin (secreto)", icon: Binary, secret: true },
   { id: "ceoFinance", label: "CEO & Financeiro", subtitle: "Soberania de Caixa", icon: Wallet },
   { id: "copyResearch", label: "Copy & Pesquisa", subtitle: "The Brain", icon: BrainCircuit },
   { id: "trafficAttribution", label: "Trafego & Atribuicao", subtitle: "The Engine", icon: SatelliteDish },
@@ -222,6 +237,15 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
     });
   }
 
+  function updateBoardroomFinanceConfig(payload: { fixedCosts: number; taxRatePct: number }) {
+    setViewData((prev) => {
+      const next = structuredClone(prev);
+      next.integrations.gateway.fixedCosts = Math.max(0, Number.isFinite(payload.fixedCosts) ? payload.fixedCosts : 0);
+      next.integrations.gateway.taxRatePct = Math.max(0, Number.isFinite(payload.taxRatePct) ? payload.taxRatePct : 0);
+      return recalculateEnterpriseFinance(next);
+    });
+  }
+
   function applySquadSyncFeedback(payload: {
     creativeId: string;
     kpisToday: SquadSyncKpiSnapshot;
@@ -301,6 +325,7 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
   const contextValue = {
     data: viewData,
     updateTrafficCpa,
+    updateBoardroomFinanceConfig,
     addActivity,
     applySquadSyncFeedback,
     registerCreativeNaming,
@@ -322,6 +347,9 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
                 const Icon = section.icon;
                 const active = section.id === activeSection;
                 const allowed = permissions.allowedSections.includes(section.id);
+                if (section.secret && !allowed) {
+                  return null;
+                }
                 return (
                   <Button
                     key={section.id}
@@ -499,7 +527,12 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
             )}
 
             {activeSection === "ceoFinance" && isSectionAllowed && (
-              <CeoFinanceModule canViewSensitiveFinancials={permissions.canViewSensitiveFinancials} />
+              <CeoFinanceModule
+                canViewSensitiveFinancials={permissions.canViewSensitiveFinancials}
+                canEditBoardroomInputs={permissions.canEditBoardroomInputs}
+                canViewSystemHealthMode={permissions.canViewSystemHealthMode}
+                actorName={activeUser.name}
+              />
             )}
             {activeSection === "commandCenterCeo" && isSectionAllowed && (
               <CommandCenterCeoView
@@ -509,8 +542,23 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
               />
             )}
             {activeSection === "offersLab" && isSectionAllowed && <OffersLabModule />}
-            {activeSection === "copyResearch" && isSectionAllowed && <CopyResearchModule />}
-            {activeSection === "trafficAttribution" && isSectionAllowed && <TrafficAttributionModule />}
+            {activeSection === "apiHub" && isSectionAllowed && <ApiHubModule />}
+            {activeSection === "copyResearch" && isSectionAllowed && (
+              <CopyResearchModule
+                canUseUtmLinkBuilder={permissions.canUseUtmLinkBuilder}
+                canViewRetentionByVsl={permissions.canViewRetentionByVsl}
+                canApproveScripts={permissions.canApproveScripts}
+                actorName={activeUser.name}
+              />
+            )}
+            {activeSection === "trafficAttribution" && isSectionAllowed && (
+              <TrafficAttributionModule
+                canInputTrafficSpend={permissions.canInputTrafficSpend}
+                canUseScalingAdvisor={permissions.canUseScalingAdvisor}
+                canViewSystemHealthMode={permissions.canViewSystemHealthMode}
+                actorName={activeUser.name}
+              />
+            )}
             {activeSection === "testLaboratory" && isSectionAllowed && (
               <TestLaboratoryModule actorName={activeUser.name} actorRole={sessionState.role} />
             )}
@@ -525,6 +573,8 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
                 canShowRoas={canShowRoas}
                 emphasizeRetention={permissions.emphasizeRetention}
                 simplified={permissions.simplifiedPerformanceView}
+                canManageProductionQueue={permissions.canManageProductionQueue}
+                actorName={activeUser.name}
               />
             )}
             {activeSection === "techCro" && isSectionAllowed && <TechCroModule />}

@@ -10,7 +10,7 @@ import {
 type DemandTask = WarRoomData["commandCenter"]["tasks"][number];
 
 export function canApproveDone(role: UserRole) {
-  return role === "ceo" || role === "mediaBuyer";
+  return role === "ceo" || role === "mediaBuyer" || role === "trafficSenior";
 }
 
 export async function mergeCommandCenterFromStore(data: WarRoomData): Promise<WarRoomData> {

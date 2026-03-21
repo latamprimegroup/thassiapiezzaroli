@@ -113,7 +113,7 @@ export function CommandCenterModule({ actorName, actorRole }: CommandCenterModul
   const [decisionDrafts, setDecisionDrafts] = useState<Record<string, string>>({});
   const [dragTaskId, setDragTaskId] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
-  const canApproveDone = actorRole === "ceo" || actorRole === "mediaBuyer";
+  const canApproveDone = actorRole === "ceo" || actorRole === "mediaBuyer" || actorRole === "trafficSenior";
 
   const fatigueWinners = useMemo(
     () => data.liveAdsTracking.filter((row) => row.roas > 2.5 && isFatigueImminent(row)),

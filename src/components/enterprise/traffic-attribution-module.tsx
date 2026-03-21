@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { useWarRoom } from "@/context/war-room-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { ContingencyMonitor } from "@/components/war-room/contingency-monitor";
 import { computeIntelligenceEngine } from "@/lib/metrics/intelligence-engine";
 
@@ -11,8 +13,27 @@ const currency = (value: number) => value.toLocaleString("pt-BR", { style: "curr
 
 type Source = "meta" | "google" | "native";
 
-export function TrafficAttributionModule() {
+type TrafficAttributionModuleProps = {
+  canInputTrafficSpend: boolean;
+  canUseScalingAdvisor: boolean;
+  canViewSystemHealthMode: boolean;
+  actorName: string;
+};
+
+export function TrafficAttributionModule({
+  canInputTrafficSpend,
+  canUseScalingAdvisor,
+  canViewSystemHealthMode,
+  actorName,
+}: TrafficAttributionModuleProps) {
   const { data, updateTrafficCpa, addActivity } = useWarRoom();
+  const [manualDailySpend, setManualDailySpend] = useState({
+    meta: data.globalOverview.trafficSources.find((item) => item.source.toLowerCase().includes("meta"))?.spend ?? 0,
+    google: data.globalOverview.trafficSources.find((item) => item.source.toLowerCase().includes("google"))?.spend ?? 0,
+    tiktok: data.globalOverview.trafficSources.find((item) => item.source.toLowerCase().includes("tiktok"))?.spend ?? 0,
+    kwai: data.globalOverview.trafficSources.find((item) => item.source.toLowerCase().includes("kwai"))?.spend ?? 0,
+  });
+  const [manualMode, setManualMode] = useState(false);
   const squads = data.enterprise.trafficAttribution.squads;
   const intelligence = computeIntelligenceEngine(data);
   const killSwitch = data.integrations.operations.killSwitch;
@@ -36,6 +57,8 @@ export function TrafficAttributionModule() {
   const bestScalingAsset = data.integrations.attribution.validatedAssets
     .slice()
     .sort((a, b) => a.effectiveCpa - b.effectiveCpa)[0];
+  const offersLabApiOnline = data.integrations.apiStatus.utmify.status === "online";
+  const effectiveDataMode = manualMode || !offersLabApiOnline ? "manual" : "api";
 
   function renderSquad(source: Source, label: string) {
     const row = squads[source];
@@ -49,7 +72,11 @@ export function TrafficAttributionModule() {
           type="number"
           step="0.01"
           defaultValue={row.currentCpa}
+          disabled={!canInputTrafficSpend}
           onBlur={(event) => {
+            if (!canInputTrafficSpend) {
+              return;
+            }
             updateTrafficCpa(source, Number(event.target.value || row.currentCpa));
             addActivity("Media Buyer", "Gestor Tráfego", "atualizou CPA", label, `novo CPA ${event.target.value}`);
           }}
@@ -68,6 +95,68 @@ export function TrafficAttributionModule() {
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Traffic Hub - Input Diário de Gastos</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm">
+          {canViewSystemHealthMode && (
+            <div className="rounded border border-white/10 bg-white/5 p-2 text-xs">
+              <p className="text-slate-300">
+                Saúde do sistema:{" "}
+                <span className={effectiveDataMode === "api" ? "text-[#10B981]" : "text-[#FF9900]"}>
+                  modo {effectiveDataMode.toUpperCase()}
+                </span>{" "}
+                {effectiveDataMode === "api" ? "(dados de API ativos)" : "(entrada manual habilitada)"}
+              </p>
+            </div>
+          )}
+          <div className="grid gap-2 md:grid-cols-4">
+            {(["meta", "google", "tiktok", "kwai"] as const).map((source) => (
+              <label key={source} className="rounded border border-white/10 bg-white/5 p-2 text-xs">
+                <span className="mb-1 block uppercase text-slate-400">{source}</span>
+                <input
+                  type="number"
+                  value={manualDailySpend[source]}
+                  onChange={(event) =>
+                    setManualDailySpend((prev) => ({
+                      ...prev,
+                      [source]: Number(event.target.value || 0),
+                    }))
+                  }
+                  className="h-7 w-full rounded border border-white/15 bg-slate-900/70 px-2"
+                  disabled={!canInputTrafficSpend}
+                />
+              </label>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              className="h-7 px-2 text-[11px]"
+              disabled={!canInputTrafficSpend}
+              onClick={() => {
+                setManualMode(true);
+                addActivity("Trafego", actorName, "registrou gastos diarios manualmente", "Traffic Hub", JSON.stringify(manualDailySpend));
+              }}
+            >
+              Salvar input manual
+            </Button>
+            <Button
+              type="button"
+              className="h-7 px-2 text-[11px]"
+              disabled={!canInputTrafficSpend}
+              onClick={() => {
+                setManualMode(false);
+                addActivity("Trafego", actorName, "retornou para modo API", "Traffic Hub", "sincronizacao automatica");
+              }}
+            >
+              Voltar para modo API
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -100,6 +189,23 @@ export function TrafficAttributionModule() {
             <div className="rounded border border-[#10B981]/30 bg-[#10B981]/10 p-2 text-xs text-emerald-100">
               Scaling Advisor: o ID {bestScalingAsset.assetId} tem LTV alto e melhor eficiencia de CPA. Sugestao: aumentar budget em 15% agora.
             </div>
+          ) : null}
+          {canUseScalingAdvisor && bestScalingAsset ? (
+            <Button
+              type="button"
+              className="h-7 px-2 text-[11px]"
+              onClick={() =>
+                addActivity(
+                  "Head Midia",
+                  actorName,
+                  "executou escala em um clique",
+                  bestScalingAsset.assetId,
+                  "oferta validada >= 70k e ROAS >= 1.8",
+                )
+              }
+            >
+              Escalar em 1 clique
+            </Button>
           ) : null}
         </CardContent>
       </Card>

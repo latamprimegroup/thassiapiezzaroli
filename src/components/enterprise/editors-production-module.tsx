@@ -14,9 +14,17 @@ type EditorsProductionModuleProps = {
   canShowRoas: boolean;
   emphasizeRetention: boolean;
   simplified: boolean;
+  canManageProductionQueue: boolean;
+  actorName: string;
 };
 
-export function EditorsProductionModule({ canShowRoas, emphasizeRetention, simplified }: EditorsProductionModuleProps) {
+export function EditorsProductionModule({
+  canShowRoas,
+  emphasizeRetention,
+  simplified,
+  canManageProductionQueue,
+  actorName,
+}: EditorsProductionModuleProps) {
   const { data, addActivity } = useWarRoom();
   const editors = data.enterprise.editorsProduction;
   const roiRanking = data.integrations.attribution.realRoiLeaderboard.slice(0, 6);
@@ -24,6 +32,11 @@ export function EditorsProductionModule({ canShowRoas, emphasizeRetention, simpl
   const [newHookVariation, setNewHookVariation] = useState("");
   const [hookVariations, setHookVariations] = useState<string[]>([]);
   const [assetSearch, setAssetSearch] = useState("");
+  const [deliveryDraft, setDeliveryDraft] = useState({
+    utmId: data.enterprise.copyResearch.namingRegistry[0]?.uniqueId ?? "ID0000",
+    assetUrl: "",
+  });
+  const [deliveries, setDeliveries] = useState<Array<{ utmId: string; assetUrl: string; at: string }>>([]);
   const priorityQueue = useMemo(
     () =>
       data.liveAdsTracking
@@ -48,6 +61,17 @@ export function EditorsProductionModule({ canShowRoas, emphasizeRetention, simpl
         .slice(0, 12),
     [assetSearch, data.liveAdsTracking],
   );
+  const productionQueue = useMemo(
+    () =>
+      data.commandCenter.tasks
+        .filter((task) => task.department === "editorsCreative" && task.status !== "done")
+        .sort((a, b) => {
+          const rank = { critical: 3, high: 2, medium: 1, low: 0 };
+          return rank[b.impact] - rank[a.impact];
+        })
+        .slice(0, 8),
+    [data.commandCenter.tasks],
+  );
 
   function addHookVariation() {
     const value = newHookVariation.trim();
@@ -59,8 +83,87 @@ export function EditorsProductionModule({ canShowRoas, emphasizeRetention, simpl
     addActivity("Edicao", "Creative Factory", "adicionou variacao de hook", pipelineBodyId, value);
   }
 
+  function saveDelivery() {
+    const url = deliveryDraft.assetUrl.trim();
+    if (!url) {
+      return;
+    }
+    const entry = {
+      utmId: deliveryDraft.utmId,
+      assetUrl: url,
+      at: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+    };
+    setDeliveries((prev) => [entry, ...prev].slice(0, 10));
+    setDeliveryDraft((prev) => ({ ...prev, assetUrl: "" }));
+    addActivity("Producao", actorName, "subiu criativo final", entry.utmId, entry.assetUrl);
+  }
+
   return (
     <section className="war-fade-in space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Creative Factory - Fila de Produção</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-xs">
+          {productionQueue.length === 0 ? (
+            <p className="rounded border border-white/10 bg-white/5 p-2 text-slate-400">Sem demandas pendentes para edição.</p>
+          ) : (
+            productionQueue.map((task) => (
+              <div key={task.id} className="rounded border border-white/10 bg-white/5 p-2">
+                <p className="text-slate-100">{task.title}</p>
+                <p className="text-slate-400">{task.description}</p>
+                <Badge variant={task.impact === "critical" ? "danger" : "warning"}>
+                  Prioridade: {task.impact.toUpperCase()}
+                </Badge>
+              </div>
+            ))
+          )}
+          {!canManageProductionQueue && <p className="text-slate-500">Permissão de gestão de fila restrita ao squad de produção.</p>}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Upload do Criativo Final (Drive/Vimeo)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-xs">
+          <div className="grid gap-2 md:grid-cols-[1fr_2fr_auto]">
+            <select
+              value={deliveryDraft.utmId}
+              onChange={(event) => setDeliveryDraft((prev) => ({ ...prev, utmId: event.target.value }))}
+              className="h-8 rounded border border-white/10 bg-slate-900/70 px-2"
+              disabled={!canManageProductionQueue}
+            >
+              {data.enterprise.copyResearch.namingRegistry.slice(0, 80).map((item) => (
+                <option key={item.id} value={item.uniqueId}>
+                  {item.uniqueId} | {item.dnaName}
+                </option>
+              ))}
+            </select>
+            <input
+              value={deliveryDraft.assetUrl}
+              onChange={(event) => setDeliveryDraft((prev) => ({ ...prev, assetUrl: event.target.value }))}
+              placeholder="https://drive.google.com/... ou https://vimeo.com/..."
+              className="h-8 rounded border border-white/10 bg-slate-900/70 px-2"
+              disabled={!canManageProductionQueue}
+            />
+            <Button type="button" className="h-8 px-3 text-[11px]" onClick={saveDelivery} disabled={!canManageProductionQueue}>
+              Vincular
+            </Button>
+          </div>
+          <div className="space-y-1">
+            {deliveries.map((item) => (
+              <div key={`${item.utmId}-${item.at}`} className="rounded border border-white/10 bg-black/30 p-2">
+                <p className="text-slate-200">
+                  {item.utmId} | {item.at}
+                </p>
+                <p className="text-slate-400">{item.assetUrl}</p>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Fila de Prioridade por Impacto Financeiro</CardTitle>
