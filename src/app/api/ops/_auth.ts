@@ -13,6 +13,9 @@ export async function isOpsAuthorized(request: Request, allowedRoles?: UserRole[
 
   const session = await getSessionFromCookies();
   if (!session) {
+    if (process.env.NODE_ENV === "production") {
+      return false;
+    }
     return !expected;
   }
   if (!allowedRoles || allowedRoles.length === 0) {

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth/session";
-import { appendPlaybookAction, listPlaybookActions } from "@/lib/persistence/lead-intelligence-store";
+import { appendPlaybookAction, listPlaybookActions } from "@/lib/persistence/lead-intelligence-repository";
 
 export const runtime = "nodejs";
 

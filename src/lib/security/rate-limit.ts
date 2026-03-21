@@ -45,6 +45,18 @@ export async function checkRateLimit(params: {
     };
   }
 
+  const requireDistributedLimiterInProd =
+    process.env.NODE_ENV === "production" && process.env.WAR_ROOM_REQUIRE_REDIS_IN_PROD === "true";
+  if (requireDistributedLimiterInProd) {
+    return {
+      allowed: false,
+      remaining: 0,
+      resetMs: now() + params.windowMs,
+      distributed: false,
+      reason: "distributed_rate_limit_unavailable",
+    };
+  }
+
   const store = getStore();
   const record = store.get(params.key);
   const currentMs = now();

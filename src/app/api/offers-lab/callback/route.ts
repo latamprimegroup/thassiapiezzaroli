@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 function isAuthorized(request: Request) {
   const expected = process.env.OFFERS_LAB_API_KEY || process.env.WAR_ROOM_WEBHOOK_API_KEY;
   if (!expected) {
-    return true;
+    return process.env.NODE_ENV !== "production";
   }
   const apiKey = request.headers.get("x-api-key");
   const authorization = request.headers.get("authorization");

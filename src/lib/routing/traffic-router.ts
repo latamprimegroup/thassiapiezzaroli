@@ -1,5 +1,10 @@
 import type { WarRoomData } from "@/lib/war-room/types";
-import { listRoutingRules, updateRoutingRule, upsertRoutingRule, type RoutingRule } from "@/lib/persistence/lead-intelligence-store";
+import {
+  listRoutingRules,
+  updateRoutingRule,
+  upsertRoutingRule,
+  type RoutingRule,
+} from "@/lib/persistence/lead-intelligence-repository";
 
 export type ResolvedRoute = {
   offerId: string;

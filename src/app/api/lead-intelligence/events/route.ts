@@ -6,7 +6,7 @@ import {
   listLeadEvents,
   listTriggerPerformance,
   type LeadEventRecord,
-} from "@/lib/persistence/lead-intelligence-store";
+} from "@/lib/persistence/lead-intelligence-repository";
 
 export const runtime = "nodejs";
 

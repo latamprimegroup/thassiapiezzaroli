@@ -6,7 +6,7 @@ import {
   listLeadEvents,
   listPlaybookActions,
   listTriggerPerformance,
-} from "@/lib/persistence/lead-intelligence-store";
+} from "@/lib/persistence/lead-intelligence-repository";
 import { getRoutingStatus } from "@/lib/routing/traffic-router";
 
 export const runtime = "nodejs";

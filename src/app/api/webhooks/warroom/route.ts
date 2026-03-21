@@ -29,7 +29,7 @@ function parseProvider(request: Request, payload: Record<string, unknown>): Prov
 function isAuthorized(request: Request) {
   const expected = process.env.WAR_ROOM_WEBHOOK_API_KEY;
   if (!expected) {
-    return true;
+    return process.env.NODE_ENV !== "production";
   }
 
   const apiKey = request.headers.get("x-api-key");

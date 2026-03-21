@@ -135,7 +135,8 @@ export async function assertProductionReadinessIfRequired(context: string) {
   if (!isProduction()) {
     return;
   }
-  if (process.env.WAR_ROOM_ENFORCE_PROD_HARDENING !== "true") {
+  const hardeningExplicitlyDisabled = process.env.WAR_ROOM_ENFORCE_PROD_HARDENING === "false";
+  if (hardeningExplicitlyDisabled) {
     return;
   }
   const snapshot = await evaluateGoLiveReadiness();
