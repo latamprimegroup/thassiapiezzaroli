@@ -12,6 +12,7 @@ import { processDueWebhookRetries, processIncomingWebhook } from "@/lib/integrat
 import { captureServerError } from "@/lib/observability/error-monitoring";
 import { checkRateLimit, readRequestIp } from "@/lib/security/rate-limit";
 import { assertProductionReadinessIfRequired } from "@/lib/runtime/go-live-readiness";
+import { webhookPayloadSchema } from "@/lib/validation/ingress-schemas";
 
 export const runtime = "nodejs";
 
@@ -53,15 +54,35 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Rate limit excedido para webhook warroom." }, { status: 429 });
   }
 
+  const contentLength = Number(request.headers.get("content-length") ?? "0");
+  if (
+    Number.isFinite(contentLength) &&
+    contentLength > 0 &&
+    contentLength > WAR_ROOM_OPS_CONSTANTS.queue.webhook.maxPayloadBytes
+  ) {
+    return NextResponse.json({ error: "Payload excede limite permitido para webhook." }, { status: 413 });
+  }
+
   try {
     const rawBody = await request.text();
-    const payload = (() => {
+    const payloadUnknown = (() => {
       try {
-        return (JSON.parse(rawBody || "{}") as Record<string, unknown>) ?? {};
+        return JSON.parse(rawBody || "{}");
       } catch {
-        return {};
+        return null;
       }
     })();
+    const payloadValidation = webhookPayloadSchema.safeParse(payloadUnknown);
+    if (!payloadValidation.success) {
+      return NextResponse.json(
+        {
+          error: "Payload malformado para webhook.",
+          detail: payloadValidation.error.issues[0]?.message ?? "JSON invalido.",
+        },
+        { status: 400 },
+      );
+    }
+    const payload = payloadValidation.data;
     const provider = parseProvider(request, payload);
 
     const adapter = provider ? resolveAdapterByProvider(provider) : resolveAdapterByPayload(payload);

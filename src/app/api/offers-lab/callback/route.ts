@@ -4,6 +4,7 @@ import { registerTrafficEvent, registerTrafficEventsBatch } from "@/lib/offers/o
 import { captureServerError } from "@/lib/observability/error-monitoring";
 import { checkRateLimit, readRequestIp } from "@/lib/security/rate-limit";
 import { assertProductionReadinessIfRequired } from "@/lib/runtime/go-live-readiness";
+import { normalizeOffersLabCallbackPayload } from "@/lib/validation/ingress-schemas";
 
 export const runtime = "nodejs";
 
@@ -53,21 +54,22 @@ export async function POST(request: Request) {
   }
 
   const parsed = (await request.json().catch(() => ({}))) as unknown;
-  const body = (typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {}) as Record<
-    string,
-    unknown
-  >;
+  const normalizedPayload = normalizeOffersLabCallbackPayload(parsed);
+  if (!normalizedPayload.ok) {
+    return NextResponse.json(
+      {
+        error: "Payload malformado para callback Offers Lab.",
+        detail: normalizedPayload.message,
+      },
+      { status: 400 },
+    );
+  }
+
   try {
-    const eventArray = Array.isArray(parsed)
-      ? parsed
-      : Array.isArray(body.events)
-        ? body.events
-        : [];
+    const eventArray = normalizedPayload.events;
 
     if (eventArray.length > 0) {
-      const events = eventArray
-        .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
-        .slice(0, WAR_ROOM_OPS_CONSTANTS.offersLab.maxBatchEventsPerRequest);
+      const events = eventArray.slice(0, WAR_ROOM_OPS_CONSTANTS.offersLab.maxBatchEventsPerRequest);
       const result = await registerTrafficEventsBatch(events);
       return NextResponse.json({
         ok: true,
@@ -80,7 +82,10 @@ export async function POST(request: Request) {
       });
     }
 
-    const event = await registerTrafficEvent(body);
+    if (!normalizedPayload.single) {
+      return NextResponse.json({ error: "Payload de evento unico ausente." }, { status: 400 });
+    }
+    const event = await registerTrafficEvent(normalizedPayload.single);
     return NextResponse.json({
       ok: true,
       mode: "single",
@@ -95,7 +100,7 @@ export async function POST(request: Request) {
       error,
       context: {
         ip,
-        hasEventsArray: Array.isArray(body.events),
+        hasEventsArray: normalizedPayload.events.length > 0,
       },
     });
     return NextResponse.json(

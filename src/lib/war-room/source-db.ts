@@ -2,16 +2,27 @@ import { Pool } from "pg";
 import { normalizeWarRoomData } from "./normalize";
 import type { WarRoomData } from "./types";
 
-export async function loadWarRoomFromDatabase(): Promise<WarRoomData> {
+declare global {
+  var __warRoomSourceDbPool: Pool | undefined;
+}
+
+function getPool() {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
     throw new Error("DATABASE_URL nao configurada.");
   }
+  if (!globalThis.__warRoomSourceDbPool) {
+    globalThis.__warRoomSourceDbPool = new Pool({
+      connectionString,
+      ssl: process.env.DATABASE_SSL === "true" ? { rejectUnauthorized: false } : undefined,
+      max: 8,
+    });
+  }
+  return globalThis.__warRoomSourceDbPool;
+}
 
-  const pool = new Pool({
-    connectionString,
-    ssl: process.env.DATABASE_SSL === "true" ? { rejectUnauthorized: false } : undefined,
-  });
+export async function loadWarRoomFromDatabase(): Promise<WarRoomData> {
+  const pool = getPool();
 
   try {
     const [adsMetricsRes, creativesRes, anglesRes, hooksRes, productionRes, techRes, financeRes] = await Promise.all([
@@ -77,6 +88,6 @@ export async function loadWarRoomFromDatabase(): Promise<WarRoomData> {
 
     return normalizeWarRoomData(payload, "database", "PostgreSQL");
   } finally {
-    await pool.end();
+    // Pool global permanece aberto para reutilizacao em ambiente serverless.
   }
 }

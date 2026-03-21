@@ -9,6 +9,10 @@ export const runtime = "nodejs";
 type DemandTask = WarRoomData["commandCenter"]["tasks"][number];
 
 export async function GET() {
+  const session = await getSessionFromCookies();
+  if (!session) {
+    return NextResponse.json({ error: "Sessao invalida." }, { status: 401 });
+  }
   const data = await getWarRoomData();
   return NextResponse.json({ tasks: data.commandCenter.tasks });
 }

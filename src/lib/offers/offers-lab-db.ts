@@ -122,6 +122,8 @@ async function ensureSchema() {
           on offers_lab_traffic_events (offer_id, occurred_at desc);
         create index if not exists offers_lab_traffic_events_source_idx
           on offers_lab_traffic_events (traffic_source, occurred_at desc);
+        create index if not exists offers_lab_traffic_events_event_occ_idx
+          on offers_lab_traffic_events (event_type, occurred_at desc);
         do $$
         begin
           if not exists (

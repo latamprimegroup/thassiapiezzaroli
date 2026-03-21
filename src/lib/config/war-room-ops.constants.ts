@@ -14,6 +14,7 @@ export const WAR_ROOM_OPS_CONSTANTS = {
       maxRetryAttempts: 4,
       maxBackoffMinutes: 60,
       retryBaseMinutes: 2,
+      maxPayloadBytes: 1024 * 1024,
       enqueueWorkerKickBatchSize: 10,
       retryScanBatchSize: 50,
       deadLetterListBatchSize: 25,

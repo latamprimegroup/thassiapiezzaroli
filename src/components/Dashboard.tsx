@@ -22,26 +22,99 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { CeoFinanceModule } from "@/components/enterprise/ceo-finance-module";
-import { CommandCenterCeoView } from "@/components/enterprise/command-center-ceo-view";
-import { CommandCenterModule } from "@/components/enterprise/command-center-module";
-import { CopyResearchModule } from "@/components/enterprise/copy-research-module";
-import { CustomerExperienceModule } from "@/components/enterprise/customer-experience-module";
-import { EditorsProductionModule } from "@/components/enterprise/editors-production-module";
-import { FinanceComplianceModule } from "@/components/enterprise/finance-compliance-module";
-import { OnboardingTour } from "@/components/enterprise/onboarding-tour";
-import { SalesRecoveryModule } from "@/components/enterprise/sales-recovery-module";
-import { SquadSyncModule } from "@/components/enterprise/squad-sync-module";
-import { TestLaboratoryModule } from "@/components/enterprise/test-laboratory-module";
-import { TechCroModule } from "@/components/enterprise/tech-cro-module";
-import { TrafficAttributionModule } from "@/components/enterprise/traffic-attribution-module";
-import { ActionableInsights } from "@/components/war-room/actionable-insights";
 import { recalculateEnterpriseFinance, WarRoomContext } from "@/context/war-room-context";
 import { rolePermissions, type SectionId, type UserRole } from "@/lib/auth/rbac";
 import { WAR_ROOM_OPS_CONSTANTS } from "@/lib/config/war-room-ops.constants";
 import { subscribeWarRoomRealtime } from "@/lib/realtime/war-room-realtime";
 import type { DemoUser } from "@/lib/auth/users";
 import type { SquadSyncCommandOrder, SquadSyncKpiSnapshot, TrafficSourceKey, WarRoomData } from "@/lib/war-room/types";
+
+function moduleSkeleton(title: string, description: string) {
+  return (
+    <Card className="border-white/10 bg-[#080808]">
+      <CardHeader>
+        <CardTitle className="text-base">{title}</CardTitle>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="h-24 animate-pulse rounded border border-white/10 bg-white/5" />
+      </CardContent>
+    </Card>
+  );
+}
+
+const CeoFinanceModule = dynamic(() => import("@/components/enterprise/ceo-finance-module").then((mod) => mod.CeoFinanceModule), {
+  loading: () => moduleSkeleton("CEO & Financeiro", "Carregando cockpit financeiro..."),
+});
+const CommandCenterCeoView = dynamic(
+  () => import("@/components/enterprise/command-center-ceo-view").then((mod) => mod.CommandCenterCeoView),
+  {
+    loading: () => moduleSkeleton("The Command Center", "Carregando visao executiva..."),
+  },
+);
+const CommandCenterModule = dynamic(
+  () => import("@/components/enterprise/command-center-module").then((mod) => mod.CommandCenterModule),
+  {
+    loading: () => moduleSkeleton("Command Center", "Carregando quadro de demandas..."),
+  },
+);
+const CopyResearchModule = dynamic(
+  () => import("@/components/enterprise/copy-research-module").then((mod) => mod.CopyResearchModule),
+  {
+    loading: () => moduleSkeleton("Copy & Pesquisa", "Carregando modulo de copy..."),
+  },
+);
+const CustomerExperienceModule = dynamic(
+  () => import("@/components/enterprise/customer-experience-module").then((mod) => mod.CustomerExperienceModule),
+  {
+    loading: () => moduleSkeleton("Customer Experience", "Carregando modulo de churn e LTV..."),
+  },
+);
+const EditorsProductionModule = dynamic(
+  () => import("@/components/enterprise/editors-production-module").then((mod) => mod.EditorsProductionModule),
+  {
+    loading: () => moduleSkeleton("Editores & Producao", "Carregando fabrica de criativos..."),
+  },
+);
+const FinanceComplianceModule = dynamic(
+  () => import("@/components/enterprise/finance-compliance-module").then((mod) => mod.FinanceComplianceModule),
+  {
+    loading: () => moduleSkeleton("Finance & Compliance", "Carregando compliance e DRE..."),
+  },
+);
+const OnboardingTour = dynamic(() => import("@/components/enterprise/onboarding-tour").then((mod) => mod.OnboardingTour), {
+  loading: () => null,
+});
+const SalesRecoveryModule = dynamic(
+  () => import("@/components/enterprise/sales-recovery-module").then((mod) => mod.SalesRecoveryModule),
+  {
+    loading: () => moduleSkeleton("Sales Recovery", "Carregando sniper list..."),
+  },
+);
+const SquadSyncModule = dynamic(() => import("@/components/enterprise/squad-sync-module").then((mod) => mod.SquadSyncModule), {
+  loading: () => moduleSkeleton("Squad Sync", "Carregando hub de demanda..."),
+});
+const TestLaboratoryModule = dynamic(
+  () => import("@/components/enterprise/test-laboratory-module").then((mod) => mod.TestLaboratoryModule),
+  {
+    loading: () => moduleSkeleton("Test Laboratory", "Carregando pipeline de testes..."),
+  },
+);
+const TechCroModule = dynamic(() => import("@/components/enterprise/tech-cro-module").then((mod) => mod.TechCroModule), {
+  loading: () => moduleSkeleton("Tech & CRO", "Carregando monitor de friccao..."),
+});
+const TrafficAttributionModule = dynamic(
+  () => import("@/components/enterprise/traffic-attribution-module").then((mod) => mod.TrafficAttributionModule),
+  {
+    loading: () => moduleSkeleton("Trafego & Atribuicao", "Carregando modulo de atribuicao..."),
+  },
+);
+const ActionableInsights = dynamic(
+  () => import("@/components/war-room/actionable-insights").then((mod) => mod.ActionableInsights),
+  {
+    loading: () => moduleSkeleton("Actionable Insights", "Carregando recomendacoes de IA..."),
+  },
+);
 
 const OffersLabModule = dynamic(
   () => import("@/components/enterprise/offers-lab-module").then((mod) => mod.OffersLabModule),

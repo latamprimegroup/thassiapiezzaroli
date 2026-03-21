@@ -58,6 +58,14 @@ function nowMs() {
   return Date.now();
 }
 
+function resolveOffersDashboardEventLimit() {
+  const configured = Number(process.env.WAR_ROOM_OFFERS_DASHBOARD_EVENTS_LIMIT ?? 150_000);
+  if (!Number.isFinite(configured)) {
+    return 150_000;
+  }
+  return Math.max(10_000, Math.min(500_000, Math.floor(configured)));
+}
+
 function getCacheStore() {
   if (!globalThis.__offersLabDashboardCache) {
     globalThis.__offersLabDashboardCache = new Map<string, { expiresAtMs: number; value: OffersLabDashboard }>();
@@ -848,9 +856,10 @@ export async function getOffersLabDashboard(filters?: DashboardFilters): Promise
   }
 
   const windowStart = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const dashboardEventLimit = resolveOffersDashboardEventLimit();
   const [offers, events7d, sync, aliases, recentQuarantine, openQuarantine, predictiveModel] = await Promise.all([
     offersRepo.listOffers(),
-    offersRepo.listTrafficEvents({ sinceIso: windowStart }),
+    offersRepo.listTrafficEvents({ sinceIso: windowStart, eventType: "sale", limit: dashboardEventLimit }),
     offersRepo.readSyncState(),
     offersRepo.listUtmAliases(),
     offersRepo.listQuarantine({ limit: WAR_ROOM_OPS_CONSTANTS.offersLab.attributionGovernance.quarantineListLimit }),
