@@ -11,6 +11,9 @@ export const demoUsers: DemoUser[] = [
   { id: "u-media", name: "Caio (Media Buyer)", role: "mediaBuyer" },
   { id: "u-copy", name: "Ana (Copywriter)", role: "copywriter" },
   { id: "u-editor", name: "Nati (Video Editor)", role: "videoEditor" },
+  { id: "u-closer", name: "Rafa (Closer)", role: "closer" },
+  { id: "u-cx", name: "Luana (CX Manager)", role: "cxManager" },
+  { id: "u-fin", name: "Marcos (Finance Manager)", role: "financeManager" },
 ];
 
 export function getDemoUserById(userId: string) {

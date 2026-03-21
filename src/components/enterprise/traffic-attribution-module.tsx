@@ -17,6 +17,25 @@ export function TrafficAttributionModule() {
   const intelligence = computeIntelligenceEngine(data);
   const killSwitch = data.integrations.operations.killSwitch;
   const maxCpa = Math.max(1, ...intelligence.validatedAssets.map((asset) => asset.effectiveCpa));
+  const baselineBySource = {
+    meta:
+      data.liveAdsTracking.filter((row) => row.squad === "facebook").reduce((acc, row) => acc + row.cpa, 0) /
+      Math.max(1, data.liveAdsTracking.filter((row) => row.squad === "facebook").length),
+    google:
+      data.liveAdsTracking.filter((row) => row.squad === "googleYoutube").reduce((acc, row) => acc + row.cpa, 0) /
+      Math.max(1, data.liveAdsTracking.filter((row) => row.squad === "googleYoutube").length),
+    native:
+      data.liveAdsTracking.filter((row) => row.squad === "tiktok").reduce((acc, row) => acc + row.cpa, 0) /
+      Math.max(1, data.liveAdsTracking.filter((row) => row.squad === "tiktok").length),
+  };
+  const stopLossAlerts = [
+    { source: "Meta", current: squads.meta.currentCpa, baseline: baselineBySource.meta },
+    { source: "Google", current: squads.google.currentCpa, baseline: baselineBySource.google },
+    { source: "Native", current: squads.native.currentCpa, baseline: baselineBySource.native },
+  ].filter((item) => item.current > item.baseline * 1.2);
+  const bestScalingAsset = data.integrations.attribution.validatedAssets
+    .slice()
+    .sort((a, b) => a.effectiveCpa - b.effectiveCpa)[0];
 
   function renderSquad(source: Source, label: string) {
     const row = squads[source];
@@ -58,6 +77,30 @@ export function TrafficAttributionModule() {
           {renderSquad("meta", "Meta")}
           {renderSquad("google", "Google")}
           {renderSquad("native", "Native")}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Media Buying Lab - Stop-Loss & Scaling Advisor</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm">
+          {stopLossAlerts.length > 0 ? (
+            <div className="rounded border border-[#EA4335]/40 bg-[#EA4335]/10 p-2 text-xs text-rose-100">
+              {stopLossAlerts.map((alert) => (
+                <p key={alert.source}>
+                  STOP-LOSS: {alert.source} com CPA {currency(alert.current)} acima de 20% da media 3h ({currency(alert.baseline)}).
+                </p>
+              ))}
+            </div>
+          ) : (
+            <Badge variant="success">Stop-loss: nenhum squad acima de +20% vs media das ultimas 3h.</Badge>
+          )}
+          {bestScalingAsset ? (
+            <div className="rounded border border-[#10B981]/30 bg-[#10B981]/10 p-2 text-xs text-emerald-100">
+              Scaling Advisor: o ID {bestScalingAsset.assetId} tem LTV alto e melhor eficiencia de CPA. Sugestao: aumentar budget em 15% agora.
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 

@@ -2,13 +2,30 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { LucideIcon } from "lucide-react";
-import { Binary, BrainCircuit, ClipboardList, Clapperboard, FlaskConical, Lock, MessageSquare, SatelliteDish, Wallet } from "lucide-react";
+import {
+  Binary,
+  BrainCircuit,
+  ClipboardList,
+  Clapperboard,
+  FlaskConical,
+  Handshake,
+  HeartPulse,
+  Lock,
+  MessageSquare,
+  SatelliteDish,
+  ShieldCheck,
+  Wallet,
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { CeoFinanceModule } from "@/components/enterprise/ceo-finance-module";
 import { CommandCenterModule } from "@/components/enterprise/command-center-module";
 import { CopyResearchModule } from "@/components/enterprise/copy-research-module";
+import { CustomerExperienceModule } from "@/components/enterprise/customer-experience-module";
 import { EditorsProductionModule } from "@/components/enterprise/editors-production-module";
+import { FinanceComplianceModule } from "@/components/enterprise/finance-compliance-module";
+import { SalesRecoveryModule } from "@/components/enterprise/sales-recovery-module";
 import { SquadSyncModule } from "@/components/enterprise/squad-sync-module";
 import { TestLaboratoryModule } from "@/components/enterprise/test-laboratory-module";
 import { TechCroModule } from "@/components/enterprise/tech-cro-module";
@@ -45,6 +62,9 @@ const sections: Section[] = [
   { id: "squadSync", label: "Squad Sync", subtitle: "Hub de Demanda", icon: MessageSquare },
   { id: "editorsProduction", label: "Editores & Producao", subtitle: "The Retention", icon: Clapperboard },
   { id: "techCro", label: "Tech & CRO", subtitle: "The Frictionless Flow", icon: Binary },
+  { id: "salesRecovery", label: "Sales Recovery", subtitle: "Sniper List", icon: Handshake },
+  { id: "customerExperience", label: "Customer Experience", subtitle: "LTV & Churn", icon: HeartPulse },
+  { id: "financeCompliance", label: "Finance & Compliance", subtitle: "DRE + Legal Vault", icon: ShieldCheck },
 ];
 
 const formatHours = (value: number) => value.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -291,6 +311,26 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
               </div>
             </header>
 
+            <Card className="mb-4 border-white/10 bg-[#050505]">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Dashboard de Permissoes por Cargo</CardTitle>
+                <CardDescription className="text-xs">
+                  Visao oficial por setor: Copywriter (Vault), Midia (Scaling), Closer (Sniper List).
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-wrap gap-2">
+                {permissions.allowedSections.map((sectionId) => {
+                  const sectionMeta = sections.find((section) => section.id === sectionId);
+                  if (!sectionMeta) return null;
+                  return (
+                    <Badge key={sectionId} variant="sky">
+                      {sectionMeta.label}
+                    </Badge>
+                  );
+                })}
+              </CardContent>
+            </Card>
+
             {siren.active && (
               <Card className="mb-4 border-rose-300/70 bg-rose-500/15">
                 <CardContent className="p-3 text-sm text-rose-100">
@@ -378,6 +418,9 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
               />
             )}
             {activeSection === "techCro" && isSectionAllowed && <TechCroModule />}
+            {activeSection === "salesRecovery" && isSectionAllowed && <SalesRecoveryModule />}
+            {activeSection === "customerExperience" && isSectionAllowed && <CustomerExperienceModule />}
+            {activeSection === "financeCompliance" && isSectionAllowed && <FinanceComplianceModule />}
 
             <section className="mt-5 grid gap-4 xl:grid-cols-2">
               <ActionableInsights rows={viewData.liveAdsTracking} role={sessionState.role} contingency={viewData.contingency} />

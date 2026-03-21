@@ -125,6 +125,13 @@ export function CopyResearchModule() {
   const { data, addActivity, registerCreativeNaming } = useWarRoom();
   const copyModule = data.enterprise.copyResearch;
   const [script, setScript] = useState(copyModule.scriptEditor);
+  const [ruleOfOne, setRuleOfOne] = useState({
+    idea: "",
+    emotion: "",
+    proclamation: "",
+    guruApproved: false,
+    guruName: "",
+  });
   const [ideas, setIdeas] = useState<BigIdeaVaultRecord[]>(() => buildInitialBigIdeas(data));
   const [selectedIdeaId, setSelectedIdeaId] = useState<string>(() => buildInitialBigIdeas(data)[0]?.id ?? "");
   const [compareAId, setCompareAId] = useState<string>(() => buildInitialBigIdeas(data)[0]?.id ?? "");
@@ -146,6 +153,7 @@ export function CopyResearchModule() {
     whyItWorks: "",
     howWeDifferentiate: "",
   });
+  const [selectedCloneCreativeId, setSelectedCloneCreativeId] = useState("");
   const [namingDraft, setNamingDraft] = useState(() => ({
     product: "LP9D",
     bigIdea: deriveBigIdeaCode(buildInitialBigIdeas(data)[0]?.title ?? "IDEIA"),
@@ -352,7 +360,7 @@ export function CopyResearchModule() {
       return;
     }
     const entry: SwipeRecord = {
-      id: `SWIPE-${Date.now()}`,
+      id: `SWIPE-${swipes.length + 1}-${newSwipe.market}`,
       market: newSwipe.market,
       url: newSwipe.url.trim(),
       mechanism: newSwipe.mechanism.trim(),
@@ -362,6 +370,23 @@ export function CopyResearchModule() {
     setSwipes((prev) => [entry, ...prev]);
     setNewSwipe({ market: "BR", url: "", mechanism: "", whyItWorks: "", howWeDifferentiate: "" });
     addActivity("Pesquisa", "Research Squad", "adicionou swipe competitivo", entry.id, entry.market);
+  }
+
+  function cloneMarketStructure() {
+    const candidate = marketCloneCandidates.find((item) => item.creativeId === selectedCloneCreativeId) ?? marketCloneCandidates[0];
+    if (!candidate) {
+      return;
+    }
+    const entry: SwipeRecord = {
+      id: `SWIPE-CLONE-${candidate.creativeId}-${swipes.length + 1}`,
+      market: candidate.source === "native" ? "US" : "BR",
+      url: `https://market-intel.local/${candidate.creativeId}`,
+      mechanism: `Estrutura clonada de ${candidate.creativeId} (ROAS ${candidate.realRoas.toFixed(2)}x)`,
+      whyItWorks: "Anuncio com alta tracao em janela recente para desconstrucao orientada por blocos.",
+      howWeDifferentiate: "Aplicar Mecanismo Unico interno com nova proclamacao e provas proprietarias.",
+    };
+    setSwipes((prev) => [entry, ...prev]);
+    addActivity("Pesquisa", "Research Squad", "clonou estrutura de swipe escalado", candidate.creativeId, "dynamic swipe clone");
   }
 
   const compareA = ideas.find((idea) => idea.id === compareAId) ?? ideas[0];
@@ -386,6 +411,15 @@ export function CopyResearchModule() {
     hookVariation: namingDraft.hookVariation,
     uniqueId: namingDraft.uniqueId,
   });
+  const canWriteScript =
+    ruleOfOne.idea.trim().length > 0 &&
+    ruleOfOne.emotion.trim().length > 0 &&
+    ruleOfOne.proclamation.trim().length > 0 &&
+    ruleOfOne.guruApproved;
+  const marketCloneCandidates = data.integrations.attribution.realRoiLeaderboard
+    .slice()
+    .sort((a, b) => b.realRoas - a.realRoas)
+    .slice(0, 8);
   const hookSuggestions = useMemo(() => suggestHookVariationsFromHistory(data.liveAdsTracking, 6), [data.liveAdsTracking]);
 
   async function copyNamingToClipboard() {
@@ -926,6 +960,29 @@ export function CopyResearchModule() {
           <CardTitle className="text-base">Biblioteca de Swipes (Inteligencia Competitiva)</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
+          <div className="rounded border border-white/10 bg-black/30 p-2 text-xs">
+            <p className="mb-1 text-slate-300">Swipe File Dinamico (clonar estrutura de anuncio escalado)</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={selectedCloneCreativeId}
+                onChange={(event) => setSelectedCloneCreativeId(event.target.value)}
+                className="h-8 min-w-56 rounded border border-white/10 bg-slate-900/70 px-2 text-xs"
+              >
+                {marketCloneCandidates.length === 0 ? (
+                  <option value="">Sem candidatos de mercado</option>
+                ) : (
+                  marketCloneCandidates.map((item) => (
+                    <option key={item.creativeId} value={item.creativeId}>
+                      {item.creativeId} | {item.source.toUpperCase()} | ROAS {item.realRoas.toFixed(2)}x
+                    </option>
+                  ))
+                )}
+              </select>
+              <Button type="button" className="h-8 px-3 text-xs" onClick={cloneMarketStructure}>
+                Clonar estrutura para analise
+              </Button>
+            </div>
+          </div>
           <div className="grid gap-2 md:grid-cols-5">
             <select
               value={newSwipe.market}
@@ -983,11 +1040,62 @@ export function CopyResearchModule() {
           <CardTitle className="text-base">Writer Focus Mode (Markdown)</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
+          <div className="rounded border border-white/10 bg-black/30 p-2 text-xs">
+            <p className="mb-1 text-slate-200">Workflow Rule of One (obrigatorio para liberar escrita)</p>
+            <div className="grid gap-2 md:grid-cols-4">
+              <input
+                value={ruleOfOne.idea}
+                onChange={(event) => setRuleOfOne((prev) => ({ ...prev, idea: event.target.value }))}
+                placeholder="1 Ideia"
+                className="rounded border border-white/10 bg-slate-900/70 px-2 py-1.5 text-xs"
+              />
+              <input
+                value={ruleOfOne.emotion}
+                onChange={(event) => setRuleOfOne((prev) => ({ ...prev, emotion: event.target.value }))}
+                placeholder="1 Emocao"
+                className="rounded border border-white/10 bg-slate-900/70 px-2 py-1.5 text-xs"
+              />
+              <input
+                value={ruleOfOne.proclamation}
+                onChange={(event) => setRuleOfOne((prev) => ({ ...prev, proclamation: event.target.value }))}
+                placeholder="1 Proclamacao"
+                className="rounded border border-white/10 bg-slate-900/70 px-2 py-1.5 text-xs"
+              />
+              <input
+                value={ruleOfOne.guruName}
+                onChange={(event) => setRuleOfOne((prev) => ({ ...prev, guruName: event.target.value }))}
+                placeholder="Especialista/Guru"
+                className="rounded border border-white/10 bg-slate-900/70 px-2 py-1.5 text-xs"
+              />
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                className="h-7 px-2 text-[11px]"
+                onClick={() => {
+                  if (!ruleOfOne.idea || !ruleOfOne.emotion || !ruleOfOne.proclamation || !ruleOfOne.guruName) {
+                    return;
+                  }
+                  setRuleOfOne((prev) => ({ ...prev, guruApproved: true }));
+                  addActivity("Especialista", ruleOfOne.guruName || "Guru", "deu visto editorial", "Rule of One", "tese validada");
+                }}
+              >
+                Visto editorial (Guru)
+              </Button>
+              {ruleOfOne.guruApproved ? <Badge variant="success">Aprovado para escrita</Badge> : <Badge variant="warning">Escrita bloqueada</Badge>}
+            </div>
+          </div>
           <textarea
             value={script}
             onChange={(event) => setScript(event.target.value)}
+            disabled={!canWriteScript}
             className="min-h-48 w-full rounded-md border border-white/10 bg-slate-900/70 p-3 font-mono text-sm"
           />
+          {!canWriteScript ? (
+            <p className="text-xs text-[#EA4335]">
+              Escrita bloqueada: defina 1 Ideia, 1 Emocao, 1 Proclamacao e receba o visto do especialista.
+            </p>
+          ) : null}
           <div className="flex flex-wrap gap-2 text-xs text-slate-400">
             <span>Palavras: {words}</span>
             <span>Tempo estimado de lead: {estimatedMinutes.toFixed(1)} min</span>

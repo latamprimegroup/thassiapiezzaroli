@@ -57,6 +57,16 @@ export function sanitizeWarRoomDataForRole(input: WarRoomData, role: UserRole): 
       ...item,
       realProfit: 0,
     }));
+    if (data.enterprise.multiTenant) {
+      data.enterprise.multiTenant.squads = data.enterprise.multiTenant.squads.map((squad) => ({
+        ...squad,
+        cost: 0,
+        revenue: 0,
+        profit: 0,
+        marginPct: 0,
+        efficiencyScore: 0,
+      }));
+    }
   }
 
   if (!permissions.canViewRoasReal) {

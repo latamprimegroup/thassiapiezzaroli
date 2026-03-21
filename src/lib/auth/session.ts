@@ -39,7 +39,7 @@ function decode(token: string): SessionPayload | null {
 
   try {
     const parsed = JSON.parse(Buffer.from(raw, "base64url").toString("utf8")) as SessionPayload;
-    const allowedRoles: UserRole[] = ["ceo", "mediaBuyer", "copywriter", "videoEditor"];
+    const allowedRoles: UserRole[] = ["ceo", "mediaBuyer", "copywriter", "videoEditor", "closer", "cxManager", "financeManager"];
     if (!parsed?.userId || !parsed?.role || !allowedRoles.includes(parsed.role)) {
       return null;
     }

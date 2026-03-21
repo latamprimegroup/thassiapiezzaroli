@@ -1,7 +1,7 @@
 import type { LucideIcon } from "lucide-react";
-import { Clapperboard, Crown, PenSquare, SatelliteDish } from "lucide-react";
+import { Clapperboard, Crown, Handshake, HeartPulse, PenSquare, SatelliteDish, ShieldCheck } from "lucide-react";
 
-export type UserRole = "ceo" | "mediaBuyer" | "copywriter" | "videoEditor";
+export type UserRole = "ceo" | "mediaBuyer" | "copywriter" | "videoEditor" | "closer" | "cxManager" | "financeManager";
 
 export type SectionId =
   | "ceoFinance"
@@ -11,7 +11,10 @@ export type SectionId =
   | "commandCenter"
   | "squadSync"
   | "editorsProduction"
-  | "techCro";
+  | "techCro"
+  | "salesRecovery"
+  | "customerExperience"
+  | "financeCompliance";
 
 export type RolePermissions = {
   label: string;
@@ -43,6 +46,9 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
       "squadSync",
       "editorsProduction",
       "techCro",
+      "salesRecovery",
+      "customerExperience",
+      "financeCompliance",
     ],
     canViewSensitiveFinancials: true,
     canViewRoasReal: true,
@@ -98,5 +104,50 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     canUploadCreativeVersions: true,
     emphasizeRetention: true,
     simplifiedPerformanceView: true,
+  },
+  closer: {
+    label: "Closer / Recovery",
+    description: "Sniper list e recuperacao comercial",
+    icon: Handshake,
+    allowedSections: ["salesRecovery", "commandCenter", "squadSync"],
+    canViewSensitiveFinancials: false,
+    canViewRoasReal: false,
+    canApproveScaleCampaigns: false,
+    canInputAuctionMetrics: false,
+    canAlertSquad: true,
+    canManageCreativeBacklog: false,
+    canUploadCreativeVersions: false,
+    emphasizeRetention: false,
+    simplifiedPerformanceView: true,
+  },
+  cxManager: {
+    label: "Customer Experience",
+    description: "Retencao, churn e LTV de pos-venda",
+    icon: HeartPulse,
+    allowedSections: ["customerExperience", "squadSync", "commandCenter"],
+    canViewSensitiveFinancials: false,
+    canViewRoasReal: false,
+    canApproveScaleCampaigns: false,
+    canInputAuctionMetrics: false,
+    canAlertSquad: true,
+    canManageCreativeBacklog: false,
+    canUploadCreativeVersions: false,
+    emphasizeRetention: true,
+    simplifiedPerformanceView: false,
+  },
+  financeManager: {
+    label: "Finance & Compliance",
+    description: "DRE, margem e governanca legal",
+    icon: ShieldCheck,
+    allowedSections: ["ceoFinance", "financeCompliance", "commandCenter", "techCro"],
+    canViewSensitiveFinancials: true,
+    canViewRoasReal: true,
+    canApproveScaleCampaigns: true,
+    canInputAuctionMetrics: false,
+    canAlertSquad: false,
+    canManageCreativeBacklog: false,
+    canUploadCreativeVersions: false,
+    emphasizeRetention: false,
+    simplifiedPerformanceView: false,
   },
 };

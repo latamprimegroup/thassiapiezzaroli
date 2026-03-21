@@ -248,6 +248,22 @@ export function CommandCenterModule({ actorName, actorRole }: CommandCenterModul
 
   function moveTask(taskId: string, department: DemandDepartment, status: DemandStatus) {
     const current = tasks.find((task) => task.id === taskId);
+    if (current && current.dependencyIds.length > 0 && status !== "backlog") {
+      const pendingDependencies = current.dependencyIds.filter((dependencyId) => {
+        const dependency = tasks.find((task) => task.id === dependencyId);
+        return !dependency || dependency.status !== "done";
+      });
+      if (pendingDependencies.length > 0) {
+        addActivity(
+          "COO",
+          actorName,
+          "bloqueou mudanca por dependencia pendente",
+          taskId,
+          `deps abertas: ${pendingDependencies.join(", ")}`,
+        );
+        return;
+      }
+    }
     if (
       status === "done" &&
       current?.department === "editorsCreative" &&
