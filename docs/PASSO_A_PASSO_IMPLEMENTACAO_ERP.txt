@@ -1,0 +1,227 @@
+PASSO A PASSO DE IMPLEMENTACAO - ERP WAR ROOM OS
+Versao: 1.0
+Objetivo: subir em producao com Vercel + Hostinger + GitHub + Cursor + dominio proprio.
+
+==================================================
+1) PRE-REQUISITOS
+==================================================
+
+[ ] Conta GitHub ativa
+[ ] Conta Vercel ativa
+[ ] Dominio comprado na Hostinger
+[ ] Projeto funcionando no Cursor
+[ ] Repositorio Git inicializado
+[ ] Acesso aos segredos (API keys e secrets)
+
+Recomendacao:
+- Use branch de desenvolvimento (ex.: cursor/war-room-dashboard-230c)
+- Use main apenas para producao
+
+==================================================
+2) CURSOR -> GITHUB (SUBIR CODIGO)
+==================================================
+
+No terminal do Cursor, dentro da pasta do projeto:
+
+1. Verificar estado:
+   git status
+
+2. Adicionar arquivos:
+   git add .
+
+3. Criar commit:
+   git commit -m "deploy production"
+
+4. Enviar branch:
+   git push -u origin cursor/war-room-dashboard-230c
+
+5. (Opcional, recomendado) Abrir PR da branch para main.
+
+==================================================
+3) GITHUB -> VERCEL (CRIAR DEPLOY)
+==================================================
+
+1. Acesse: https://vercel.com
+2. Clique em: Add New -> Project
+3. Conecte com GitHub (se necessario)
+4. Selecione o repositorio do ERP
+5. Configure o projeto:
+   - Framework Preset: Next.js
+   - Root Directory: /
+   - Build Command: next build
+   - Output Directory: (padrao do Next.js)
+6. Clique em Deploy
+
+Observacao:
+- Cada push no GitHub gera novo deploy automatico.
+
+==================================================
+4) VARIAVEIS DE AMBIENTE (VERCEL)
+==================================================
+
+Caminho:
+Vercel -> Project -> Settings -> Environment Variables
+
+Cadastre as variaveis de producao:
+
+NODE_ENV=production
+WAR_ROOM_REQUIRE_SESSION=true
+WAR_ROOM_SESSION_SECRET=SEU_SEGREDO_FORTE_MIN_24
+
+WAR_ROOM_WEBHOOK_API_KEY=CHAVE_FORTE_1
+OFFERS_LAB_API_KEY=CHAVE_FORTE_2
+WAR_ROOM_REQUIRE_HMAC_IN_PROD=true
+
+UTMIFY_WEBHOOK_SECRET=...
+APPMAX_WEBHOOK_SECRET=...
+KIWIFY_WEBHOOK_SECRET=...
+YAMPI_WEBHOOK_SECRET=...
+
+SUPABASE_JWT_SECRET=...
+WAR_ROOM_TRUST_SUPABASE_JWT_CLAIMS=false
+
+NEXT_PUBLIC_APP_URL=https://seudominio.com
+WAR_ROOM_ALLOWED_ORIGINS=https://seudominio.com,https://www.seudominio.com
+
+WAR_ROOM_COMPLIANCE_ALLOWED_HOSTS=seudominio.com,www.seudominio.com
+WAR_ROOM_ROUTING_ALLOWED_HOSTS=seudominio.com,www.seudominio.com
+
+WAR_ROOM_ALLOW_INSECURE_DEV_WEBHOOKS=false
+WAR_ROOM_ALLOW_INSECURE_DEV_SCANNER=false
+WAR_ROOM_ALLOW_INSECURE_DEV_ROUTING=false
+WAR_ROOM_ENABLE_DEMO_SWITCH_USER=false
+
+Se usar banco e redis em producao:
+DATABASE_URL=...
+WAR_ROOM_OPS_PERSISTENCE_MODE=database
+WAR_ROOM_REQUIRE_DATABASE_IN_PROD=true
+REDIS_URL=...
+WAR_ROOM_REQUIRE_REDIS_IN_PROD=true
+REDIS_DISABLED=false
+
+Depois de salvar variaveis:
+- Clique em Redeploy (ou faca novo push no GitHub).
+
+==================================================
+5) VERCEL + HOSTINGER + DOMINIO
+==================================================
+
+5.1 Adicionar dominio na Vercel
+1. Vercel -> Settings -> Domains
+2. Add Domain: seudominio.com
+3. Add Domain: www.seudominio.com
+
+5.2 Configurar DNS na Hostinger
+No hPanel da Hostinger -> DNS Zone:
+
+Registro 1:
+- Tipo: A
+- Host/Nome: @
+- Valor: 76.76.21.21
+- TTL: padrao
+
+Registro 2:
+- Tipo: CNAME
+- Host/Nome: www
+- Valor: cname.vercel-dns.com
+- TTL: padrao
+
+Importante:
+- Remova registros antigos conflitantes para @ e www.
+- Aguarde propagacao DNS (pode variar de minutos a horas).
+
+5.3 Confirmar no painel da Vercel
+- Status esperado: Valid Configuration
+- SSL HTTPS e gerado automaticamente.
+
+==================================================
+6) CONFIGURACAO DE WEBHOOKS (INTEGRACOES)
+==================================================
+
+Webhook principal sugerido:
+https://seudominio.com/api/webhooks/warroom
+
+Configurar nos provedores (Utmify/Appmax/Kiwify/Yampi):
+- URL do webhook
+- Header x-api-key com WAR_ROOM_WEBHOOK_API_KEY (se aplicavel)
+- Assinatura HMAC com segredo correspondente
+
+Checklist webhook:
+[ ] Endpoint responde 401 sem credencial
+[ ] Endpoint responde 200 com credencial valida
+[ ] Assinatura invalida e rejeitada
+[ ] Rate limit ativo
+
+==================================================
+7) TESTE RAPIDO POS-DEPLOY (SMOKE TEST)
+==================================================
+
+7.1 Disponibilidade
+[ ] GET /api/health retorna status ok
+[ ] Home abre via HTTPS
+
+7.2 Autenticacao
+[ ] Usuario sem sessao nao acessa areas protegidas
+[ ] Login/sessao funcionando
+
+7.3 Fluxo de negocio principal
+[ ] Daily Settlement salva corretamente
+[ ] Dashboard CEO carrega sem erro
+[ ] Modulo Sniper CRM abre e movimenta lead
+[ ] Integracoes nao quebram tela em caso de erro
+
+7.4 Financeiro
+[ ] Lucro liquido sem NaN/Infinity
+[ ] Atualizacoes sem duplicidade evidente
+
+==================================================
+8) GO / NO-GO
+==================================================
+
+GO (pode publicar) se:
+[ ] Build passou
+[ ] Variaveis de ambiente completas
+[ ] Dominio validado
+[ ] SSL ativo
+[ ] Smoke test aprovado
+
+NO-GO (nao publicar) se:
+[ ] Falta de secret critico
+[ ] Rotas protegidas retornando acesso indevido
+[ ] Erros de runtime em fluxo core
+
+==================================================
+9) ROLLBACK RAPIDO
+==================================================
+
+Na Vercel:
+1. Deployments
+2. Selecione o deploy anterior estavel
+3. Promote to Production
+
+No GitHub:
+1. Reverter commit problematico
+2. Push
+3. Novo deploy automatico
+
+==================================================
+10) ROTINA OPERACIONAL RECOMENDADA
+==================================================
+
+- Alterar codigo no Cursor
+- Commit pequeno e descritivo
+- Push para branch
+- Revisao por PR
+- Merge em main
+- Deploy automatico Vercel
+- Smoke test de 5 minutos
+
+Modelo de comando diario:
+git add .
+git commit -m "feat/fix: descricao objetiva"
+git push
+
+==================================================
+FIM
+==================================================
+
