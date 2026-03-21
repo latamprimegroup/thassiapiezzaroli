@@ -36,6 +36,7 @@ export type SectionId =
   | "editorsProduction"
   | "techCro"
   | "salesRecovery"
+  | "sniperCrm"
   | "customerExperience"
   | "financeCompliance";
 
@@ -85,6 +86,7 @@ const baseRolePermissions = {
       "editorsProduction",
       "techCro",
       "salesRecovery",
+      "sniperCrm",
       "customerExperience",
       "financeCompliance",
     ],
@@ -244,6 +246,7 @@ const baseRolePermissions = {
       "commandCenterCeo",
       "offersLab",
       "trafficAttribution",
+      "sniperCrm",
       "testLaboratory",
       "commandCenter",
       "squadSync",
@@ -321,7 +324,7 @@ const baseRolePermissions = {
     label: "Closer / Recovery",
     description: "Sniper list e recuperacao comercial",
     icon: Handshake,
-    allowedSections: ["commandCenterCeo", "offersLab", "salesRecovery", "commandCenter", "squadSync"],
+    allowedSections: ["commandCenterCeo", "offersLab", "salesRecovery", "sniperCrm", "commandCenter", "squadSync"],
     canViewSensitiveFinancials: false,
     canViewRoasReal: false,
     canApproveScaleCampaigns: false,
@@ -345,7 +348,7 @@ const baseRolePermissions = {
     label: "Customer Experience",
     description: "Retencao, churn e LTV de pos-venda",
     icon: HeartPulse,
-    allowedSections: ["commandCenterCeo", "offersLab", "customerExperience", "squadSync", "commandCenter"],
+    allowedSections: ["commandCenterCeo", "offersLab", "customerExperience", "sniperCrm", "squadSync", "commandCenter"],
     canViewSensitiveFinancials: false,
     canViewRoasReal: false,
     canApproveScaleCampaigns: false,

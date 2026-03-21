@@ -39,6 +39,7 @@ const sectionTitles: Record<SectionId, string> = {
   editorsProduction: "Creative Factory",
   techCro: "Tech & CRO",
   salesRecovery: "Sniper List",
+  sniperCrm: "Sniper CRM",
   customerExperience: "Customer Experience",
   financeCompliance: "Finance & Compliance",
 };
@@ -173,14 +174,14 @@ function buildRoleSteps(role: UserRole): OnboardingStep[] {
       return [
         {
           id: "closer-1",
-          section: "salesRecovery",
+          section: "sniperCrm",
           title: "Sniper List",
           instruction: "Ataque primeiro leads com score alto e compra perdida.",
           inputHint: "Priorize score 90+ e cartao recusado.",
         },
         {
           id: "closer-2",
-          section: "salesRecovery",
+          section: "sniperCrm",
           title: "One-Tap WhatsApp",
           instruction: "Dispare mensagem com script adequado a objecao.",
           inputHint: "Use botao de contato direto na linha do lead.",
@@ -252,7 +253,7 @@ function buildRoleSteps(role: UserRole): OnboardingStep[] {
         },
         {
           id: "cx-2",
-          section: "squadSync",
+          section: "sniperCrm",
           title: "Integracao com squads",
           instruction: "Abra demanda quando friccao de cliente impactar LTV.",
           inputHint: "Registre eventos no Squad Sync.",

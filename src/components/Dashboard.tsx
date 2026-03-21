@@ -98,6 +98,12 @@ const SalesRecoveryModule = dynamic(
     loading: () => moduleSkeleton("Sales Recovery", "Carregando sniper list..."),
   },
 );
+const SniperCrmModule = dynamic(
+  () => import("@/components/enterprise/sniper-crm-module").then((mod) => mod.SniperCrmModule),
+  {
+    loading: () => moduleSkeleton("Sniper CRM", "Carregando cockpit de mensageria..."),
+  },
+);
 const SquadSyncModule = dynamic(() => import("@/components/enterprise/squad-sync-module").then((mod) => mod.SquadSyncModule), {
   loading: () => moduleSkeleton("Squad Sync", "Carregando hub de demanda..."),
 });
@@ -187,6 +193,7 @@ const sections: Section[] = [
   { id: "editorsProduction", label: "Editores & Producao", subtitle: "The Retention", icon: Clapperboard },
   { id: "techCro", label: "Tech & CRO", subtitle: "The Frictionless Flow", icon: Binary },
   { id: "salesRecovery", label: "Sales Recovery", subtitle: "Sniper List", icon: Handshake },
+  { id: "sniperCrm", label: "Sniper CRM", subtitle: "WhatsApp Native Engine", icon: MessageSquare },
   { id: "customerExperience", label: "Customer Experience", subtitle: "LTV & Churn", icon: HeartPulse },
   { id: "financeCompliance", label: "Finance & Compliance", subtitle: "DRE + Legal Vault", icon: ShieldCheck },
 ];
@@ -889,6 +896,7 @@ export default function Dashboard({ data, users, session, initialSection }: Dash
             )}
             {activeSection === "techCro" && isSectionAllowed && <TechCroModule />}
             {activeSection === "salesRecovery" && isSectionAllowed && <SalesRecoveryModule />}
+            {activeSection === "sniperCrm" && isSectionAllowed && <SniperCrmModule />}
             {activeSection === "customerExperience" && isSectionAllowed && <CustomerExperienceModule />}
             {activeSection === "financeCompliance" && isSectionAllowed && <FinanceComplianceModule />}
 
