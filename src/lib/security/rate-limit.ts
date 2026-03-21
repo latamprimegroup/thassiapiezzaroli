@@ -1,3 +1,5 @@
+import { redisIncrementWithWindow } from "@/lib/infra/redis";
+
 type Counter = {
   count: number;
   windowStartMs: number;
@@ -27,11 +29,22 @@ export function readRequestIp(request: Request) {
   );
 }
 
-export function checkRateLimit(params: {
+export async function checkRateLimit(params: {
   key: string;
   limit: number;
   windowMs: number;
 }) {
+  const redisResult = await redisIncrementWithWindow(params.key, Math.ceil(params.windowMs / 1000));
+  if (redisResult) {
+    const allowed = redisResult.count <= params.limit;
+    return {
+      allowed,
+      remaining: Math.max(0, params.limit - redisResult.count),
+      resetMs: now() + redisResult.ttlSeconds * 1000,
+      distributed: true,
+    };
+  }
+
   const store = getStore();
   const record = store.get(params.key);
   const currentMs = now();
@@ -44,6 +57,7 @@ export function checkRateLimit(params: {
       allowed: true,
       remaining: Math.max(0, params.limit - 1),
       resetMs: currentMs + params.windowMs,
+      distributed: false,
     };
   }
   const nextCount = record.count + 1;
@@ -56,6 +70,7 @@ export function checkRateLimit(params: {
     allowed,
     remaining: Math.max(0, params.limit - nextCount),
     resetMs: record.windowStartMs + params.windowMs,
+    distributed: false,
   };
 }
 

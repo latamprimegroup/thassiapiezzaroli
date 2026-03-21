@@ -54,6 +54,21 @@ const EMPTY_DASHBOARD: OffersLabDashboard = {
     lastStatus: "idle",
     lastMessage: "",
   },
+  governance: {
+    aliases: [],
+    openQuarantineCount: 0,
+    recentQuarantine: [],
+  },
+  predictiveLtv: {
+    trainedAt: "",
+    sampleSize: 0,
+    slope: 0,
+    intercept: 0,
+    r2: 0,
+    mae: 0,
+    driftRatio: 0,
+    driftStatus: "stable",
+  },
 };
 
 function SkeletonBlock({ className }: { className?: string }) {
@@ -65,6 +80,8 @@ export function OffersLabModule() {
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [savingAlias, setSavingAlias] = useState(false);
+  const [trainingLtv, setTrainingLtv] = useState(false);
   const [error, setError] = useState("");
   const [payload, setPayload] = useState<ApiPayload>({
     data: EMPTY_DASHBOARD,
@@ -94,6 +111,10 @@ export function OffersLabModule() {
     uniqueMechanism: "",
     sophisticationLevel: "3",
     hookVariations: "",
+  });
+  const [aliasForm, setAliasForm] = useState({
+    rawSource: "",
+    canonicalSource: "meta",
   });
 
   const validationChecklistReady = useMemo(() => {
@@ -237,6 +258,46 @@ export function OffersLabModule() {
     void fetchDashboard();
   }
 
+  async function saveAlias() {
+    if (!aliasForm.rawSource.trim()) {
+      setError("Informe o raw source para criar alias.");
+      return;
+    }
+    setSavingAlias(true);
+    setError("");
+    const response = await fetch("/api/offers-lab/aliases", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(aliasForm),
+    }).catch(() => null);
+    if (!response || !response.ok) {
+      const body = response ? ((await response.json().catch(() => null)) as { error?: string } | null) : null;
+      setError(body?.error ?? "Falha ao salvar alias.");
+      setSavingAlias(false);
+      return;
+    }
+    setAliasForm((prev) => ({ ...prev, rawSource: "" }));
+    setSavingAlias(false);
+    void fetchDashboard();
+  }
+
+  async function trainLtvModel() {
+    setTrainingLtv(true);
+    setError("");
+    const response = await fetch("/api/offers-lab/ltv", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    }).catch(() => null);
+    if (!response || !response.ok) {
+      const body = response ? ((await response.json().catch(() => null)) as { error?: string } | null) : null;
+      setError(body?.error ?? "Falha ao treinar modelo de LTV.");
+      setTrainingLtv(false);
+      return;
+    }
+    setTrainingLtv(false);
+    void fetchDashboard();
+  }
+
   return (
     <section className="war-fade-in space-y-4">
       <Card className="border-[#FF9900]/35 bg-[#0b0b0b]">
@@ -260,6 +321,15 @@ export function OffersLabModule() {
             )}
           </div>
           <div className="rounded border border-white/10 bg-black/30 p-3 text-xs">
+            <p className="text-slate-400">Quarentena de atribuição</p>
+            {loading ? (
+              <SkeletonBlock className="mt-2 h-8" />
+            ) : (
+              <p className="mt-1 text-lg font-semibold text-[#FF9900]">{payload.data.governance.openQuarantineCount}</p>
+            )}
+            <p className="text-[11px] text-slate-500">Eventos inválidos bloqueados</p>
+          </div>
+          <div className="rounded border border-white/10 bg-black/30 p-3 text-xs">
             <p className="text-slate-400">Ultimo sync UTMify</p>
             <p className="mt-1 text-slate-100">{toIsoClock(payload.data.sync.lastSyncAt)}</p>
             <Badge variant={payload.data.sync.lastStatus === "ok" ? "success" : payload.data.sync.lastStatus === "error" ? "danger" : "default"}>
@@ -275,6 +345,103 @@ export function OffersLabModule() {
           </div>
         </CardContent>
       </Card>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Card className="bg-[#080808]">
+          <CardHeader>
+            <CardTitle className="text-base">Attribution Governance</CardTitle>
+            <CardDescription className="text-xs">
+              Alias canonico de UTM source + quarentena automatica de eventos invalidos.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid gap-2 md:grid-cols-3">
+              <input
+                value={aliasForm.rawSource}
+                onChange={(event) => setAliasForm((prev) => ({ ...prev, rawSource: event.target.value }))}
+                className="h-8 rounded border border-white/15 bg-black/40 px-2 text-xs"
+                placeholder="raw source (ex: faceads)"
+              />
+              <select
+                value={aliasForm.canonicalSource}
+                onChange={(event) => setAliasForm((prev) => ({ ...prev, canonicalSource: event.target.value }))}
+                className="h-8 rounded border border-white/15 bg-black/40 px-2 text-xs"
+              >
+                <option value="meta">meta</option>
+                <option value="google">google</option>
+                <option value="tiktok">tiktok</option>
+                <option value="kwai">kwai</option>
+                <option value="networking">networking</option>
+              </select>
+              <Button type="button" className="h-8 text-xs" disabled={savingAlias} onClick={() => void saveAlias()}>
+                {savingAlias ? "Salvando..." : "Salvar alias"}
+              </Button>
+            </div>
+            <div className="rounded border border-white/10 bg-black/30 p-2 text-xs">
+              <p className="mb-1 text-slate-300">Aliases ativos</p>
+              <div className="flex flex-wrap gap-1">
+                {payload.data.governance.aliases.slice(0, 8).map((alias) => (
+                  <Badge key={alias.id} variant="default">
+                    {alias.rawSource} -&gt; {alias.canonicalSource}
+                  </Badge>
+                ))}
+                {payload.data.governance.aliases.length === 0 && <span className="text-slate-500">Sem aliases configurados.</span>}
+              </div>
+            </div>
+            <div className="rounded border border-white/10 bg-black/30 p-2 text-xs">
+              <p className="mb-1 text-slate-300">Ultimos eventos em quarentena</p>
+              {payload.data.governance.recentQuarantine.slice(0, 5).map((item) => (
+                <p key={item.id} className="text-slate-400">
+                  {item.reason} | source: {item.rawSource || "n/a"} | offer: {item.offerId || "n/a"}
+                </p>
+              ))}
+              {payload.data.governance.recentQuarantine.length === 0 && <p className="text-slate-500">Sem eventos em quarentena.</p>}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-[#080808]">
+          <CardHeader>
+            <CardTitle className="text-base">LTV Predictivo (D7 -&gt; D90)</CardTitle>
+            <CardDescription className="text-xs">
+              Modelo supervisionado com monitor de drift para escala por valor real.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 text-xs">
+            <div className="grid gap-2 md:grid-cols-3">
+              <div className="rounded border border-white/10 bg-black/30 p-2">
+                <p className="text-slate-400">R²</p>
+                <p className="text-slate-100">{payload.data.predictiveLtv.r2.toFixed(4)}</p>
+              </div>
+              <div className="rounded border border-white/10 bg-black/30 p-2">
+                <p className="text-slate-400">MAE</p>
+                <p className="text-slate-100">{payload.data.predictiveLtv.mae.toFixed(4)}</p>
+              </div>
+              <div className="rounded border border-white/10 bg-black/30 p-2">
+                <p className="text-slate-400">Drift</p>
+                <p
+                  className={
+                    payload.data.predictiveLtv.driftStatus === "critical"
+                      ? "text-[#EA4335]"
+                      : payload.data.predictiveLtv.driftStatus === "warning"
+                        ? "text-[#FF9900]"
+                        : "text-[#10B981]"
+                  }
+                >
+                  {payload.data.predictiveLtv.driftStatus.toUpperCase()} ({payload.data.predictiveLtv.driftRatio.toFixed(2)}x)
+                </p>
+              </div>
+            </div>
+            <div className="rounded border border-white/10 bg-black/30 p-2">
+              <p className="text-slate-400">Amostras: {payload.data.predictiveLtv.sampleSize}</p>
+              <p className="text-slate-500">Treinado em: {toIsoClock(payload.data.predictiveLtv.trainedAt)}</p>
+            </div>
+            <Button type="button" className="h-8 text-xs" disabled={trainingLtv} onClick={() => void trainLtvModel()}>
+              {trainingLtv ? "Treinando..." : "Treinar modelo agora"}
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.15fr_1fr]">
         <Card className="bg-[#080808]">

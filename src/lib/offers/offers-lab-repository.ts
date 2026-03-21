@@ -37,3 +37,35 @@ export async function writeSyncState(...args: Parameters<typeof fileStore.writeS
   return isDatabaseMode() ? dbStore.writeSyncState(...args) : fileStore.writeSyncState(...args);
 }
 
+export async function listUtmAliases(...args: Parameters<typeof fileStore.listUtmAliases>) {
+  return isDatabaseMode() ? dbStore.listUtmAliases(...args) : fileStore.listUtmAliases(...args);
+}
+
+export async function upsertUtmAlias(...args: Parameters<typeof fileStore.upsertUtmAlias>) {
+  return isDatabaseMode() ? dbStore.upsertUtmAlias(...args) : fileStore.upsertUtmAlias(...args);
+}
+
+export async function appendQuarantine(...args: Parameters<typeof fileStore.appendQuarantine>) {
+  return isDatabaseMode() ? dbStore.appendQuarantine(...args) : fileStore.appendQuarantine(...args);
+}
+
+export async function listQuarantine(...args: Parameters<typeof fileStore.listQuarantine>) {
+  return isDatabaseMode() ? dbStore.listQuarantine(...args) : fileStore.listQuarantine(...args);
+}
+
+export async function appendLtvSample(...args: Parameters<typeof fileStore.appendLtvSample>) {
+  return isDatabaseMode() ? dbStore.appendLtvSample(...args) : fileStore.appendLtvSample(...args);
+}
+
+export async function listLtvSamples(...args: Parameters<typeof fileStore.listLtvSamples>) {
+  return isDatabaseMode() ? dbStore.listLtvSamples(...args) : fileStore.listLtvSamples(...args);
+}
+
+export async function readPredictiveLtvModel(...args: Parameters<typeof fileStore.readPredictiveLtvModel>) {
+  return isDatabaseMode() ? dbStore.readPredictiveLtvModel(...args) : fileStore.readPredictiveLtvModel(...args);
+}
+
+export async function writePredictiveLtvModel(...args: Parameters<typeof fileStore.writePredictiveLtvModel>) {
+  return isDatabaseMode() ? dbStore.writePredictiveLtvModel(...args) : fileStore.writePredictiveLtvModel(...args);
+}
+

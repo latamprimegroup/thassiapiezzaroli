@@ -42,7 +42,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Nao autorizado." }, { status: 401 });
   }
   const ip = readRequestIp(request);
-  const limiter = checkRateLimit({
+  const limiter = await checkRateLimit({
     key: `webhooks-warroom:${ip}`,
     limit: 2_000,
     windowMs: 60_000,

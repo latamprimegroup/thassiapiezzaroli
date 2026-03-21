@@ -80,10 +80,65 @@ export type OffersLabSyncState = {
   lastMessage: string;
 };
 
+export type UtmAliasRecord = {
+  id: string;
+  rawSource: string;
+  canonicalSource: TrafficSource;
+  approvedBy: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type QuarantineReason =
+  | "unknown_source"
+  | "missing_name_id_pattern"
+  | "networking_missing_brought_by"
+  | "missing_offer_id"
+  | "invalid_payload";
+
+export type QuarantinedTrafficEventRecord = {
+  id: string;
+  eventId: string;
+  offerId: string;
+  rawSource: string;
+  normalizedSource: TrafficSource;
+  reason: QuarantineReason;
+  detail: string;
+  status: "open" | "resolved";
+  payload: Record<string, unknown>;
+  detectedAt: string;
+};
+
+export type LtvSampleRecord = {
+  id: string;
+  offerId: string;
+  ltvD7: number;
+  ltvD90: number;
+  capturedAt: string;
+  source: string;
+};
+
+export type PredictiveLtvModelState = {
+  trainedAt: string;
+  sampleSize: number;
+  slope: number;
+  intercept: number;
+  r2: number;
+  mae: number;
+  driftRatio: number;
+  driftStatus: "stable" | "warning" | "critical";
+};
+
 export type OffersLabDashboard = {
   offers: OfferWithMetrics[];
   validatedOffers: OfferWithMetrics[];
   sources: TrafficSourceSummary[];
   sync: OffersLabSyncState;
+  governance: {
+    aliases: UtmAliasRecord[];
+    openQuarantineCount: number;
+    recentQuarantine: QuarantinedTrafficEventRecord[];
+  };
+  predictiveLtv: PredictiveLtvModelState;
 };
 

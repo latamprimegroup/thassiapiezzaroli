@@ -160,9 +160,22 @@ export const WAR_ROOM_OPS_CONSTANTS = {
     callbackMaxPayloadBytes: 1024 * 1024,
     maxBatchEventsPerRequest: 500,
     callbackRateLimitPerMinute: 1_500,
+    redis: {
+      keyPrefix: "warroom:offerslab",
+    },
     validation: {
       minRevenue7d: 70_000,
       minRoas: 1.8,
+    },
+    attributionGovernance: {
+      strictMode: true,
+      quarantineListLimit: 100,
+    },
+    predictiveLtv: {
+      minSamplesForTraining: 25,
+      retrainEverySync: true,
+      driftWarningRatio: 1.35,
+      driftCriticalRatio: 1.8,
     },
     trafficSources: ["meta", "google", "tiktok", "kwai", "networking", "unknown"] as const,
   },

@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   }
 
   const ip = readRequestIp(request);
-  const limiter = checkRateLimit({
+  const limiter = await checkRateLimit({
     key: `offers-lab-callback:${ip}`,
     limit: WAR_ROOM_OPS_CONSTANTS.offersLab.callbackRateLimitPerMinute,
     windowMs: 60_000,

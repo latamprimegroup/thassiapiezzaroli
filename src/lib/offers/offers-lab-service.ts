@@ -1,14 +1,24 @@
 import { randomUUID } from "node:crypto";
 import { WAR_ROOM_OPS_CONSTANTS } from "@/lib/config/war-room-ops.constants";
+import { redisDelete, redisGetString, redisIncrementWithWindow, redisSetStringEx } from "@/lib/infra/redis";
 import * as offersRepo from "@/lib/offers/offers-lab-repository";
+import {
+  buildDefaultPredictiveModelState,
+  evaluateDrift,
+  trainLinearLtvModel,
+} from "@/lib/offers/predictive-ltv";
 import type {
+  LtvSampleRecord,
   OfferMetrics7d,
   OfferRecord,
   OffersLabDashboard,
   OffersLabSyncState,
   OfferWithMetrics,
+  PredictiveLtvModelState,
+  QuarantinedTrafficEventRecord,
   TrafficEventRecord,
   TrafficSourceSummary,
+  UtmAliasRecord,
 } from "@/lib/offers/types";
 import { normalizeGatewayPayload, normalizeTrafficSource } from "@/lib/offers/utm-normalization";
 import { captureServerError } from "@/lib/observability/error-monitoring";
@@ -37,6 +47,7 @@ type DashboardFilters = {
 
 declare global {
   var __offersLabDashboardCache: Map<string, { expiresAtMs: number; value: OffersLabDashboard }> | undefined;
+  var __offersLabCacheVersion: number | undefined;
 }
 
 function nowIso() {
@@ -63,8 +74,37 @@ function buildDashboardCacheKey(filters?: DashboardFilters) {
   });
 }
 
-function invalidateDashboardCache() {
+function localCacheVersion() {
+  if (typeof globalThis.__offersLabCacheVersion !== "number") {
+    globalThis.__offersLabCacheVersion = 1;
+  }
+  return globalThis.__offersLabCacheVersion;
+}
+
+async function resolveCacheVersion() {
+  const redisKey = `${WAR_ROOM_OPS_CONSTANTS.offersLab.redis.keyPrefix}:cache-version`;
+  const raw = await redisGetString(redisKey);
+  const parsed = Number(raw);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    globalThis.__offersLabCacheVersion = parsed;
+    return parsed;
+  }
+  return localCacheVersion();
+}
+
+async function invalidateDashboardCache() {
+  const redisKey = `${WAR_ROOM_OPS_CONSTANTS.offersLab.redis.keyPrefix}:cache-version`;
+  const redisResult = await redisIncrementWithWindow(redisKey, 60 * 60 * 24 * 365);
+  if (redisResult) {
+    globalThis.__offersLabCacheVersion = redisResult.count;
+  } else {
+    globalThis.__offersLabCacheVersion = localCacheVersion() + 1;
+  }
   getCacheStore().clear();
+}
+
+function buildRedisDashboardCacheKey(version: number, filters?: DashboardFilters) {
+  return `${WAR_ROOM_OPS_CONSTANTS.offersLab.redis.keyPrefix}:dashboard:v${version}:${buildDashboardCacheKey(filters)}`;
 }
 
 function toNumber(value: unknown, fallback = 0) {
@@ -160,6 +200,87 @@ async function warnIfUtmPatternWeak(event: TrafficEventRecord) {
     },
     level: "warning",
   });
+}
+
+function normalizeAliasToken(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[^\w\s-]/g, "")
+    .replace(/\s+/g, "_");
+}
+
+function parseLtvSampleFromPayload(payload: Record<string, unknown>, offerId: string): LtvSampleRecord | null {
+  const ltvD7 = toNumber(payload.ltv_7d ?? payload.customer_ltv_7d ?? payload.ltv7d, 0);
+  const ltvD90 = toNumber(payload.ltv_90d ?? payload.customer_ltv_90d ?? payload.ltv90d, 0);
+  if (!(ltvD7 > 0 && ltvD90 > 0)) {
+    return null;
+  }
+  const capturedAtRaw = String(payload.timestamp ?? payload.occurred_at ?? payload.created_at ?? nowIso());
+  const parsedDate = new Date(capturedAtRaw);
+  const capturedAt = Number.isNaN(parsedDate.getTime()) ? nowIso() : parsedDate.toISOString();
+  const source = String(payload.provider ?? payload.gateway ?? "utmify").trim() || "utmify";
+  const signature = Buffer.from(`${offerId}|${capturedAt}|${ltvD7}|${ltvD90}`).toString("base64url").slice(0, 22);
+  return {
+    id: `LTVS-${signature}`,
+    offerId,
+    ltvD7,
+    ltvD90,
+    capturedAt,
+    source,
+  };
+}
+
+function buildQuarantineRecord(params: {
+  payload: Record<string, unknown>;
+  eventId: string;
+  offerId: string;
+  rawSource: string;
+  normalizedSource: TrafficEventRecord["trafficSource"];
+  reason: QuarantinedTrafficEventRecord["reason"];
+  detail: string;
+}): QuarantinedTrafficEventRecord {
+  return {
+    id: `Q-${Buffer.from(`${params.eventId}|${params.reason}|${params.offerId}`).toString("base64url").slice(0, 28)}`,
+    eventId: params.eventId,
+    offerId: params.offerId,
+    rawSource: params.rawSource,
+    normalizedSource: params.normalizedSource,
+    reason: params.reason,
+    detail: params.detail,
+    status: "open",
+    payload: params.payload,
+    detectedAt: nowIso(),
+  };
+}
+
+function requiresNameIdPattern(source: TrafficEventRecord["trafficSource"]) {
+  return source === "meta" || source === "google" || source === "tiktok" || source === "kwai";
+}
+
+async function buildAliasMap() {
+  const aliases = await offersRepo.listUtmAliases();
+  const map = new Map<string, TrafficEventRecord["trafficSource"]>();
+  aliases.forEach((alias) => {
+    const normalized = normalizeTrafficSource(alias.canonicalSource);
+    if (normalized !== "unknown") {
+      map.set(normalizeAliasToken(alias.rawSource), normalized);
+    }
+  });
+  return { aliases, map };
+}
+
+function resolveSourceWithAliases(
+  rawSource: string,
+  normalizedSource: TrafficEventRecord["trafficSource"],
+  aliasMap: Map<string, TrafficEventRecord["trafficSource"]>,
+) {
+  if (normalizedSource !== "unknown") {
+    return normalizedSource;
+  }
+  const alias = aliasMap.get(normalizeAliasToken(rawSource));
+  return alias ?? normalizedSource;
 }
 
 async function notifyScaleReached(offer: OfferWithMetrics) {
@@ -342,6 +463,70 @@ function extractEventRowsFromUtmify(payload: Record<string, unknown>) {
   return [];
 }
 
+export async function listUtmAliases() {
+  return offersRepo.listUtmAliases();
+}
+
+export async function upsertUtmAlias(input: {
+  rawSource: string;
+  canonicalSource: UtmAliasRecord["canonicalSource"];
+  approvedBy: string;
+}) {
+  const rawSource = normalizeAliasToken(input.rawSource);
+  const canonicalSource = normalizeTrafficSource(input.canonicalSource);
+  if (!rawSource) {
+    throw new Error("raw_source obrigatorio.");
+  }
+  if (canonicalSource === "unknown") {
+    throw new Error("canonical_source invalido para alias.");
+  }
+  const now = nowIso();
+  const record: UtmAliasRecord = {
+    id: `ALIAS-${Buffer.from(rawSource).toString("base64url").slice(0, 18)}`,
+    rawSource,
+    canonicalSource,
+    approvedBy: input.approvedBy || "system",
+    createdAt: now,
+    updatedAt: now,
+  };
+  await offersRepo.upsertUtmAlias(record);
+  await invalidateDashboardCache();
+  return record;
+}
+
+export async function listQuarantine(params?: { status?: QuarantinedTrafficEventRecord["status"]; limit?: number }) {
+  return offersRepo.listQuarantine({
+    status: params?.status,
+    limit: Math.min(params?.limit ?? WAR_ROOM_OPS_CONSTANTS.offersLab.attributionGovernance.quarantineListLimit, 1000),
+  });
+}
+
+export async function trainPredictiveLtvModel() {
+  const samples = await offersRepo.listLtvSamples({ limit: 50_000 });
+  if (samples.length < WAR_ROOM_OPS_CONSTANTS.offersLab.predictiveLtv.minSamplesForTraining) {
+    const existing = await offersRepo.readPredictiveLtvModel();
+    return existing.sampleSize > 0 ? existing : buildDefaultPredictiveModelState();
+  }
+  const stats = trainLinearLtvModel(samples);
+  const drift = evaluateDrift(samples, stats.mae, {
+    warningRatio: WAR_ROOM_OPS_CONSTANTS.offersLab.predictiveLtv.driftWarningRatio,
+    criticalRatio: WAR_ROOM_OPS_CONSTANTS.offersLab.predictiveLtv.driftCriticalRatio,
+  });
+  const model: PredictiveLtvModelState = {
+    trainedAt: nowIso(),
+    sampleSize: samples.length,
+    slope: stats.slope,
+    intercept: stats.intercept,
+    r2: stats.r2,
+    mae: stats.mae,
+    driftRatio: drift.driftRatio,
+    driftStatus: drift.driftStatus,
+  };
+  await offersRepo.writePredictiveLtvModel(model);
+  await invalidateDashboardCache();
+  return model;
+}
+
 export async function upsertOffer(input: UpsertOfferInput) {
   const existing = input.id ? await offersRepo.readOffer(input.id) : null;
   const createdAt = existing?.createdAt ?? nowIso();
@@ -374,24 +559,79 @@ export async function upsertOffer(input: UpsertOfferInput) {
     throw new Error("Nome da oferta e obrigatorio.");
   }
   await offersRepo.upsertOffer(record);
-  invalidateDashboardCache();
+  await invalidateDashboardCache();
   return record;
 }
 
 async function registerTrafficEventInternal(payload: Record<string, unknown>, options?: { invalidateCache?: boolean }) {
   const normalized = normalizeGatewayPayload(payload);
+  const rawSource = String(payload.utm_source ?? payload.source ?? payload.traffic_source ?? "").trim();
+  const eventId = resolveEventId(payload, normalized.offerId || "UNKNOWN", normalized.eventType);
+  const { map: aliasMap } = await buildAliasMap();
+  const canonicalSource = resolveSourceWithAliases(rawSource || normalized.utmSource, normalized.trafficSource, aliasMap);
+
   if (!normalized.offerId) {
+    const quarantine = buildQuarantineRecord({
+      payload,
+      eventId,
+      offerId: "",
+      rawSource,
+      normalizedSource: canonicalSource,
+      reason: "missing_offer_id",
+      detail: "Evento recebido sem offer_id.",
+    });
+    await offersRepo.appendQuarantine(quarantine);
     throw new Error("offer_id obrigatorio para registrar traffic_event.");
   }
-  if (normalized.trafficSource === "networking" && !normalized.utmBroughtBy) {
-    throw new Error("utm_brought_by obrigatorio para eventos de networking.");
+
+  const quarantineReasons: Array<{ reason: QuarantinedTrafficEventRecord["reason"]; detail: string }> = [];
+  if (canonicalSource === "unknown") {
+    quarantineReasons.push({
+      reason: "unknown_source",
+      detail: "Nao foi possivel identificar a origem de trafego e nao ha alias canonico.",
+    });
   }
+  if (requiresNameIdPattern(canonicalSource) && (!normalized.campaignId || !normalized.contentId)) {
+    quarantineReasons.push({
+      reason: "missing_name_id_pattern",
+      detail: "utm_campaign/utm_content sem padrao Nome|ID para canal pago.",
+    });
+  }
+  if (canonicalSource === "networking" && !normalized.utmBroughtBy) {
+    quarantineReasons.push({
+      reason: "networking_missing_brought_by",
+      detail: "Evento networking sem utm_brought_by.",
+    });
+  }
+
+  if (
+    WAR_ROOM_OPS_CONSTANTS.offersLab.attributionGovernance.strictMode &&
+    quarantineReasons.length > 0
+  ) {
+    await Promise.all(
+      quarantineReasons.map((entry, index) =>
+        offersRepo.appendQuarantine(
+          buildQuarantineRecord({
+            payload,
+            eventId: `${eventId}-${index + 1}`,
+            offerId: normalized.offerId,
+            rawSource,
+            normalizedSource: canonicalSource,
+            reason: entry.reason,
+            detail: entry.detail,
+          }),
+        ),
+      ),
+    );
+    throw new Error(`Evento em quarentena: ${quarantineReasons.map((entry) => entry.reason).join(", ")}`);
+  }
+
   const event: TrafficEventRecord = {
-    id: resolveEventId(payload, normalized.offerId, normalized.eventType),
+    id: eventId,
     offerId: normalized.offerId,
     eventType: normalized.eventType,
     gateway: normalized.gateway,
-    trafficSource: normalized.trafficSource,
+    trafficSource: canonicalSource,
     occurredAt: normalized.occurredAt,
     utmSource: normalized.utmSource,
     utmCampaign: normalized.utmCampaign,
@@ -417,8 +657,12 @@ async function registerTrafficEventInternal(payload: Record<string, unknown>, op
   await ensureOfferExistsFromEvent(event);
   await offersRepo.appendTrafficEvent(event);
   await warnIfUtmPatternWeak(event);
+  const ltvSample = parseLtvSampleFromPayload(payload, event.offerId);
+  if (ltvSample) {
+    await offersRepo.appendLtvSample(ltvSample);
+  }
   if (options?.invalidateCache !== false) {
-    invalidateDashboardCache();
+    await invalidateDashboardCache();
   }
   return event;
 }
@@ -431,25 +675,77 @@ export async function registerTrafficEventsBatch(payloads: Record<string, unknow
   const maxBatch = WAR_ROOM_OPS_CONSTANTS.offersLab.maxBatchEventsPerRequest;
   const cappedPayloads = payloads.slice(0, maxBatch);
   const existingOffers = new Map((await offersRepo.listOffers()).map((offer) => [offer.id, offer]));
+  const { map: aliasMap } = await buildAliasMap();
   const toInsert: TrafficEventRecord[] = [];
+  const ltvSamples: LtvSampleRecord[] = [];
   const failures: Array<{ index: number; message: string }> = [];
 
   for (let index = 0; index < cappedPayloads.length; index += 1) {
     const payload = cappedPayloads[index];
     try {
       const normalized = normalizeGatewayPayload(payload);
+      const rawSource = String(payload.utm_source ?? payload.source ?? payload.traffic_source ?? "").trim();
+      const eventId = resolveEventId(payload, normalized.offerId || "UNKNOWN", normalized.eventType);
+      const canonicalSource = resolveSourceWithAliases(rawSource || normalized.utmSource, normalized.trafficSource, aliasMap);
+
       if (!normalized.offerId) {
+        const quarantine = buildQuarantineRecord({
+          payload,
+          eventId,
+          offerId: "",
+          rawSource,
+          normalizedSource: canonicalSource,
+          reason: "missing_offer_id",
+          detail: "Evento recebido sem offer_id.",
+        });
+        await offersRepo.appendQuarantine(quarantine);
         throw new Error("offer_id obrigatorio.");
       }
-      if (normalized.trafficSource === "networking" && !normalized.utmBroughtBy) {
-        throw new Error("utm_brought_by obrigatorio para networking.");
+
+      const quarantineReasons: Array<{ reason: QuarantinedTrafficEventRecord["reason"]; detail: string }> = [];
+      if (canonicalSource === "unknown") {
+        quarantineReasons.push({
+          reason: "unknown_source",
+          detail: "Nao foi possivel identificar source e nao existe alias.",
+        });
       }
+      if (requiresNameIdPattern(canonicalSource) && (!normalized.campaignId || !normalized.contentId)) {
+        quarantineReasons.push({
+          reason: "missing_name_id_pattern",
+          detail: "utm_campaign/utm_content sem padrao Nome|ID em canal pago.",
+        });
+      }
+      if (canonicalSource === "networking" && !normalized.utmBroughtBy) {
+        quarantineReasons.push({
+          reason: "networking_missing_brought_by",
+          detail: "Evento networking sem utm_brought_by.",
+        });
+      }
+      if (WAR_ROOM_OPS_CONSTANTS.offersLab.attributionGovernance.strictMode && quarantineReasons.length > 0) {
+        await Promise.all(
+          quarantineReasons.map((entry, reasonIndex) =>
+            offersRepo.appendQuarantine(
+              buildQuarantineRecord({
+                payload,
+                eventId: `${eventId}-${reasonIndex + 1}`,
+                offerId: normalized.offerId,
+                rawSource,
+                normalizedSource: canonicalSource,
+                reason: entry.reason,
+                detail: entry.detail,
+              }),
+            ),
+          ),
+        );
+        throw new Error(`Evento em quarentena: ${quarantineReasons.map((entry) => entry.reason).join(", ")}`);
+      }
+
       const event: TrafficEventRecord = {
-        id: resolveEventId(payload, normalized.offerId, normalized.eventType),
+        id: eventId,
         offerId: normalized.offerId,
         eventType: normalized.eventType,
         gateway: normalized.gateway,
-        trafficSource: normalized.trafficSource,
+        trafficSource: canonicalSource,
         occurredAt: normalized.occurredAt,
         utmSource: normalized.utmSource,
         utmCampaign: normalized.utmCampaign,
@@ -496,6 +792,10 @@ export async function registerTrafficEventsBatch(payloads: Record<string, unknow
         existingOffers.set(fallback.id, fallback);
       }
       toInsert.push(event);
+      const ltvSample = parseLtvSampleFromPayload(payload, event.offerId);
+      if (ltvSample) {
+        ltvSamples.push(ltvSample);
+      }
       void warnIfUtmPatternWeak(event);
     } catch (error) {
       failures.push({
@@ -505,10 +805,13 @@ export async function registerTrafficEventsBatch(payloads: Record<string, unknow
     }
   }
   const insertion = await offersRepo.appendTrafficEventsBatch(toInsert);
+  if (ltvSamples.length > 0) {
+    await Promise.all(ltvSamples.map((sample) => offersRepo.appendLtvSample(sample)));
+  }
   const created = insertion.inserted;
   const duplicates = Math.max(0, insertion.attempted - insertion.inserted);
   const failed = failures.length;
-  invalidateDashboardCache();
+  await invalidateDashboardCache();
   return {
     created,
     failed,
@@ -518,18 +821,37 @@ export async function registerTrafficEventsBatch(payloads: Record<string, unknow
 }
 
 export async function getOffersLabDashboard(filters?: DashboardFilters): Promise<OffersLabDashboard> {
-  const cacheKey = buildDashboardCacheKey(filters);
+  const cacheVersion = await resolveCacheVersion();
+  const cacheKey = `${cacheVersion}:${buildDashboardCacheKey(filters)}`;
+  const redisCacheKey = buildRedisDashboardCacheKey(cacheVersion, filters);
   const cacheTtlMs = WAR_ROOM_OPS_CONSTANTS.offersLab.cacheTtlSeconds * 1000;
+  const redisCached = await redisGetString(redisCacheKey);
+  if (redisCached) {
+    try {
+      const parsed = JSON.parse(redisCached) as OffersLabDashboard;
+      getCacheStore().set(cacheKey, {
+        value: parsed,
+        expiresAtMs: nowMs() + cacheTtlMs,
+      });
+      return parsed;
+    } catch {
+      await redisDelete(redisCacheKey);
+    }
+  }
   const cached = getCacheStore().get(cacheKey);
   if (cached && cached.expiresAtMs > nowMs()) {
     return cached.value;
   }
 
   const windowStart = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-  const [offers, events7d, sync] = await Promise.all([
+  const [offers, events7d, sync, aliases, recentQuarantine, openQuarantine, predictiveModel] = await Promise.all([
     offersRepo.listOffers(),
     offersRepo.listTrafficEvents({ sinceIso: windowStart }),
     offersRepo.readSyncState(),
+    offersRepo.listUtmAliases(),
+    offersRepo.listQuarantine({ limit: WAR_ROOM_OPS_CONSTANTS.offersLab.attributionGovernance.quarantineListLimit }),
+    offersRepo.listQuarantine({ status: "open", limit: 5_000 }),
+    offersRepo.readPredictiveLtvModel(),
   ]);
   const evaluated = await autoValidateOffers(offers, events7d);
   const filtered = applyDashboardFilters(evaluated, filters);
@@ -541,11 +863,22 @@ export async function getOffersLabDashboard(filters?: DashboardFilters): Promise
     validatedOffers,
     sources: sourceSummary,
     sync,
+    governance: {
+      aliases: aliases.slice(0, 200),
+      openQuarantineCount: openQuarantine.length,
+      recentQuarantine,
+    },
+    predictiveLtv: predictiveModel,
   };
   getCacheStore().set(cacheKey, {
     value: dashboard,
     expiresAtMs: nowMs() + cacheTtlMs,
   });
+  await redisSetStringEx(
+    redisCacheKey,
+    JSON.stringify(dashboard),
+    WAR_ROOM_OPS_CONSTANTS.offersLab.cacheTtlSeconds,
+  );
   return dashboard;
 }
 
@@ -596,14 +929,17 @@ export async function syncOffersFromUtmify() {
         event_type: row.event_type ?? "sale",
       })),
     );
+    if (WAR_ROOM_OPS_CONSTANTS.offersLab.predictiveLtv.retrainEverySync) {
+      await trainPredictiveLtvModel();
+    }
     const syncedEvents = batch.created;
     const state: OffersLabSyncState = {
       lastSyncAt: now,
       lastStatus: "ok",
       lastMessage:
         batch.failed > 0
-          ? `${syncedEvents} eventos sincronizados com UTMify (${batch.failed} falhas).`
-          : `${syncedEvents} eventos sincronizados com UTMify.`,
+          ? `${syncedEvents} eventos sincronizados com UTMify (${batch.failed} falhas, ${batch.duplicates} duplicados).`
+          : `${syncedEvents} eventos sincronizados com UTMify (${batch.duplicates} duplicados).`,
     };
     await offersRepo.writeSyncState(state);
     return { syncedEvents, state };

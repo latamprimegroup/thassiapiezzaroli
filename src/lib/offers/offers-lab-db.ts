@@ -1,5 +1,14 @@
 import { Pool, type PoolClient } from "pg";
-import type { OfferRecord, OffersLabSyncState, TrafficEventRecord } from "@/lib/offers/types";
+import { buildDefaultPredictiveModelState } from "@/lib/offers/predictive-ltv";
+import type {
+  LtvSampleRecord,
+  OfferRecord,
+  OffersLabSyncState,
+  PredictiveLtvModelState,
+  QuarantinedTrafficEventRecord,
+  TrafficEventRecord,
+  UtmAliasRecord,
+} from "@/lib/offers/types";
 
 declare global {
   var __offersLabDbPool: Pool | undefined;
@@ -133,6 +142,55 @@ async function ensureSchema() {
           last_status text not null default 'idle',
           last_message text not null default ''
         );
+
+        create table if not exists offers_lab_utm_aliases (
+          id text primary key,
+          raw_source text not null unique,
+          canonical_source text not null,
+          approved_by text not null default '',
+          created_at timestamptz not null,
+          updated_at timestamptz not null
+        );
+        create index if not exists offers_lab_utm_aliases_canonical_idx
+          on offers_lab_utm_aliases (canonical_source, updated_at desc);
+
+        create table if not exists offers_lab_quarantine_events (
+          id text primary key,
+          event_id text not null default '',
+          offer_id text not null default '',
+          raw_source text not null default '',
+          normalized_source text not null default 'unknown',
+          reason text not null,
+          detail text not null default '',
+          status text not null default 'open',
+          payload jsonb not null default '{}'::jsonb,
+          detected_at timestamptz not null
+        );
+        create index if not exists offers_lab_quarantine_status_idx
+          on offers_lab_quarantine_events (status, detected_at desc);
+
+        create table if not exists offers_lab_ltv_samples (
+          id text primary key,
+          offer_id text not null,
+          ltv_d7 numeric not null default 0,
+          ltv_d90 numeric not null default 0,
+          captured_at timestamptz not null,
+          source text not null default 'utmify'
+        );
+        create index if not exists offers_lab_ltv_samples_offer_idx
+          on offers_lab_ltv_samples (offer_id, captured_at desc);
+
+        create table if not exists offers_lab_predictive_ltv_state (
+          state_key text primary key,
+          trained_at timestamptz null,
+          sample_size integer not null default 0,
+          slope numeric not null default 0,
+          intercept numeric not null default 0,
+          r2 numeric not null default 0,
+          mae numeric not null default 0,
+          drift_ratio numeric not null default 0,
+          drift_status text not null default 'stable'
+        );
       `);
     })();
   }
@@ -220,6 +278,60 @@ function toSyncState(row: Record<string, unknown> | undefined): OffersLabSyncSta
         ? (String(row.last_status) as OffersLabSyncState["lastStatus"])
         : "idle",
     lastMessage: String(row.last_message ?? ""),
+  };
+}
+
+function toUtmAlias(row: Record<string, unknown>): UtmAliasRecord {
+  return {
+    id: String(row.id ?? ""),
+    rawSource: String(row.raw_source ?? ""),
+    canonicalSource: String(row.canonical_source ?? "unknown") as UtmAliasRecord["canonicalSource"],
+    approvedBy: String(row.approved_by ?? ""),
+    createdAt: asIso(row.created_at),
+    updatedAt: asIso(row.updated_at),
+  };
+}
+
+function toQuarantine(row: Record<string, unknown>): QuarantinedTrafficEventRecord {
+  return {
+    id: String(row.id ?? ""),
+    eventId: String(row.event_id ?? ""),
+    offerId: String(row.offer_id ?? ""),
+    rawSource: String(row.raw_source ?? ""),
+    normalizedSource: String(row.normalized_source ?? "unknown") as QuarantinedTrafficEventRecord["normalizedSource"],
+    reason: String(row.reason ?? "invalid_payload") as QuarantinedTrafficEventRecord["reason"],
+    detail: String(row.detail ?? ""),
+    status: String(row.status ?? "open") as QuarantinedTrafficEventRecord["status"],
+    payload: asObject(row.payload),
+    detectedAt: asIso(row.detected_at),
+  };
+}
+
+function toLtvSample(row: Record<string, unknown>): LtvSampleRecord {
+  return {
+    id: String(row.id ?? ""),
+    offerId: String(row.offer_id ?? ""),
+    ltvD7: asNumber(row.ltv_d7),
+    ltvD90: asNumber(row.ltv_d90),
+    capturedAt: asIso(row.captured_at),
+    source: String(row.source ?? ""),
+  };
+}
+
+function toPredictiveModel(row: Record<string, unknown> | undefined): PredictiveLtvModelState {
+  if (!row) {
+    return buildDefaultPredictiveModelState();
+  }
+  const driftStatusRaw = String(row.drift_status ?? "stable");
+  return {
+    trainedAt: asIso(row.trained_at),
+    sampleSize: Number(row.sample_size ?? 0),
+    slope: asNumber(row.slope),
+    intercept: asNumber(row.intercept),
+    r2: asNumber(row.r2),
+    mae: asNumber(row.mae),
+    driftRatio: asNumber(row.drift_ratio),
+    driftStatus: driftStatusRaw === "warning" || driftStatusRaw === "critical" ? driftStatusRaw : "stable",
   };
 }
 
@@ -468,6 +580,154 @@ export async function writeSyncState(state: OffersLabSyncState) {
       [state.lastSyncAt, state.lastStatus, state.lastMessage],
     );
     return state;
+  });
+}
+
+export async function listUtmAliases() {
+  return withClient(async (client) => {
+    const result = await client.query(`select * from offers_lab_utm_aliases order by updated_at desc`);
+    return result.rows.map((row) => toUtmAlias(row as Record<string, unknown>));
+  });
+}
+
+export async function upsertUtmAlias(record: UtmAliasRecord) {
+  return withClient(async (client) => {
+    await client.query(
+      `
+      insert into offers_lab_utm_aliases
+        (id, raw_source, canonical_source, approved_by, created_at, updated_at)
+      values
+        ($1, $2, $3, $4, $5::timestamptz, $6::timestamptz)
+      on conflict (raw_source) do update set
+        id = excluded.id,
+        canonical_source = excluded.canonical_source,
+        approved_by = excluded.approved_by,
+        updated_at = excluded.updated_at
+      `,
+      [record.id, record.rawSource, record.canonicalSource, record.approvedBy, record.createdAt, record.updatedAt],
+    );
+    return record;
+  });
+}
+
+export async function appendQuarantine(record: QuarantinedTrafficEventRecord) {
+  return withClient(async (client) => {
+    await client.query(
+      `
+      insert into offers_lab_quarantine_events
+        (id, event_id, offer_id, raw_source, normalized_source, reason, detail, status, payload, detected_at)
+      values
+        ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::timestamptz)
+      on conflict (id) do nothing
+      `,
+      [
+        record.id,
+        record.eventId,
+        record.offerId,
+        record.rawSource,
+        record.normalizedSource,
+        record.reason,
+        record.detail,
+        record.status,
+        JSON.stringify(record.payload ?? {}),
+        record.detectedAt,
+      ],
+    );
+    return record;
+  });
+}
+
+export async function listQuarantine(params?: { status?: QuarantinedTrafficEventRecord["status"]; limit?: number }) {
+  return withClient(async (client) => {
+    const limit = params?.limit ?? 500;
+    const values: unknown[] = [];
+    const clauses: string[] = [];
+    if (params?.status) {
+      values.push(params.status);
+      clauses.push(`status = $${values.length}`);
+    }
+    values.push(limit);
+    const where = clauses.length > 0 ? `where ${clauses.join(" and ")}` : "";
+    const result = await client.query(
+      `select * from offers_lab_quarantine_events ${where} order by detected_at desc limit $${values.length}`,
+      values,
+    );
+    return result.rows.map((row) => toQuarantine(row as Record<string, unknown>));
+  });
+}
+
+export async function appendLtvSample(sample: LtvSampleRecord) {
+  return withClient(async (client) => {
+    await client.query(
+      `
+      insert into offers_lab_ltv_samples
+        (id, offer_id, ltv_d7, ltv_d90, captured_at, source)
+      values
+        ($1, $2, $3, $4, $5::timestamptz, $6)
+      on conflict (id) do nothing
+      `,
+      [sample.id, sample.offerId, sample.ltvD7, sample.ltvD90, sample.capturedAt, sample.source],
+    );
+    return sample;
+  });
+}
+
+export async function listLtvSamples(params?: { offerId?: string; limit?: number }) {
+  return withClient(async (client) => {
+    const limit = params?.limit ?? 20_000;
+    const values: unknown[] = [];
+    const clauses: string[] = [];
+    if (params?.offerId) {
+      values.push(params.offerId);
+      clauses.push(`offer_id = $${values.length}`);
+    }
+    values.push(limit);
+    const where = clauses.length > 0 ? `where ${clauses.join(" and ")}` : "";
+    const result = await client.query(
+      `select * from offers_lab_ltv_samples ${where} order by captured_at desc limit $${values.length}`,
+      values,
+    );
+    return result.rows.map((row) => toLtvSample(row as Record<string, unknown>));
+  });
+}
+
+export async function readPredictiveLtvModel() {
+  return withClient(async (client) => {
+    const result = await client.query(`select * from offers_lab_predictive_ltv_state where state_key = 'singleton' limit 1`);
+    return toPredictiveModel(result.rows[0] as Record<string, unknown> | undefined);
+  });
+}
+
+export async function writePredictiveLtvModel(model: PredictiveLtvModelState) {
+  return withClient(async (client) => {
+    await client.query(
+      `
+      insert into offers_lab_predictive_ltv_state
+        (state_key, trained_at, sample_size, slope, intercept, r2, mae, drift_ratio, drift_status)
+      values
+        ('singleton', nullif($1, '')::timestamptz, $2, $3, $4, $5, $6, $7, $8)
+      on conflict (state_key) do update set
+        trained_at = excluded.trained_at,
+        sample_size = excluded.sample_size,
+        slope = excluded.slope,
+        intercept = excluded.intercept,
+        r2 = excluded.r2,
+        mae = excluded.mae,
+        drift_ratio = excluded.drift_ratio,
+        drift_status = excluded.drift_status
+      `,
+      [
+        model.trainedAt,
+        model.sampleSize,
+        model.slope,
+        model.intercept,
+        model.r2,
+        model.mae,
+        model.driftRatio,
+        model.driftStatus,
+      ],
+    );
+    return model;
   });
 }
 

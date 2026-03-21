@@ -139,6 +139,8 @@ create table if not exists offers_lab_traffic_events (
 );
 create index if not exists offers_lab_traffic_events_offer_occ_idx
   on offers_lab_traffic_events (offer_id, occurred_at desc);
+create index if not exists offers_lab_traffic_events_source_idx
+  on offers_lab_traffic_events (traffic_source, occurred_at desc);
 do $$
 begin
   if not exists (
@@ -158,4 +160,53 @@ create table if not exists offers_lab_sync_state (
   last_sync_at timestamptz null,
   last_status text not null default 'idle',
   last_message text not null default ''
+);
+
+create table if not exists offers_lab_utm_aliases (
+  id text primary key,
+  raw_source text not null unique,
+  canonical_source text not null,
+  approved_by text not null default '',
+  created_at timestamptz not null,
+  updated_at timestamptz not null
+);
+create index if not exists offers_lab_utm_aliases_canonical_idx
+  on offers_lab_utm_aliases (canonical_source, updated_at desc);
+
+create table if not exists offers_lab_quarantine_events (
+  id text primary key,
+  event_id text not null default '',
+  offer_id text not null default '',
+  raw_source text not null default '',
+  normalized_source text not null default 'unknown',
+  reason text not null,
+  detail text not null default '',
+  status text not null default 'open',
+  payload jsonb not null default '{}'::jsonb,
+  detected_at timestamptz not null
+);
+create index if not exists offers_lab_quarantine_status_idx
+  on offers_lab_quarantine_events (status, detected_at desc);
+
+create table if not exists offers_lab_ltv_samples (
+  id text primary key,
+  offer_id text not null,
+  ltv_d7 numeric not null default 0,
+  ltv_d90 numeric not null default 0,
+  captured_at timestamptz not null,
+  source text not null default 'utmify'
+);
+create index if not exists offers_lab_ltv_samples_offer_idx
+  on offers_lab_ltv_samples (offer_id, captured_at desc);
+
+create table if not exists offers_lab_predictive_ltv_state (
+  state_key text primary key,
+  trained_at timestamptz null,
+  sample_size integer not null default 0,
+  slope numeric not null default 0,
+  intercept numeric not null default 0,
+  r2 numeric not null default 0,
+  mae numeric not null default 0,
+  drift_ratio numeric not null default 0,
+  drift_status text not null default 'stable'
 );
