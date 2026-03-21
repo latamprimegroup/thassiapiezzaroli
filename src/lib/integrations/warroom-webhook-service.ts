@@ -7,7 +7,7 @@ import {
   readWebhookEvent,
   type WebhookEventRecord,
   upsertWebhookEvent,
-} from "@/lib/persistence/war-room-ops-store";
+} from "@/lib/persistence/war-room-ops-repository";
 
 const MAX_RETRY_ATTEMPTS = WAR_ROOM_OPS_CONSTANTS.queue.webhook.maxRetryAttempts;
 

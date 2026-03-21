@@ -1,6 +1,6 @@
 import { safeDivide } from "@/lib/metrics/kpis";
 import { WAR_ROOM_OPS_CONSTANTS } from "@/lib/config/war-room-ops.constants";
-import { getOpsJobStats } from "@/lib/persistence/war-room-ops-store";
+import { getOpsJobStats } from "@/lib/persistence/war-room-ops-repository";
 import type { TrafficSourceKey, WarRoomData } from "@/lib/war-room/types";
 import type { ProviderName, RecoveryAgent, UnifiedProviderEvent } from "./warroom-adapters";
 

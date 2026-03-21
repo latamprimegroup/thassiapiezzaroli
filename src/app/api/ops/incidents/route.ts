@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getOpsIncidentMetrics, listOpsIncidents, resolveOpsIncidentById } from "@/lib/persistence/war-room-ops-store";
+import { getOpsIncidentMetrics, listOpsIncidents, resolveOpsIncidentById } from "@/lib/persistence/war-room-ops-repository";
 import { WAR_ROOM_OPS_CONSTANTS } from "@/lib/config/war-room-ops.constants";
 import { isOpsAuthorized } from "@/app/api/ops/_auth";
 import { getSessionFromCookies } from "@/lib/auth/session";

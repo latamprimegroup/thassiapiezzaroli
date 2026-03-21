@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { processOpsJobQueue } from "@/lib/ops/war-room-ops-worker";
-import { getOpsJobStats } from "@/lib/persistence/war-room-ops-store";
+import { getOpsJobStats } from "@/lib/persistence/war-room-ops-repository";
 import { WAR_ROOM_OPS_CONSTANTS } from "@/lib/config/war-room-ops.constants";
 import { isOpsAuthorized } from "@/app/api/ops/_auth";
 

@@ -268,3 +268,33 @@ Tabelas legadas suportadas:
 - `src/context/war-room-context.tsx`: Context API para integridade de dados (CPA -> Lucro).
 - `src/app/page.tsx`: entrada principal da aplicacao.
 - `src/lib/war-room/*`: conectores de dados (API, Google Sheets e PostgreSQL).
+
+## Persistencia operacional de producao (9D)
+
+Para operar com lock distribuido e multi-instancia:
+
+```env
+WAR_ROOM_OPS_PERSISTENCE_MODE=database
+DATABASE_URL=postgresql://...
+DATABASE_SSL=true
+```
+
+Com este modo ativo:
+- webhook events, jobs, task approvals e incidentes sao persistidos em Postgres;
+- a fila operacional usa `FOR UPDATE SKIP LOCKED` (multi-worker seguro);
+- o Incident Center (SLA/MTTR) passa a ter historico transacional.
+
+Schema SQL:
+- `docs/sql/war_room_ops_schema.sql`
+
+## Stress test de webhooks (50k eventos)
+
+Script para teste de carga:
+
+```bash
+STRESS_BASE_URL=http://localhost:3000 \
+STRESS_EVENTS=50000 \
+STRESS_CONCURRENCY=50 \
+STRESS_API_KEY=seu_token \
+npm run stress:webhooks
+```

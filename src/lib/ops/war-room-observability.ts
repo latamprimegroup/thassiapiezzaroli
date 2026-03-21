@@ -5,9 +5,9 @@ import {
   getOpsIncidentMetrics,
   resolveOpsIncidentByKey,
   upsertOpsIncident,
-} from "@/lib/persistence/war-room-ops-store";
+} from "@/lib/persistence/war-room-ops-repository";
 import { safeDivide } from "@/lib/metrics/kpis";
-import { getOpsJobStats } from "@/lib/persistence/war-room-ops-store";
+import { getOpsJobStats } from "@/lib/persistence/war-room-ops-repository";
 
 type ReturnTypeAsync<T extends (...args: never[]) => Promise<unknown>> = T extends (
   ...args: never[]

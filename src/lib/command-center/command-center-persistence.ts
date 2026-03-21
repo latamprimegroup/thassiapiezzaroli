@@ -5,7 +5,7 @@ import {
   readPersistedCommandCenterTasks,
   type TaskApprovalRecord,
   writePersistedCommandCenterTasks,
-} from "@/lib/persistence/war-room-ops-store";
+} from "@/lib/persistence/war-room-ops-repository";
 
 type DemandTask = WarRoomData["commandCenter"]["tasks"][number];
 

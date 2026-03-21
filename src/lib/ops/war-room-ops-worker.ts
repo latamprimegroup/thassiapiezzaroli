@@ -7,7 +7,7 @@ import {
   failOpsJob,
   getOpsJobStats,
   type OpsJobRecord,
-} from "@/lib/persistence/war-room-ops-store";
+} from "@/lib/persistence/war-room-ops-repository";
 
 type WebhookIngestPayload = {
   provider: "utmify" | "appmax" | "kiwify" | "yampi";

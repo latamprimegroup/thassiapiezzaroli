@@ -5,8 +5,8 @@ import {
   type ProviderName,
 } from "@/lib/integrations/warroom-adapters";
 import { WAR_ROOM_OPS_CONSTANTS } from "@/lib/config/war-room-ops.constants";
-import { listDeadLetterEvents } from "@/lib/persistence/war-room-ops-store";
-import { enqueueOpsJob, getOpsJobStats } from "@/lib/persistence/war-room-ops-store";
+import { listDeadLetterEvents } from "@/lib/persistence/war-room-ops-repository";
+import { enqueueOpsJob, getOpsJobStats } from "@/lib/persistence/war-room-ops-repository";
 import { processOpsJobQueue } from "@/lib/ops/war-room-ops-worker";
 import { processDueWebhookRetries, processIncomingWebhook } from "@/lib/integrations/warroom-webhook-service";
 
