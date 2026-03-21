@@ -87,14 +87,20 @@ function normalizeChat(input: SniperChat): SniperChat {
       utmSource: normalizeString(input.profile.utmSource),
       utmCampaign: normalizeString(input.profile.utmCampaign),
       utmContent: normalizeString(input.profile.utmContent),
+      originAdName: normalizeString(input.profile.originAdName),
       creativeId: normalizeString(input.profile.creativeId),
       offerId: normalizeString(input.profile.offerId),
+      cartValue: Math.max(0, normalizeNumber(input.profile.cartValue)),
+      abandonmentStep: (normalizeString(input.profile.abandonmentStep) as SniperChat["profile"]["abandonmentStep"]) || "pagamento",
+      checkoutDroppedAt: normalizeString(input.profile.checkoutDroppedAt),
       vslId: normalizeString(input.profile.vslId),
       vslWatchSeconds: Math.max(0, normalizeNumber(input.profile.vslWatchSeconds)),
       vslCompletionPct: Math.max(0, normalizeNumber(input.profile.vslCompletionPct)),
       predictedLtv90d: Math.max(0, normalizeNumber(input.profile.predictedLtv90d)),
     },
     tags: Array.isArray(input.tags) ? input.tags.map((item) => normalizeString(item).trim()).filter(Boolean) : [],
+    contacted: Boolean(input.contacted),
+    firstContactAt: normalizeString(input.firstContactAt),
     latestMessagePreview: normalizeString(input.latestMessagePreview),
     latestMessageAt: normalizeString(input.latestMessageAt),
     lastInboundAt: normalizeString(input.lastInboundAt),
@@ -290,7 +296,7 @@ export async function listSniperChats(params: ChatListParams = {}) {
   const limit = clampLimit(params.limit, 300);
   return filtered.slice(0, limit).map((chat) => ({
     ...chat,
-    tags: [...chat.tags, chat.awaitingResponse ? "aguardando_resposta" : ""].filter(Boolean),
+    tags: [...chat.tags, chat.awaitingResponse ? "aguardando_resposta" : "", chat.contacted ? "ja_contatado" : ""].filter(Boolean),
     updatedAt: chat.updatedAt || chat.latestMessageAt || chat.createdAt,
     profile: { ...chat.profile },
     // usado no smart inbox para destacar gargalo de atendimento.
@@ -299,6 +305,28 @@ export async function listSniperChats(params: ChatListParams = {}) {
     nextFollowUpAt: chat.nextFollowUpAt,
     createdAt: chat.createdAt,
   }));
+}
+
+export async function markSniperChatContacted(input: { chatId: string; contactedAt?: string }) {
+  return withMutation(async (payload) => {
+    const index = payload.chats.findIndex((chat) => chat.id === input.chatId);
+    if (index < 0) {
+      return null;
+    }
+    const current = payload.chats[index];
+    if (current.contacted) {
+      return current;
+    }
+    const now = input.contactedAt || new Date().toISOString();
+    const updated = normalizeChat({
+      ...current,
+      contacted: true,
+      firstContactAt: now,
+      updatedAt: now,
+    });
+    payload.chats[index] = updated;
+    return updated;
+  });
 }
 
 export async function upsertSniperChat(input: Omit<SniperChat, "id" | "createdAt" | "updatedAt"> & { id?: string }) {

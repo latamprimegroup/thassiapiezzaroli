@@ -17,6 +17,7 @@ import {
   listSniperMessages,
   listSniperQueueDue,
   listSniperChats,
+  markSniperChatContacted,
   setSniperChatAutomationState,
   updateSniperChatStage,
   updateSniperQueueStatus,
@@ -24,7 +25,13 @@ import {
   upsertSniperFunnel,
   upsertSniperInstance,
 } from "@/lib/persistence/sniper-crm-repository";
-import { applyQuickCommand, buildQueueItemsFromFunnel, defaultSniperStorePayload, randomIntBetween } from "@/lib/sniper-crm/engine";
+import {
+  applyQuickCommand,
+  buildQueueItemsFromFunnel,
+  defaultSniperStorePayload,
+  randomIntBetween,
+  resolveTypingCps,
+} from "@/lib/sniper-crm/engine";
 import type {
   SniperAuditEventType,
   SniperChat,
@@ -125,8 +132,12 @@ async function bootstrapForUser(session: { userId: string; role: UserRole }) {
         utmSource: "meta",
         utmCampaign: `crm-${lead.awarenessStage}`,
         utmContent: lead.lastVslId || "CR-001",
+        originAdName: `AD_${(lead.lastVslId || "CR-001").replaceAll("-", "_")}`,
         creativeId: lead.lastVslId || "CR-001",
         offerId: "OFF-001",
+        cartValue: Math.round(Math.max(97, lead.predictedLtv90d * 0.35)),
+        abandonmentStep: lead.watchCompletionPct > 80 ? "pagamento" : lead.watchCompletionPct > 60 ? "telefone" : "email",
+        checkoutDroppedAt: new Date(Date.now() - randomIntBetween(2, 58) * 60_000).toISOString(),
         vslId: lead.lastVslId || "VSL-001",
         vslWatchSeconds: lead.watchSeconds,
         vslCompletionPct: lead.watchCompletionPct,
@@ -136,6 +147,8 @@ async function bootstrapForUser(session: { userId: string; role: UserRole }) {
       priority: lead.watchCompletionPct > 80 ? "urgent" : lead.watchCompletionPct > 55 ? "high" : "normal",
       tags: ["seed", lead.awarenessStage],
       awaitingResponse: lead.purchases === 0,
+      contacted: false,
+      firstContactAt: "",
       automationPaused: false,
       automationPausedAt: "",
       automationPausedReason: "",
@@ -184,6 +197,29 @@ async function appendAudit(params: {
     eventType: params.eventType,
     note: params.note,
   });
+}
+
+export async function processFirstContactWebhook(params: {
+  chatId: string;
+  actorUserId: string;
+  actorUserName: string;
+  actorRole: UserRole | "system";
+}) {
+  const marked = await markSniperChatContacted({
+    chatId: params.chatId,
+  });
+  if (!marked) {
+    return null;
+  }
+  await appendAudit({
+    chatId: params.chatId,
+    actorUserId: params.actorUserId,
+    actorUserName: params.actorUserName,
+    actorRole: params.actorRole,
+    eventType: "first_contact_webhook",
+    note: "Webhook interno confirmou primeiro contato e atualizou status para 'Ja contatado'.",
+  });
+  return marked;
 }
 
 export async function getSniperDashboard(params: {
@@ -299,6 +335,32 @@ export async function sendChatMessage(params: {
   const text = applied ? applied.text : params.text || "";
   const kind = applied ? applied.kind : params.kind || "text";
   const mediaUrl = applied ? applied.mediaUrl : params.mediaUrl || "";
+  const previousMessages = await listSniperMessages(chat.id, 400);
+  const firstOutbound = params.direction === "outbound" && !previousMessages.some((item) => item.direction === "outbound");
+  if (firstOutbound) {
+    const typingCps = resolveTypingCps(text || "oi");
+    const randomDelaySec = randomIntBetween(3, 7);
+    await appendSniperMessage({
+      chatId: chat.id,
+      instanceId: chat.instanceId,
+      direction: "system",
+      kind: "state",
+      stateSignal: kind === "audio" ? "recording" : "composing",
+      text: kind === "audio" ? "Gravando..." : "Digitando...",
+      mediaUrl: "",
+      voiceDurationSec: 0,
+      sentByUserId: "system",
+      sentByUserName: "Sniper Bot",
+      sentByRole: "system",
+      meta: {
+        quickCommand: "",
+        funnelRunId: "",
+        queueId: "",
+        typingCps,
+        randomDelaySec,
+      },
+    });
+  }
   const message = await appendSniperMessage({
     chatId: chat.id,
     instanceId: chat.instanceId,
@@ -334,6 +396,14 @@ export async function sendChatMessage(params: {
       actorRole: params.session.role,
       eventType: "automation_paused",
       note: "Lead respondeu. Sequencia automatica pausada.",
+    });
+  }
+  if (firstOutbound) {
+    await processFirstContactWebhook({
+      chatId: chat.id,
+      actorUserId: "system",
+      actorUserName: "Sniper CRM Webhook",
+      actorRole: "system",
     });
   }
 

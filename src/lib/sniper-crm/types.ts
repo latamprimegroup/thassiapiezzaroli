@@ -10,6 +10,7 @@ export type SniperQueueStatus = "pending" | "dispatched" | "cancelled" | "failed
 export type SniperAuditEventType =
   | "message_queued"
   | "message_sent"
+  | "first_contact_webhook"
   | "automation_paused"
   | "automation_resumed"
   | "stage_changed"
@@ -40,8 +41,12 @@ export type SniperLeadProfile = {
   utmSource: string;
   utmCampaign: string;
   utmContent: string;
+  originAdName: string;
   creativeId: string;
   offerId: string;
+  cartValue: number;
+  abandonmentStep: "nome" | "email" | "telefone" | "pagamento" | "revisao";
+  checkoutDroppedAt: string;
   vslId: string;
   vslWatchSeconds: number;
   vslCompletionPct: number;
@@ -60,6 +65,8 @@ export type SniperChat = {
   priority: SniperPriorityTag;
   tags: string[];
   awaitingResponse: boolean;
+  contacted: boolean;
+  firstContactAt: string;
   automationPaused: boolean;
   automationPausedAt: string;
   automationPausedReason: string;

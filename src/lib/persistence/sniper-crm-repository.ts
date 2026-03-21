@@ -37,6 +37,10 @@ export async function upsertSniperChat(...args: Parameters<typeof fileStore.upse
   return isDatabaseMode() ? dbStore.upsertSniperChat(...args) : fileStore.upsertSniperChat(...args);
 }
 
+export async function markSniperChatContacted(...args: Parameters<typeof fileStore.markSniperChatContacted>) {
+  return isDatabaseMode() ? dbStore.markSniperChatContacted(...args) : fileStore.markSniperChatContacted(...args);
+}
+
 export async function getSniperChatById(...args: Parameters<typeof fileStore.getSniperChatById>) {
   return isDatabaseMode() ? dbStore.getSniperChatById(...args) : fileStore.getSniperChatById(...args);
 }
