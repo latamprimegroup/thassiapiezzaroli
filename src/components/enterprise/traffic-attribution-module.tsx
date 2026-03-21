@@ -75,6 +75,24 @@ type SettlementFeedbackItem = {
   netProfit: number;
 };
 
+type BonusSummaryPayload = {
+  monthKey: string;
+  userId: string;
+  userName: string;
+  netProfit: number;
+  payoutValue: number;
+  commissionPctApplied: number;
+  bonusFixedApplied: number;
+  progress: {
+    currentPct: number;
+    nextPct: number;
+    missingProfit: number;
+    progressPct: number;
+    message: string;
+  };
+  frozenSnapshot: boolean;
+};
+
 export function TrafficAttributionModule({
   canInputTrafficSpend,
   canUseScalingAdvisor,
@@ -135,6 +153,7 @@ export function TrafficAttributionModule({
   const [dailySettlementSummary, setDailySettlementSummary] = useState<DailySettlementSummaryPayload | null>(null);
   const [savingDailySettlement, setSavingDailySettlement] = useState(false);
   const [dailySettlementError, setDailySettlementError] = useState("");
+  const [bonusSummary, setBonusSummary] = useState<BonusSummaryPayload | null>(null);
   const [settlementFeedback, setSettlementFeedback] = useState<SettlementFeedbackItem[]>([]);
   const [adminSnapshot, setAdminSnapshot] = useState<{
     managers: Array<{
@@ -189,6 +208,12 @@ export function TrafficAttributionModule({
     adSpend: dailySettlementForm.adSpend,
   }).netProfit;
   const isAdminView = actorRole === "ceo" || actorRole === "financeManager" || actorRole === "cfo";
+  const isBonusEligibleRole =
+    actorRole === "ceo" ||
+    actorRole === "trafficJunior" ||
+    actorRole === "trafficSenior" ||
+    actorRole === "mediaBuyer" ||
+    actorRole === "headTraffic";
   const pendingYesterday = dailySettlementSummary?.pendingStatus && !dailySettlementSummary.pendingStatus.hasRecord;
 
 
@@ -303,6 +328,22 @@ export function TrafficAttributionModule({
     setDailySettlementSummary(payload);
   }, []);
 
+  const fetchBonusSummary = useCallback(async () => {
+    if (!isBonusEligibleRole) {
+      setBonusSummary(null);
+      return;
+    }
+    const response = await fetch("/api/bonus/my-summary", { cache: "no-store" }).catch(() => null);
+    if (!response?.ok) {
+      return;
+    }
+    const payload = (await response.json().catch(() => null)) as BonusSummaryPayload | null;
+    if (!payload) {
+      return;
+    }
+    setBonusSummary(payload);
+  }, [isBonusEligibleRole]);
+
   const fetchSettlementFeedback = useCallback(async () => {
     const response = await fetch("/api/daily-settlements?mode=feedback&team=editing&limit=8", { cache: "no-store" }).catch(() => null);
     if (!response?.ok) {
@@ -363,11 +404,12 @@ export function TrafficAttributionModule({
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void fetchDailySettlementSummary();
+      void fetchBonusSummary();
       void fetchSettlementFeedback();
       void fetchAdminSnapshot();
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [fetchAdminSnapshot, fetchDailySettlementSummary, fetchSettlementFeedback]);
+  }, [fetchAdminSnapshot, fetchBonusSummary, fetchDailySettlementSummary, fetchSettlementFeedback]);
 
   function validateDailySettlementForm() {
     if (!dailySettlementForm.niche.trim()) {
@@ -424,6 +466,7 @@ export function TrafficAttributionModule({
       `nicho ${dailySettlementForm.niche} | winner ${dailySettlementForm.winningCreativeId}`,
     );
     void fetchDailySettlementSummary();
+    void fetchBonusSummary();
     void fetchSettlementFeedback();
     void fetchAdminSnapshot();
   }
@@ -442,6 +485,44 @@ export function TrafficAttributionModule({
         <Card className="border-[#FF9900]/40 bg-[#FF9900]/10">
           <CardContent className="p-3 text-sm text-[#FFD39A]">
             Pendencia operacional: nao existe Daily Settlement para {dailySettlementSummary?.pendingStatus.date}. Complete o fechamento para liberar o dia atual.
+          </CardContent>
+        </Card>
+      )}
+
+      {isBonusEligibleRole && (
+        <Card className="border-[#10B981]/30 bg-[#10B981]/10">
+          <CardHeader>
+            <CardTitle className="text-base">Minha Bonificacao Acumulada (Mes Corrente)</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-xs">
+            <div className="grid gap-2 md:grid-cols-3">
+              <div className="rounded border border-white/10 bg-black/20 p-2">
+                <p className="text-slate-300">Payout estimado</p>
+                <p className="text-lg text-[#10B981]">{currency(bonusSummary?.payoutValue ?? 0)}</p>
+              </div>
+              <div className="rounded border border-white/10 bg-black/20 p-2">
+                <p className="text-slate-300">% de comissao aplicada</p>
+                <p className="text-lg text-slate-100">{(bonusSummary?.commissionPctApplied ?? 0).toFixed(2)}%</p>
+              </div>
+              <div className="rounded border border-white/10 bg-black/20 p-2">
+                <p className="text-slate-300">Lucro liquido do mes</p>
+                <p className={(bonusSummary?.netProfit ?? 0) >= 0 ? "text-lg text-emerald-300" : "text-lg text-rose-300"}>
+                  {currency(bonusSummary?.netProfit ?? 0)}
+                </p>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <div className="h-2 w-full overflow-hidden rounded bg-white/10">
+                <div
+                  className="h-full rounded bg-[#10B981]"
+                  style={{ width: `${Math.max(0, Math.min(100, bonusSummary?.progress.progressPct ?? 0))}%` }}
+                />
+              </div>
+              <p className="text-slate-200">
+                {bonusSummary?.progress.message ??
+                  "Sem dados suficientes ainda. Complete os Daily Settlements para acompanhar sua progressao de comissao."}
+              </p>
+            </div>
           </CardContent>
         </Card>
       )}

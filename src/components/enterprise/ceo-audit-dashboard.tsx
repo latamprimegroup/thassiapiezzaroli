@@ -16,8 +16,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import type { UserRole } from "@/lib/auth/rbac";
 
 type PeriodPreset = "today" | "yesterday" | "last_7d" | "this_month" | "last_month";
+
+type CeoAuditDashboardProps = {
+  actorRole: UserRole;
+};
 
 type CeoAuditPayload = {
   cards: {
@@ -92,10 +97,62 @@ type CeoAuditPayload = {
   };
 };
 
+type BonusSettingsPayload = {
+  settings: {
+    managerRules: Array<{
+      userId: string;
+      userName: string;
+      commissionPct: number;
+      active: boolean;
+    }>;
+    ladderRules: Array<{
+      id: string;
+      minNetProfit: number;
+      commissionPct: number;
+      bonusFixed: number;
+    }>;
+    updatedAt: string;
+    updatedBy: string;
+  };
+};
+
+type BonusPayoutPayload = {
+  monthKey: string;
+  frozenSnapshot: boolean;
+  summary: {
+    totalNetProfit: number;
+    totalAdSpend: number;
+    totalGrossRevenue: number;
+    totalPayout: number;
+  };
+  rows: Array<{
+    userId: string;
+    userName: string;
+    niche: string;
+    netProfit: number;
+    commissionPctApplied: number;
+    bonusFixedApplied: number;
+    payoutValue: number;
+    ruleSource: "manager_override" | "ladder";
+  }>;
+  approvals: Array<{
+    id: string;
+    monthKey: string;
+    approvedBy: string;
+    approvedAt: string;
+    totalPayout: number;
+  }>;
+};
+
 const PIE_COLORS = ["#FF9900", "#10B981", "#3B82F6", "#A855F7", "#EF4444", "#14B8A6", "#F59E0B"];
 
 const currency = (value: number) =>
   value.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+
+function currentMonthKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
 
 function shortPresetLabel(value: PeriodPreset) {
   switch (value) {
@@ -112,10 +169,18 @@ function shortPresetLabel(value: PeriodPreset) {
   }
 }
 
-export function CeoAuditDashboard() {
+export function CeoAuditDashboard({ actorRole }: CeoAuditDashboardProps) {
+  const isCeo = actorRole === "ceo";
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [savingScaleApprovalId, setSavingScaleApprovalId] = useState("");
+  const [savingPayoutApproval, setSavingPayoutApproval] = useState(false);
+  const [savingBonusSettings, setSavingBonusSettings] = useState(false);
+  const [bonusSettings, setBonusSettings] = useState<BonusSettingsPayload["settings"] | null>(null);
+  const [payoutPayload, setPayoutPayload] = useState<BonusPayoutPayload | null>(null);
+  const [payoutMonth, setPayoutMonth] = useState(currentMonthKey());
+  const [managerPctDraft, setManagerPctDraft] = useState<Record<string, string>>({});
+  const [ladderDraft, setLadderDraft] = useState<Array<{ id: string; minNetProfit: number; commissionPct: number; bonusFixed: number }>>([]);
   const [filters, setFilters] = useState<{
     preset: PeriodPreset;
     managerUserId: string;
@@ -153,19 +218,63 @@ export function CeoAuditDashboard() {
     setLoading(false);
   }, [filters.managerUserId, filters.niche, filters.preset]);
 
+  const fetchBonusSettings = useCallback(async () => {
+    if (!isCeo) {
+      return;
+    }
+    const response = await fetch("/api/bonus/settings", { cache: "no-store" }).catch(() => null);
+    if (!response?.ok) {
+      return;
+    }
+    const data = (await response.json().catch(() => null)) as BonusSettingsPayload | null;
+    if (!data?.settings) {
+      return;
+    }
+    setBonusSettings(data.settings);
+    const pctDraft: Record<string, string> = {};
+    for (const rule of data.settings.managerRules) {
+      pctDraft[rule.userId] = Number(rule.commissionPct).toFixed(2);
+    }
+    setManagerPctDraft(pctDraft);
+    setLadderDraft(data.settings.ladderRules);
+  }, [isCeo]);
+
+  const fetchPayout = useCallback(async () => {
+    const query = new URLSearchParams();
+    query.set("month", payoutMonth);
+    if (filters.managerUserId) {
+      query.set("userId", filters.managerUserId);
+    }
+    if (filters.niche) {
+      query.set("niche", filters.niche);
+    }
+    const response = await fetch(`/api/bonus/payout?${query.toString()}`, { cache: "no-store" }).catch(() => null);
+    if (!response?.ok) {
+      return;
+    }
+    const data = (await response.json().catch(() => null)) as BonusPayoutPayload | null;
+    if (!data) {
+      return;
+    }
+    setPayoutPayload(data);
+  }, [filters.managerUserId, filters.niche, payoutMonth]);
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void fetchAudit();
+      void fetchPayout();
+      void fetchBonusSettings();
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [fetchAudit]);
+  }, [fetchAudit, fetchBonusSettings, fetchPayout]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
       void fetchAudit();
+      void fetchPayout();
     }, 60_000);
     return () => window.clearInterval(interval);
-  }, [fetchAudit]);
+  }, [fetchAudit, fetchPayout]);
 
   async function approveScaleVertical(item: CeoAuditPayload["scaleAlerts"][number]) {
     const message = [
@@ -190,7 +299,73 @@ export function CeoAuditDashboard() {
     void fetchAudit();
   }
 
+  async function approvePayout() {
+    if (!isCeo) {
+      setError("Somente CEO pode aprovar pagamentos.");
+      return;
+    }
+    setSavingPayoutApproval(true);
+    const response = await fetch("/api/bonus/payout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        monthKey: payoutMonth,
+        note: "Aprovacao de payout via CEO Audit Dashboard",
+      }),
+    }).catch(() => null);
+    setSavingPayoutApproval(false);
+    if (!response?.ok) {
+      setError("Falha ao aprovar payout do mes.");
+      return;
+    }
+    void fetchPayout();
+  }
+
+  async function saveBonusSettings() {
+    if (!isCeo || !bonusSettings) {
+      return;
+    }
+    const managerRules = Object.entries(managerPctDraft).map(([userId, pct]) => {
+      const fromCurrent = bonusSettings.managerRules.find((item) => item.userId === userId);
+      const fromPayout = payoutPayload?.rows.find((item) => item.userId === userId);
+      return {
+        userId,
+        userName: fromCurrent?.userName ?? fromPayout?.userName ?? userId,
+        commissionPct: Number(pct || 0),
+        active: true,
+      };
+    });
+    setSavingBonusSettings(true);
+    const response = await fetch("/api/bonus/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        managerRules,
+        ladderRules: ladderDraft,
+      }),
+    }).catch(() => null);
+    setSavingBonusSettings(false);
+    if (!response?.ok) {
+      setError("Falha ao salvar configuracoes de comissionamento.");
+      return;
+    }
+    void fetchBonusSettings();
+    void fetchPayout();
+  }
+
   const marketShareData = useMemo(() => payload?.charts.marketShareByManager ?? [], [payload?.charts.marketShareByManager]);
+  const managerRuleRows = useMemo(() => {
+    const map = new Map<string, { userId: string; userName: string }>();
+    for (const item of bonusSettings?.managerRules ?? []) {
+      map.set(item.userId, { userId: item.userId, userName: item.userName });
+    }
+    for (const item of payoutPayload?.rows ?? []) {
+      if (!map.has(item.userId)) {
+        map.set(item.userId, { userId: item.userId, userName: item.userName });
+      }
+    }
+    return [...map.values()];
+  }, [bonusSettings?.managerRules, payoutPayload?.rows]);
 
   return (
     <section className="war-fade-in space-y-4">
@@ -268,6 +443,185 @@ export function CeoAuditDashboard() {
           Janela ativa: {payload?.filters.startDate ?? "--"} ate {payload?.filters.endDate ?? "--"}
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Modulo de Bonificacao - Profit Share 9D</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-xs">
+          <div className="grid gap-2 md:grid-cols-[180px_auto_auto_auto]">
+            <label className="space-y-1 text-slate-300">
+              <span>Mes de referencia</span>
+              <input
+                type="month"
+                value={payoutMonth}
+                onChange={(event) => setPayoutMonth(event.target.value)}
+                className="h-8 w-full rounded border border-white/10 bg-slate-900/70 px-2"
+              />
+            </label>
+            <div className="rounded border border-white/10 bg-white/5 p-2">
+              <p className="text-slate-400">Payout total previsto</p>
+              <p className="text-base text-[#10B981]">{currency(payoutPayload?.summary.totalPayout ?? 0)}</p>
+            </div>
+            <div className="rounded border border-white/10 bg-white/5 p-2">
+              <p className="text-slate-400">Lucro liquido base</p>
+              <p className="text-base text-slate-100">{currency(payoutPayload?.summary.totalNetProfit ?? 0)}</p>
+            </div>
+            <div className="rounded border border-white/10 bg-white/5 p-2">
+              <p className="text-slate-400">Status de fechamento</p>
+              <p className={payoutPayload?.frozenSnapshot ? "text-emerald-300" : "text-amber-300"}>
+                {payoutPayload?.frozenSnapshot ? "Snapshot mensal congelado" : "Mes corrente (tempo real)"}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" className="h-8 px-3 text-xs" onClick={() => void fetchPayout()}>
+              Atualizar payout
+            </Button>
+            <Button
+              type="button"
+              className="h-8 px-3 text-xs"
+              onClick={() => void approvePayout()}
+              disabled={!isCeo || savingPayoutApproval}
+            >
+              {savingPayoutApproval ? "Aprovando..." : "Aprovar Pagamento"}
+            </Button>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-left text-xs">
+              <thead className="text-slate-400">
+                <tr>
+                  <th className="py-2 pr-3">Gestor</th>
+                  <th className="py-2 pr-3">Nicho</th>
+                  <th className="py-2 pr-3">Lucro Mês</th>
+                  <th className="py-2 pr-3">% Aplicada</th>
+                  <th className="py-2 pr-3">Bônus Fixo</th>
+                  <th className="py-2 pr-3">Payout</th>
+                  <th className="py-2 pr-3">Regra</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(payoutPayload?.rows ?? []).map((row) => (
+                  <tr key={`${row.userId}-${row.niche}`} className="border-t border-white/10">
+                    <td className="py-2 pr-3 text-slate-100">{row.userName}</td>
+                    <td className="py-2 pr-3 text-slate-300">{row.niche}</td>
+                    <td className={row.netProfit >= 0 ? "py-2 pr-3 text-emerald-300" : "py-2 pr-3 text-rose-300"}>{currency(row.netProfit)}</td>
+                    <td className="py-2 pr-3 text-slate-300">{row.commissionPctApplied.toFixed(2)}%</td>
+                    <td className="py-2 pr-3 text-slate-300">{currency(row.bonusFixedApplied)}</td>
+                    <td className="py-2 pr-3 text-[#FFD39A]">{currency(row.payoutValue)}</td>
+                    <td className="py-2 pr-3">
+                      <Badge variant={row.ruleSource === "manager_override" ? "success" : "default"}>
+                        {row.ruleSource === "manager_override" ? "Override Gestor" : "Escada"}
+                      </Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {(payoutPayload?.rows.length ?? 0) === 0 ? <p className="text-slate-500">Nenhum gestor elegivel no periodo.</p> : null}
+          {(payoutPayload?.approvals ?? []).length > 0 ? (
+            <p className="text-[11px] text-slate-400">
+              Ultima aprovacao: {(payoutPayload?.approvals[0]?.approvedAt ?? "").replace("T", " ").slice(0, 16)} por{" "}
+              {payoutPayload?.approvals[0]?.approvedBy}
+            </p>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      {isCeo && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Settings de Comissionamento (CEO)</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-xs">
+            <div className="rounded border border-white/10 bg-white/5 p-2">
+              <p className="mb-2 text-slate-300">Percentual por gestor</p>
+              <div className="grid gap-2 md:grid-cols-2">
+                {managerRuleRows.map((row) => (
+                  <label key={row.userId} className="rounded border border-white/10 bg-black/30 p-2">
+                    <span className="mb-1 block text-slate-300">
+                      {row.userName} ({row.userId})
+                    </span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={0.1}
+                      value={managerPctDraft[row.userId] ?? ""}
+                      onChange={(event) =>
+                        setManagerPctDraft((prev) => ({
+                          ...prev,
+                          [row.userId]: event.target.value,
+                        }))
+                      }
+                      className="h-8 w-full rounded border border-white/10 bg-slate-900/70 px-2"
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="rounded border border-white/10 bg-white/5 p-2">
+              <p className="mb-2 text-slate-300">Escada de performance</p>
+              <div className="space-y-2">
+                {ladderDraft.map((rule, index) => (
+                  <div key={rule.id} className="grid gap-2 md:grid-cols-[1.3fr_1fr_1fr]">
+                    <input
+                      type="number"
+                      min={0}
+                      value={rule.minNetProfit}
+                      onChange={(event) =>
+                        setLadderDraft((prev) =>
+                          prev.map((item, currentIndex) =>
+                            currentIndex === index ? { ...item, minNetProfit: Number(event.target.value || 0) } : item,
+                          ),
+                        )
+                      }
+                      className="h-8 rounded border border-white/10 bg-slate-900/70 px-2"
+                    />
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={0.1}
+                      value={rule.commissionPct}
+                      onChange={(event) =>
+                        setLadderDraft((prev) =>
+                          prev.map((item, currentIndex) =>
+                            currentIndex === index ? { ...item, commissionPct: Number(event.target.value || 0) } : item,
+                          ),
+                        )
+                      }
+                      className="h-8 rounded border border-white/10 bg-slate-900/70 px-2"
+                    />
+                    <input
+                      type="number"
+                      min={0}
+                      value={rule.bonusFixed}
+                      onChange={(event) =>
+                        setLadderDraft((prev) =>
+                          prev.map((item, currentIndex) =>
+                            currentIndex === index ? { ...item, bonusFixed: Number(event.target.value || 0) } : item,
+                          ),
+                        )
+                      }
+                      className="h-8 rounded border border-white/10 bg-slate-900/70 px-2"
+                    />
+                  </div>
+                ))}
+              </div>
+              <p className="mt-2 text-[11px] text-slate-400">
+                Colunas: lucro minimo mensal | % de comissao | bonus fixo.
+              </p>
+            </div>
+            <Button type="button" className="h-8 px-3 text-xs" onClick={() => void saveBonusSettings()} disabled={savingBonusSettings}>
+              {savingBonusSettings ? "Salvando..." : "Salvar regras de bonificacao"}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
         <Card>

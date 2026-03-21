@@ -849,7 +849,7 @@ export default function Dashboard({ data, users, session, initialSection }: Dash
                 onDrillDown={(sectionId) => setActiveSection(sectionId)}
               />
             )}
-            {activeSection === "ceoAudit" && isSectionAllowed && <CeoAuditDashboard />}
+            {activeSection === "ceoAudit" && isSectionAllowed && <CeoAuditDashboard actorRole={sessionState.role} />}
             {activeSection === "offersLab" && isSectionAllowed && <OffersLabModule />}
             {activeSection === "apiHub" && isSectionAllowed && <ApiHubModule />}
             {activeSection === "copyResearch" && isSectionAllowed && (
