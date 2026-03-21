@@ -63,19 +63,42 @@ export async function POST(request: Request) {
   if (!session) {
     return NextResponse.json({ error: "Nao autenticado." }, { status: 401 });
   }
-  if (!["ceo", "mediaBuyer", "copywriter", "financeManager"].includes(session.role)) {
+  const canWriteOffers = [
+    "ceo",
+    "cco",
+    "copySenior",
+    "copyJunior",
+    "copywriter",
+    "headTraffic",
+    "trafficSenior",
+    "trafficJunior",
+    "mediaBuyer",
+    "financeManager",
+    "cfo",
+  ].includes(session.role);
+  if (!canWriteOffers) {
     return NextResponse.json({ error: "Sem permissao para alterar Offers Lab." }, { status: 403 });
   }
 
   try {
     const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+    const requestedStatus =
+      body.status === "teste" || body.status === "validada" || body.status === "escala" || body.status === "arquivada"
+        ? body.status
+        : undefined;
+    const canValidateOffer = ["ceo", "cco", "copySenior", "headTraffic", "trafficSenior", "mediaBuyer"].includes(
+      session.role,
+    );
+    if ((requestedStatus === "validada" || requestedStatus === "escala") && !canValidateOffer) {
+      return NextResponse.json(
+        { error: "Apenas perfis senior/CEO podem validar oferta para escala." },
+        { status: 403 },
+      );
+    }
     const offer = await upsertOffer({
       id: typeof body.id === "string" ? body.id : undefined,
       name: typeof body.name === "string" ? body.name : "",
-      status:
-        body.status === "teste" || body.status === "validada" || body.status === "escala" || body.status === "arquivada"
-          ? body.status
-          : undefined,
+      status: requestedStatus,
       niche: typeof body.niche === "string" ? body.niche : undefined,
       ownerId: typeof body.ownerId === "string" ? body.ownerId : undefined,
       minRoasTarget: typeof body.minRoasTarget === "number" ? body.minRoasTarget : Number(body.minRoasTarget),

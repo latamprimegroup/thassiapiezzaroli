@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useWarRoom } from "@/context/war-room-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +34,16 @@ export function TrafficAttributionModule({
     kwai: data.globalOverview.trafficSources.find((item) => item.source.toLowerCase().includes("kwai"))?.spend ?? 0,
   });
   const [manualMode, setManualMode] = useState(false);
+  const [assetWorkflow, setAssetWorkflow] = useState<
+    Array<{
+      id: string;
+      title: string;
+      offerId: string;
+      status: "aguardando_edicao" | "pronto_para_trafego";
+      assignedEditor: string;
+      creativeUrl: string;
+    }>
+  >([]);
   const squads = data.enterprise.trafficAttribution.squads;
   const intelligence = computeIntelligenceEngine(data);
   const killSwitch = data.integrations.operations.killSwitch;
@@ -60,6 +70,7 @@ export function TrafficAttributionModule({
   const offersLabApiOnline = data.integrations.apiStatus.utmify.status === "online";
   const effectiveDataMode = manualMode || !offersLabApiOnline ? "manual" : "api";
 
+
   function renderSquad(source: Source, label: string) {
     const row = squads[source];
     const cpaTone = row.currentCpa <= row.targetCpa ? "text-[#34A853]" : row.currentCpa <= row.targetCpa * 1.1 ? "text-[#FF9900]" : "text-[#EA4335]";
@@ -85,6 +96,25 @@ export function TrafficAttributionModule({
       </div>
     );
   }
+
+  const fetchAssetWorkflow = useCallback(async () => {
+    const response = await fetch("/api/assets/workflow", { cache: "no-store" }).catch(() => null);
+    if (!response?.ok) {
+      return;
+    }
+    const payload = (await response.json().catch(() => null)) as { items?: typeof assetWorkflow } | null;
+    if (!payload?.items) {
+      return;
+    }
+    setAssetWorkflow(payload.items);
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void fetchAssetWorkflow();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [fetchAssetWorkflow]);
 
   return (
     <section className="war-fade-in space-y-4">
@@ -155,6 +185,31 @@ export function TrafficAttributionModule({
               Voltar para modo API
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Status de Ativo - Pronto para Trafego</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-xs">
+          {assetWorkflow
+            .filter((asset) => asset.status === "pronto_para_trafego")
+            .slice(0, 8)
+            .map((asset) => (
+              <div key={asset.id} className="rounded border border-white/10 bg-white/5 p-2">
+                <p className="text-slate-100">
+                  {asset.title} ({asset.offerId})
+                </p>
+                <p className="text-slate-300">
+                  Editor: {asset.assignedEditor || "N/A"} | Link: {asset.creativeUrl || "pendente"}
+                </p>
+                <Badge variant="success">Pronto para Trafego</Badge>
+              </div>
+            ))}
+          {assetWorkflow.filter((asset) => asset.status === "pronto_para_trafego").length === 0 ? (
+            <p className="rounded border border-white/10 bg-white/5 p-2 text-slate-400">Sem ativos liberados no momento.</p>
+          ) : null}
         </CardContent>
       </Card>
 

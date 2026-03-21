@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,9 +34,22 @@ export function EditorsProductionModule({
   const [assetSearch, setAssetSearch] = useState("");
   const [deliveryDraft, setDeliveryDraft] = useState({
     utmId: data.enterprise.copyResearch.namingRegistry[0]?.uniqueId ?? "ID0000",
+    assetId: "",
     assetUrl: "",
   });
   const [deliveries, setDeliveries] = useState<Array<{ utmId: string; assetUrl: string; at: string }>>([]);
+  const [assetWorkflow, setAssetWorkflow] = useState<
+    Array<{
+      id: string;
+      title: string;
+      offerId: string;
+      status: "aguardando_edicao" | "pronto_para_trafego";
+      createdByName: string;
+      assignedEditor: string;
+      creativeUrl: string;
+      updatedAt: string;
+    }>
+  >([]);
   const priorityQueue = useMemo(
     () =>
       data.liveAdsTracking
@@ -72,6 +85,10 @@ export function EditorsProductionModule({
         .slice(0, 8),
     [data.commandCenter.tasks],
   );
+  const awaitingEditing = useMemo(
+    () => assetWorkflow.filter((asset) => asset.status === "aguardando_edicao"),
+    [assetWorkflow],
+  );
 
   function addHookVariation() {
     const value = newHookVariation.trim();
@@ -88,14 +105,53 @@ export function EditorsProductionModule({
     if (!url) {
       return;
     }
+    if (!deliveryDraft.assetId) {
+      return;
+    }
     const entry = {
       utmId: deliveryDraft.utmId,
       assetUrl: url,
       at: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
     };
     setDeliveries((prev) => [entry, ...prev].slice(0, 10));
-    setDeliveryDraft((prev) => ({ ...prev, assetUrl: "" }));
+    setDeliveryDraft((prev) => ({ ...prev, assetUrl: "", assetId: "" }));
     addActivity("Producao", actorName, "subiu criativo final", entry.utmId, entry.assetUrl);
+    void finalizeAssetForTraffic(entry.assetUrl);
+  }
+
+  const fetchAssetWorkflow = useCallback(async () => {
+    const response = await fetch("/api/assets/workflow", { cache: "no-store" }).catch(() => null);
+    if (!response?.ok) {
+      return;
+    }
+    const payload = (await response.json().catch(() => null)) as { items?: typeof assetWorkflow } | null;
+    if (!payload?.items) {
+      return;
+    }
+    setAssetWorkflow(payload.items);
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void fetchAssetWorkflow();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [fetchAssetWorkflow]);
+
+  async function finalizeAssetForTraffic(creativeUrl: string) {
+    if (!deliveryDraft.assetId) {
+      return;
+    }
+    await fetch("/api/assets/workflow", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "finalize_edit",
+        assetId: deliveryDraft.assetId,
+        creativeUrl,
+      }),
+    }).catch(() => null);
+    void fetchAssetWorkflow();
   }
 
   return (
@@ -127,7 +183,20 @@ export function EditorsProductionModule({
           <CardTitle className="text-base">Upload do Criativo Final (Drive/Vimeo)</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-xs">
-          <div className="grid gap-2 md:grid-cols-[1fr_2fr_auto]">
+          <div className="grid gap-2 md:grid-cols-[1fr_1fr_2fr_auto]">
+            <select
+              value={deliveryDraft.assetId}
+              onChange={(event) => setDeliveryDraft((prev) => ({ ...prev, assetId: event.target.value }))}
+              className="h-8 rounded border border-white/10 bg-slate-900/70 px-2"
+              disabled={!canManageProductionQueue}
+            >
+              <option value="">Selecione ativo aguardando edicao</option>
+              {awaitingEditing.map((asset) => (
+                <option key={asset.id} value={asset.id}>
+                  {asset.title} ({asset.offerId})
+                </option>
+              ))}
+            </select>
             <select
               value={deliveryDraft.utmId}
               onChange={(event) => setDeliveryDraft((prev) => ({ ...prev, utmId: event.target.value }))}
@@ -160,6 +229,19 @@ export function EditorsProductionModule({
                 <p className="text-slate-400">{item.assetUrl}</p>
               </div>
             ))}
+          </div>
+          <div className="space-y-1">
+            {assetWorkflow
+              .filter((asset) => asset.status === "pronto_para_trafego")
+              .slice(0, 6)
+              .map((asset) => (
+                <div key={asset.id} className="rounded border border-white/10 bg-white/5 p-2">
+                  <p className="text-slate-100">
+                    {asset.title} ({asset.offerId})
+                  </p>
+                  <p className="text-[#10B981]">Status: Pronto para Trafego</p>
+                </div>
+              ))}
           </div>
         </CardContent>
       </Card>

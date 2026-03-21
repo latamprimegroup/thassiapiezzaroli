@@ -4,7 +4,12 @@ import { Clapperboard, Crown, Handshake, HeartPulse, KeyRound, PenSquare, Satell
 export type UserRole =
   | "ceo"
   | "techAdmin"
+  | "ctoDev"
   | "financeManager"
+  | "cfo"
+  | "cco"
+  | "headTraffic"
+  | "sdr"
   | "copyJunior"
   | "copySenior"
   | "trafficJunior"
@@ -58,6 +63,8 @@ export type RolePermissions = {
   canViewSystemHealthMode: boolean;
 };
 
+export type AppRouteKey = "copy" | "traffic" | "admin";
+
 const baseRolePermissions = {
   ceo: {
     label: "CEO (Admin)",
@@ -99,8 +106,8 @@ const baseRolePermissions = {
     canViewSystemHealthMode: true,
   },
   techAdmin: {
-    label: "Tech Admin",
-    description: "Integracoes, tokens e saude de dados",
+    label: "CTO / DEV (Tech Admin)",
+    description: "Integracoes, logs, health checks e tokens",
     icon: KeyRound,
     allowedSections: ["commandCenterCeo", "apiHub", "techCro", "financeCompliance", "commandCenter"],
     canViewSensitiveFinancials: false,
@@ -123,7 +130,7 @@ const baseRolePermissions = {
     canViewSystemHealthMode: true,
   },
   financeManager: {
-    label: "Financeiro",
+    label: "Financeiro / CFO",
     description: "Boardroom financeiro: custos fixos, impostos e DRE",
     icon: ShieldCheck,
     allowedSections: ["commandCenterCeo", "offersLab", "ceoFinance", "financeCompliance", "commandCenter", "techCro"],
@@ -357,12 +364,39 @@ const baseRolePermissions = {
     canViewSystemHealthMode: false,
   },
 } satisfies Record<
-  Exclude<UserRole, "mediaBuyer" | "copywriter" | "videoEditor">,
+  Exclude<UserRole, "mediaBuyer" | "copywriter" | "videoEditor" | "ctoDev" | "cfo" | "cco" | "headTraffic" | "sdr">,
   RolePermissions
 >;
 
 export const rolePermissions: Record<UserRole, RolePermissions> = {
   ...baseRolePermissions,
+  ctoDev: {
+    ...baseRolePermissions.techAdmin,
+    label: "CTO / DEV",
+    description: "Alias executivo para tecnologia",
+  },
+  cfo: {
+    ...baseRolePermissions.financeManager,
+    label: "CFO",
+    description: "Alias executivo para financeiro",
+  },
+  cco: {
+    ...baseRolePermissions.copySenior,
+    label: "Chief Copy Officer (CCO)",
+    description: "Diretor de copy para Big Idea e Mecanismo Unico",
+    canApproveScaleCampaigns: true,
+  },
+  headTraffic: {
+    ...baseRolePermissions.trafficSenior,
+    label: "Head de Trafego",
+    description: "Estrategia macro de budget e escala",
+    canApproveScaleCampaigns: true,
+  },
+  sdr: {
+    ...baseRolePermissions.closer,
+    label: "SDR / Recuperador",
+    description: "Alias comercial para Sniper List",
+  },
   mediaBuyer: {
     ...baseRolePermissions.trafficSenior,
     label: "Media Buyer (Legacy)",
@@ -379,3 +413,26 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     description: "Alias para Squad Producao (Editor)",
   },
 };
+
+const routeRoleMatrix: Record<AppRouteKey, UserRole[]> = {
+  copy: ["ceo", "copyJunior", "copySenior", "copywriter", "cco"],
+  traffic: ["ceo", "trafficJunior", "trafficSenior", "mediaBuyer", "headTraffic"],
+  admin: ["ceo", "financeManager", "cfo", "techAdmin", "ctoDev"],
+};
+
+export function canAccessAppRoute(role: UserRole, route: AppRouteKey) {
+  return routeRoleMatrix[route].includes(role);
+}
+
+export function defaultRouteForRole(role: UserRole) {
+  if (canAccessAppRoute(role, "admin")) {
+    return "/admin";
+  }
+  if (canAccessAppRoute(role, "traffic")) {
+    return "/traffic";
+  }
+  if (canAccessAppRoute(role, "copy")) {
+    return "/copy";
+  }
+  return "/";
+}

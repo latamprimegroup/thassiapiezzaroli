@@ -13,7 +13,12 @@ type SessionPayload = {
 const ALLOWED_ROLES: UserRole[] = [
   "ceo",
   "techAdmin",
+  "ctoDev",
   "financeManager",
+  "cfo",
+  "cco",
+  "headTraffic",
+  "sdr",
   "copyJunior",
   "copySenior",
   "trafficJunior",

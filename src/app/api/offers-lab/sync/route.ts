@@ -19,7 +19,12 @@ function isApiKeyAuthorized(request: Request) {
 
 async function authorize(request: Request) {
   const session = await getSessionFromCookies();
-  if (session && ["ceo", "mediaBuyer", "financeManager"].includes(session.role)) {
+  if (
+    session &&
+    ["ceo", "headTraffic", "trafficSenior", "mediaBuyer", "financeManager", "cfo", "techAdmin", "ctoDev"].includes(
+      session.role,
+    )
+  ) {
     return true;
   }
   return isApiKeyAuthorized(request);

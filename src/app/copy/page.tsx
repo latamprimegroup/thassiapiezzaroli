@@ -1,15 +1,14 @@
 import Dashboard from "@/components/Dashboard";
-import { redirect } from "next/navigation";
-import { defaultRouteForRole } from "@/lib/auth/rbac";
+import { canAccessAppRoute, defaultRouteForRole } from "@/lib/auth/rbac";
 import { loadDashboardPageData } from "@/lib/auth/dashboard-page-loader";
+import { redirect } from "next/navigation";
 
 export const runtime = "nodejs";
 
-export default async function Home() {
+export default async function CopyRoutePage() {
   const payload = await loadDashboardPageData();
-  const route = defaultRouteForRole(payload.role);
-  if (route !== "/") {
-    redirect(route);
+  if (!canAccessAppRoute(payload.role, "copy")) {
+    redirect(defaultRouteForRole(payload.role));
   }
 
   return (
@@ -20,6 +19,7 @@ export default async function Home() {
         userId: payload.currentUser.id,
         role: payload.role,
       }}
+      initialSection="copyResearch"
     />
   );
 }

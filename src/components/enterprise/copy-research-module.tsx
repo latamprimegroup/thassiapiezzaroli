@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -182,6 +182,20 @@ export function CopyResearchModule({
     uniqueId: nextUniqueId(data.enterprise.copyResearch.namingRegistry),
     linkedCreativeId: data.liveAdsTracking[0]?.id ?? "N/A",
   }));
+  const [assetDraft, setAssetDraft] = useState({
+    title: "",
+    offerId: "OFF-DEFAULT",
+  });
+  const [assetWorkflow, setAssetWorkflow] = useState<
+    Array<{
+      id: string;
+      title: string;
+      offerId: string;
+      status: "aguardando_edicao" | "pronto_para_trafego";
+      createdByName: string;
+      updatedAt: string;
+    }>
+  >([]);
 
   const selectedIdea = ideas.find((idea) => idea.id === selectedIdeaId) ?? ideas[0];
 
@@ -488,6 +502,36 @@ export function CopyResearchModule({
     return `${baseUrl}${separator}utm_source=${source}&utm_campaign=${ideaCode}|${chosenIdea?.id || "BIG_IDEA"}&utm_content=${variationToken}|${linkedId}&utm_term=${sanitizeNamingToken(chosenIdea?.nomenclature || "MECANISMO")}|${linkedId}`;
   }, [ideasWithSaturation, selectedIdea, utmDraft.baseUrl, utmDraft.extraVariation, utmDraft.hookVariation, utmDraft.source]);
 
+  const fetchAssetWorkflow = useCallback(async () => {
+    const response = await fetch("/api/assets/workflow", { cache: "no-store" }).catch(() => null);
+    if (!response?.ok) {
+      return;
+    }
+    const payload = (await response.json().catch(() => null)) as
+      | {
+          items?: Array<{
+            id: string;
+            title: string;
+            offerId: string;
+            status: "aguardando_edicao" | "pronto_para_trafego";
+            createdByName: string;
+            updatedAt: string;
+          }>;
+        }
+      | null;
+    if (!payload?.items) {
+      return;
+    }
+    setAssetWorkflow(payload.items);
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void fetchAssetWorkflow();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [fetchAssetWorkflow]);
+
   async function copyNamingToClipboard() {
     if (!namingPreview.valid) {
       return;
@@ -540,6 +584,27 @@ export function CopyResearchModule({
     }
     setIdeas((prev) => prev.map((idea) => (idea.id === ideaId ? { ...idea, approvedByHead: true } : idea)));
     addActivity("Head Copy", actorName, "aprovou roteiro para producao", ideaId, "fila de aprovacao senior");
+  }
+
+  async function submitScriptToEditing() {
+    if (!assetDraft.title.trim() || !assetDraft.offerId.trim()) {
+      return;
+    }
+    const response = await fetch("/api/assets/workflow", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "submit_script",
+        title: assetDraft.title,
+        offerId: assetDraft.offerId,
+      }),
+    }).catch(() => null);
+    if (!response?.ok) {
+      return;
+    }
+    setAssetDraft((prev) => ({ ...prev, title: "" }));
+    addActivity("Copy", actorName, "subiu roteiro", assetDraft.offerId, "status aguardando edicao");
+    void fetchAssetWorkflow();
   }
 
   return (
@@ -645,6 +710,44 @@ export function CopyResearchModule({
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Status de Ativo (Copy -&gt; Edicao)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-xs">
+          <div className="grid gap-2 md:grid-cols-[2fr_1fr_auto]">
+            <input
+              value={assetDraft.title}
+              onChange={(event) => setAssetDraft((prev) => ({ ...prev, title: event.target.value }))}
+              placeholder="Titulo do roteiro"
+              className="h-8 rounded border border-white/10 bg-slate-900/70 px-2"
+            />
+            <input
+              value={assetDraft.offerId}
+              onChange={(event) => setAssetDraft((prev) => ({ ...prev, offerId: event.target.value }))}
+              placeholder="ID da oferta"
+              className="h-8 rounded border border-white/10 bg-slate-900/70 px-2"
+            />
+            <Button type="button" className="h-8 px-3 text-xs" onClick={() => void submitScriptToEditing()}>
+              Subir roteiro
+            </Button>
+          </div>
+          <div className="space-y-1">
+            {assetWorkflow
+              .filter((asset) => asset.status === "aguardando_edicao")
+              .slice(0, 6)
+              .map((asset) => (
+                <div key={asset.id} className="rounded border border-white/10 bg-white/5 p-2">
+                  <p className="text-slate-100">
+                    {asset.title} ({asset.offerId})
+                  </p>
+                  <p className="text-[#FF9900]">Status: Aguardando Edicao</p>
+                </div>
+              ))}
+          </div>
+        </CardContent>
+      </Card>
 
       {canViewRetentionByVsl && (
         <Card>

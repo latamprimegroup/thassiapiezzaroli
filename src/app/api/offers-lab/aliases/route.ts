@@ -28,7 +28,7 @@ export async function POST(request: Request) {
   if (!session) {
     return NextResponse.json({ error: "Nao autenticado." }, { status: 401 });
   }
-  if (!["ceo", "mediaBuyer", "financeManager"].includes(session.role)) {
+  if (!["ceo", "headTraffic", "trafficSenior", "mediaBuyer", "financeManager", "cfo", "techAdmin", "ctoDev"].includes(session.role)) {
     return NextResponse.json({ error: "Sem permissao para cadastrar alias." }, { status: 403 });
   }
   try {

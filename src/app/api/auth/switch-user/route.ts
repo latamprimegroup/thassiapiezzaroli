@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { defaultRouteForRole } from "@/lib/auth/rbac";
 import { createSessionToken, SESSION_COOKIE_NAME } from "@/lib/auth/session";
 import { getDemoUserById } from "@/lib/auth/users";
 
@@ -15,6 +16,7 @@ export async function POST(request: Request) {
   const token = createSessionToken(user.id, user.role);
   const response = NextResponse.json({
     ok: true,
+    redirectTo: defaultRouteForRole(user.role),
     user: {
       id: user.id,
       name: user.name,

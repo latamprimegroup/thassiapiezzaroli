@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 import {
   Binary,
@@ -81,6 +82,7 @@ type DashboardProps = {
     userId: string;
     role: UserRole;
   };
+  initialSection?: SectionId;
 };
 
 type Section = {
@@ -110,7 +112,8 @@ const sections: Section[] = [
 
 const formatHours = (value: number) => value.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
-export default function Dashboard({ data, users, session }: DashboardProps) {
+export default function Dashboard({ data, users, session, initialSection }: DashboardProps) {
+  const router = useRouter();
   const [viewData, setViewData] = useState(data);
   const [sessionState, setSessionState] = useState(session);
   const [activityLog, setActivityLog] = useState(data.activityLog);
@@ -118,13 +121,32 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
   const [ceoMode, setCeoMode] = useState(false);
   const [presentationMode, setPresentationMode] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [dailyTaskForm, setDailyTaskForm] = useState({
+    summary: "",
+    blockers: "",
+    impactNote: "",
+  });
+  const [dailyTaskRecords, setDailyTaskRecords] = useState<
+    Array<{
+      id: string;
+      userId: string;
+      userName: string;
+      role: UserRole;
+      summary: string;
+      blockers: string;
+      impactNote: string;
+      createdAt: string;
+    }>
+  >([]);
+  const [savingDailyTask, setSavingDailyTask] = useState(false);
 
   const defaultSection =
     rolePermissions[session.role].allowedSections.includes("commandCenterCeo")
       ? "commandCenterCeo"
       : rolePermissions[session.role].allowedSections[0];
-  const initialSection = defaultSection;
-  const [activeSection, setActiveSection] = useState<SectionId>(initialSection);
+  const resolvedInitialSection =
+    initialSection && rolePermissions[session.role].allowedSections.includes(initialSection) ? initialSection : defaultSection;
+  const [activeSection, setActiveSection] = useState<SectionId>(resolvedInitialSection);
 
   const permissions = rolePermissions[sessionState.role];
   const ActiveRoleIcon = permissions.icon;
@@ -181,6 +203,13 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
       void fetchLatestData();
     }, WAR_ROOM_OPS_CONSTANTS.performance.dashboardRefreshMs);
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void fetchDailyTasks();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   useEffect(() => {
@@ -343,6 +372,7 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
         body: JSON.stringify({ userId }),
       });
       if (!switchResponse.ok) throw new Error("Falha ao trocar usuario.");
+      const switchPayload = (await switchResponse.json().catch(() => null)) as { redirectTo?: string } | null;
 
       const dataResponse = await fetch("/api/war-room", { cache: "no-store" });
       if (!dataResponse.ok) throw new Error("Falha ao recarregar dados.");
@@ -357,9 +387,62 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
       setActivityLog(payload.data.activityLog);
       setSessionState({ userId: payload.session.userId, role: payload.session.role });
       setActiveSection((prev) => (nextPermissions.allowedSections.includes(prev) ? prev : nextPermissions.allowedSections[0]));
+      if (switchPayload?.redirectTo && window.location.pathname !== switchPayload.redirectTo) {
+        router.push(switchPayload.redirectTo);
+      }
+      void fetchDailyTasks();
     } finally {
       setIsSwitchingUser(false);
     }
+  }
+
+  async function fetchDailyTasks() {
+    const response = await fetch("/api/daily-tasks", { cache: "no-store" }).catch(() => null);
+    if (!response?.ok) {
+      return;
+    }
+    const payload = (await response.json().catch(() => null)) as
+      | {
+          records?: Array<{
+            id: string;
+            userId: string;
+            userName: string;
+            role: UserRole;
+            summary: string;
+            blockers: string;
+            impactNote: string;
+            createdAt: string;
+          }>;
+        }
+      | null;
+    if (!payload?.records) {
+      return;
+    }
+    setDailyTaskRecords(payload.records);
+  }
+
+  async function submitDailyTask() {
+    const summary = dailyTaskForm.summary.trim();
+    if (!summary) {
+      return;
+    }
+    setSavingDailyTask(true);
+    const response = await fetch("/api/daily-tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(dailyTaskForm),
+    }).catch(() => null);
+    setSavingDailyTask(false);
+    if (!response?.ok) {
+      return;
+    }
+    setDailyTaskForm({
+      summary: "",
+      blockers: "",
+      impactNote: "",
+    });
+    addActivity(permissions.label, activeUser.name, "registrou daily task", activeSection, "log operacional diario");
+    void fetchDailyTasks();
   }
 
   const contextValue = {
@@ -555,6 +638,55 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
                 </CardContent>
               </Card>
             )}
+
+            <Card className="mb-4 border-white/10 bg-[#050505]">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Daily Task Input (workflow operacional)</CardTitle>
+                <CardDescription className="text-xs text-slate-400">
+                  Cada colaborador registra o que executou no dia para alimentar o relatorio do CEO.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <textarea
+                  value={dailyTaskForm.summary}
+                  onChange={(event) => setDailyTaskForm((prev) => ({ ...prev, summary: event.target.value }))}
+                  className="min-h-16 w-full rounded border border-white/10 bg-slate-900/70 p-2 text-xs"
+                  placeholder="O que voce fez hoje no seu setor?"
+                />
+                <div className="grid gap-2 md:grid-cols-2">
+                  <input
+                    value={dailyTaskForm.blockers}
+                    onChange={(event) => setDailyTaskForm((prev) => ({ ...prev, blockers: event.target.value }))}
+                    className="h-8 rounded border border-white/10 bg-slate-900/70 px-2 text-xs"
+                    placeholder="Bloqueios (opcional)"
+                  />
+                  <input
+                    value={dailyTaskForm.impactNote}
+                    onChange={(event) => setDailyTaskForm((prev) => ({ ...prev, impactNote: event.target.value }))}
+                    className="h-8 rounded border border-white/10 bg-slate-900/70 px-2 text-xs"
+                    placeholder="Impacto percebido em receita/custo"
+                  />
+                </div>
+                <Button type="button" className="h-8 px-3 text-xs" onClick={() => void submitDailyTask()} disabled={savingDailyTask}>
+                  {savingDailyTask ? "Salvando..." : "Salvar Daily Task"}
+                </Button>
+                <div className="space-y-1">
+                  {(sessionState.role === "ceo"
+                    ? dailyTaskRecords.slice(0, 12)
+                    : dailyTaskRecords.filter((item) => item.userId === sessionState.userId).slice(0, 5)
+                  ).map((item) => (
+                    <div key={item.id} className="rounded border border-white/10 bg-white/5 p-2 text-[11px]">
+                      <p className="text-slate-200">
+                        {item.userName} ({item.role}) - {new Date(item.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                      <p className="text-slate-300">{item.summary}</p>
+                      {item.blockers ? <p className="text-[#FF9900]">Bloqueios: {item.blockers}</p> : null}
+                      {item.impactNote ? <p className="text-slate-400">Impacto: {item.impactNote}</p> : null}
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
 
             {siren.active && (
               <Card className="mb-4 border-rose-300/70 bg-rose-500/15">
