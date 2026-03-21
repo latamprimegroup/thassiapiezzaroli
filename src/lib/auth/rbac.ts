@@ -5,6 +5,7 @@ export type UserRole = "ceo" | "mediaBuyer" | "copywriter" | "videoEditor" | "cl
 
 export type SectionId =
   | "commandCenterCeo"
+  | "offersLab"
   | "ceoFinance"
   | "copyResearch"
   | "trafficAttribution"
@@ -40,6 +41,7 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     icon: Crown,
     allowedSections: [
       "commandCenterCeo",
+      "offersLab",
       "ceoFinance",
       "copyResearch",
       "trafficAttribution",
@@ -68,6 +70,7 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     icon: SatelliteDish,
     allowedSections: [
       "commandCenterCeo",
+      "offersLab",
       "trafficAttribution",
       "testLaboratory",
       "commandCenter",
@@ -91,6 +94,7 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     icon: PenSquare,
     allowedSections: [
       "commandCenterCeo",
+      "offersLab",
       "copyResearch",
       "trafficAttribution",
       "testLaboratory",
@@ -112,7 +116,15 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     label: "Video Editor",
     description: "Performance por criativo e novas versoes",
     icon: Clapperboard,
-    allowedSections: ["commandCenterCeo", "trafficAttribution", "testLaboratory", "commandCenter", "squadSync", "editorsProduction"],
+    allowedSections: [
+      "commandCenterCeo",
+      "offersLab",
+      "trafficAttribution",
+      "testLaboratory",
+      "commandCenter",
+      "squadSync",
+      "editorsProduction",
+    ],
     canViewSensitiveFinancials: false,
     canViewRoasReal: false,
     canApproveScaleCampaigns: false,
@@ -127,7 +139,7 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     label: "Closer / Recovery",
     description: "Sniper list e recuperacao comercial",
     icon: Handshake,
-    allowedSections: ["commandCenterCeo", "salesRecovery", "commandCenter", "squadSync"],
+    allowedSections: ["commandCenterCeo", "offersLab", "salesRecovery", "commandCenter", "squadSync"],
     canViewSensitiveFinancials: false,
     canViewRoasReal: false,
     canApproveScaleCampaigns: false,
@@ -142,7 +154,7 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     label: "Customer Experience",
     description: "Retencao, churn e LTV de pos-venda",
     icon: HeartPulse,
-    allowedSections: ["commandCenterCeo", "customerExperience", "squadSync", "commandCenter"],
+    allowedSections: ["commandCenterCeo", "offersLab", "customerExperience", "squadSync", "commandCenter"],
     canViewSensitiveFinancials: false,
     canViewRoasReal: false,
     canApproveScaleCampaigns: false,
@@ -157,7 +169,7 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     label: "Finance & Compliance",
     description: "DRE, margem e governanca legal",
     icon: ShieldCheck,
-    allowedSections: ["commandCenterCeo", "ceoFinance", "financeCompliance", "commandCenter", "techCro"],
+    allowedSections: ["commandCenterCeo", "offersLab", "ceoFinance", "financeCompliance", "commandCenter", "techCro"],
     canViewSensitiveFinancials: true,
     canViewRoasReal: true,
     canApproveScaleCampaigns: true,

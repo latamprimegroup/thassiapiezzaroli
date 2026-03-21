@@ -73,3 +73,63 @@ create index if not exists war_room_ops_incidents_status_idx
   on war_room_ops_incidents (status, last_seen_at desc);
 create unique index if not exists war_room_ops_incidents_open_key_uidx
   on war_room_ops_incidents (incident_key) where status = 'open';
+
+-- OFFERS LAB - Production & Offers Engine
+create table if not exists offers_lab_offers (
+  id text primary key,
+  name text not null default '',
+  status text not null,
+  niche text not null default '',
+  owner_id text not null default '',
+  min_roas_target numeric not null default 1.8,
+  traffic_source text not null default 'unknown',
+  utm_brought_by text not null default '',
+  big_idea text not null default '',
+  unique_mechanism text not null default '',
+  sophistication_level integer not null default 3,
+  hook_variations jsonb not null default '[]'::jsonb,
+  launch_candidate boolean not null default false,
+  created_at timestamptz not null,
+  updated_at timestamptz not null,
+  last_validated_at timestamptz null
+);
+create index if not exists offers_lab_offers_status_idx
+  on offers_lab_offers (status, updated_at desc);
+
+create table if not exists offers_lab_traffic_events (
+  id text primary key,
+  offer_id text not null,
+  event_type text not null,
+  gateway text not null,
+  traffic_source text not null,
+  occurred_at timestamptz not null,
+  utm_source text not null default '',
+  utm_campaign text not null default '',
+  utm_medium text not null default '',
+  utm_content text not null default '',
+  utm_term text not null default '',
+  campaign_name text not null default '',
+  campaign_id text not null default '',
+  content_name text not null default '',
+  content_id text not null default '',
+  term_name text not null default '',
+  term_id text not null default '',
+  utm_brought_by text not null default '',
+  device text not null default '',
+  network text not null default '',
+  keyword text not null default '',
+  revenue numeric not null default 0,
+  spend numeric not null default 0,
+  currency text not null default 'BRL',
+  raw_payload jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+create index if not exists offers_lab_traffic_events_offer_occ_idx
+  on offers_lab_traffic_events (offer_id, occurred_at desc);
+
+create table if not exists offers_lab_sync_state (
+  state_key text primary key,
+  last_sync_at timestamptz null,
+  last_status text not null default 'idle',
+  last_message text not null default ''
+);

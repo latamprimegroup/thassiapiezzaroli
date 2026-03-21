@@ -27,6 +27,7 @@ import { CopyResearchModule } from "@/components/enterprise/copy-research-module
 import { CustomerExperienceModule } from "@/components/enterprise/customer-experience-module";
 import { EditorsProductionModule } from "@/components/enterprise/editors-production-module";
 import { FinanceComplianceModule } from "@/components/enterprise/finance-compliance-module";
+import { OffersLabModule } from "@/components/enterprise/offers-lab-module";
 import { SalesRecoveryModule } from "@/components/enterprise/sales-recovery-module";
 import { SquadSyncModule } from "@/components/enterprise/squad-sync-module";
 import { TestLaboratoryModule } from "@/components/enterprise/test-laboratory-module";
@@ -58,6 +59,7 @@ type Section = {
 
 const sections: Section[] = [
   { id: "commandCenterCeo", label: "The Command Center", subtitle: "CEO View 10D", icon: LayoutDashboard },
+  { id: "offersLab", label: "Offers Lab", subtitle: "Production & Validation", icon: FlaskConical },
   { id: "ceoFinance", label: "CEO & Financeiro", subtitle: "Soberania de Caixa", icon: Wallet },
   { id: "copyResearch", label: "Copy & Pesquisa", subtitle: "The Brain", icon: BrainCircuit },
   { id: "trafficAttribution", label: "Trafego & Atribuicao", subtitle: "The Engine", icon: SatelliteDish },
@@ -450,6 +452,7 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
                 onDrillDown={(sectionId) => setActiveSection(sectionId)}
               />
             )}
+            {activeSection === "offersLab" && isSectionAllowed && <OffersLabModule />}
             {activeSection === "copyResearch" && isSectionAllowed && <CopyResearchModule />}
             {activeSection === "trafficAttribution" && isSectionAllowed && <TrafficAttributionModule />}
             {activeSection === "testLaboratory" && isSectionAllowed && (

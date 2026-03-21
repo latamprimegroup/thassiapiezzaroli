@@ -154,4 +154,12 @@ export const WAR_ROOM_OPS_CONSTANTS = {
       holdoutPct: 0.2,
     },
   },
+  offersLab: {
+    syncIntervalMinutes: 15,
+    validation: {
+      minRevenue7d: 70_000,
+      minRoas: 1.8,
+    },
+    trafficSources: ["meta", "google", "tiktok", "kwai", "networking", "unknown"] as const,
+  },
 } as const;
