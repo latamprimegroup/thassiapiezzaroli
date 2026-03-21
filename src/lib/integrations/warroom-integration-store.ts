@@ -343,7 +343,9 @@ export function mergeWarRoomWithIntegrations(base: WarRoomData): WarRoomData {
     safeDivide(averageUpsellTakeRate, 100) * modelWeights.upsellTakeRate +
     safeDivide(crmSharePct, 100) * modelWeights.crmShare +
     (pixelStatus === "unhealthy" ? modelWeights.pixelHealthPenalty : 0) +
-    (state.yampi.cartAbandonmentRate > 60 ? modelWeights.abandonmentPenalty : 0);
+    (state.yampi.cartAbandonmentRate > WAR_ROOM_OPS_CONSTANTS.thresholds.yampi.abandonmentCriticalPct
+      ? modelWeights.abandonmentPenalty
+      : 0);
   const ltvBaselineFromD7 = ltvD7 * WAR_ROOM_OPS_CONSTANTS.predictiveLtv.baseGrowthFromD7;
   const predictedLtv90d = Math.max(0, ltvBaselineFromD7 * (1 + qualityScore));
   const confidencePct = Math.max(
@@ -404,10 +406,19 @@ export function mergeWarRoomWithIntegrations(base: WarRoomData): WarRoomData {
     (1 - WAR_ROOM_OPS_CONSTANTS.thresholds.appmax.approvalDropAlertPct / 100);
   const approvalIncident = next.integrations.gateway.appmaxCardApprovalRate > 0 &&
     next.integrations.gateway.appmaxCardApprovalRate < approvalDropThreshold;
-  const checkoutIncident = next.integrations.gateway.yampiCartAbandonmentRate > 60;
+  const checkoutIncident =
+    next.integrations.gateway.yampiCartAbandonmentRate >
+    WAR_ROOM_OPS_CONSTANTS.thresholds.yampi.abandonmentCriticalPct;
   const pixelIncident = pixelStatus === "unhealthy";
   const lossPerMinute =
-    (checkoutIncident ? revenuePerMinute * safeDivide(next.integrations.gateway.yampiCartAbandonmentRate - 60, 100) : 0) +
+    (checkoutIncident
+      ? revenuePerMinute *
+        safeDivide(
+          next.integrations.gateway.yampiCartAbandonmentRate -
+            WAR_ROOM_OPS_CONSTANTS.thresholds.yampi.abandonmentCriticalPct,
+          100,
+        )
+      : 0) +
     (approvalIncident ? revenuePerMinute * 0.22 : 0) +
     (pixelIncident ? revenuePerMinute * 0.18 : 0);
   const currentIncidents: WarRoomData["integrations"]["operations"]["opportunityLost"]["incidents"] = [];
@@ -415,7 +426,7 @@ export function mergeWarRoomWithIntegrations(base: WarRoomData): WarRoomData {
     currentIncidents.push({
       id: `INC-YAMPI-${Date.now()}`,
       severity: "critical",
-      reason: "Checkout com abandono acima de 60%.",
+      reason: `Checkout com abandono acima de ${WAR_ROOM_OPS_CONSTANTS.thresholds.yampi.abandonmentCriticalPct}%.`,
       estimatedLoss: Math.round(revenuePerMinute * 15),
       startedAt: nowLabel(),
     });
@@ -444,7 +455,11 @@ export function mergeWarRoomWithIntegrations(base: WarRoomData): WarRoomData {
       expected: fallbackSpend,
       observed: spendTotal,
       variancePct: safeDivide(spendTotal - fallbackSpend, fallbackSpend || 1) * 100,
-      status: Math.abs(safeDivide(spendTotal - fallbackSpend, fallbackSpend || 1) * 100) > 5 ? "warning" : "ok",
+      status:
+        Math.abs(safeDivide(spendTotal - fallbackSpend, fallbackSpend || 1) * 100) >
+        WAR_ROOM_OPS_CONSTANTS.attribution.reconciliation.spendVarianceWarningPct
+          ? "warning"
+          : "ok",
       note: "Conferencia do spend consolidado entre fontes internas e Utmify.",
     },
     {
@@ -455,7 +470,7 @@ export function mergeWarRoomWithIntegrations(base: WarRoomData): WarRoomData {
       status:
         Math.abs(
           safeDivide((consolidatedGross || next.globalOverview.revenue) - next.globalOverview.revenue, next.globalOverview.revenue || 1) * 100,
-        ) > 3
+        ) > WAR_ROOM_OPS_CONSTANTS.attribution.reconciliation.grossVarianceWarningPct
           ? "warning"
           : "ok",
       note: "Conferencia de faturamento bruto vs gateways.",
@@ -466,7 +481,8 @@ export function mergeWarRoomWithIntegrations(base: WarRoomData): WarRoomData {
       observed: next.enterprise.ceoFinance.netProfit,
       variancePct: safeDivide(next.enterprise.ceoFinance.netProfit - simulatedNetProfit, simulatedNetProfit || 1) * 100,
       status:
-        Math.abs(safeDivide(next.enterprise.ceoFinance.netProfit - simulatedNetProfit, simulatedNetProfit || 1) * 100) > 2
+        Math.abs(safeDivide(next.enterprise.ceoFinance.netProfit - simulatedNetProfit, simulatedNetProfit || 1) * 100) >
+        WAR_ROOM_OPS_CONSTANTS.attribution.reconciliation.profitVarianceCriticalPct
           ? "critical"
           : "ok",
       note: "Conferencia da formula de lucro liquido operacional.",
@@ -634,7 +650,9 @@ export function mergeWarRoomWithIntegrations(base: WarRoomData): WarRoomData {
   }
   if (next.integrations.gateway.yampiCartAbandonmentRate > 0) {
     next.enterprise.techCro.checkout.cartAbandonment = next.integrations.gateway.yampiCartAbandonmentRate;
-    next.enterprise.techCro.checkout.gatewayAlert = next.integrations.gateway.yampiCartAbandonmentRate > 60;
+    next.enterprise.techCro.checkout.gatewayAlert =
+      next.integrations.gateway.yampiCartAbandonmentRate >
+      WAR_ROOM_OPS_CONSTANTS.thresholds.yampi.abandonmentCriticalPct;
   }
 
   next.enterprise.techCro.upsellFlow = [

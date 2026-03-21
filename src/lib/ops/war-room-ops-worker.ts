@@ -1,4 +1,5 @@
 import { processIncomingWebhook, processDueWebhookRetries } from "@/lib/integrations/warroom-webhook-service";
+import { WAR_ROOM_OPS_CONSTANTS } from "@/lib/config/war-room-ops.constants";
 import {
   claimDueOpsJobs,
   completeOpsJob,
@@ -34,7 +35,7 @@ function asWebhookPayload(job: OpsJobRecord): WebhookIngestPayload | null {
   };
 }
 
-export async function processOpsJobQueue(limit = 25) {
+export async function processOpsJobQueue(limit: number = WAR_ROOM_OPS_CONSTANTS.queue.worker.observabilityBatchSize) {
   const dueJobs = await claimDueOpsJobs(limit);
   let completed = 0;
   let retried = 0;
@@ -72,7 +73,9 @@ export async function processOpsJobQueue(limit = 25) {
     deadLettered += 1;
   }
 
-  const webhookRetries = await processDueWebhookRetries(Math.max(10, Math.floor(limit / 2)));
+  const webhookRetries = await processDueWebhookRetries(
+    Math.max(WAR_ROOM_OPS_CONSTANTS.queue.worker.followupRetryBatchFloor, Math.floor(limit / 2)),
+  );
   const stats = await getOpsJobStats();
 
   return {

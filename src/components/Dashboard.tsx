@@ -16,6 +16,7 @@ import { TrafficAttributionModule } from "@/components/enterprise/traffic-attrib
 import { ActionableInsights } from "@/components/war-room/actionable-insights";
 import { recalculateEnterpriseFinance, WarRoomContext } from "@/context/war-room-context";
 import { rolePermissions, type SectionId, type UserRole } from "@/lib/auth/rbac";
+import { WAR_ROOM_OPS_CONSTANTS } from "@/lib/config/war-room-ops.constants";
 import type { DemoUser } from "@/lib/auth/users";
 import type { SquadSyncCommandOrder, SquadSyncKpiSnapshot, TrafficSourceKey, WarRoomData } from "@/lib/war-room/types";
 
@@ -92,7 +93,7 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
         setActivityLog(payload.data.activityLog);
         setSessionState(payload.session);
       })();
-    }, 60_000);
+    }, WAR_ROOM_OPS_CONSTANTS.performance.dashboardRefreshMs);
     return () => clearInterval(interval);
   }, []);
 

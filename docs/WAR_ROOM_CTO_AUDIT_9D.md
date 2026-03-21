@@ -2,100 +2,115 @@
 
 ## 1) Auditoria de Escala (Stress Test 50.000 eventos/dia)
 
-### Capacidade atual
-- A arquitetura atual suporta volume moderado, mas **nao e ideal para 50k eventos/dia com baixa latencia** porque:
-  - ingestao de webhooks e retries rodam no ciclo de request (sem worker dedicado);
-  - merge de dados e enrichments sao feitos em memoria no processo Node;
-  - persistencia operacional usa arquivo local (`.war-room/ops-store.json`), limitado para concorrencia alta;
-  - dashboard faz polling periodico e renderiza blocos densos no client.
+### Estado atual (real)
+- Ja existe **fila assinc + worker dedicado** para ingestao de webhooks (`ops-worker`) com retry e dead-letter.
+- O sistema hoje aguenta operacao agressiva, mas para **50k eventos/dia com baixa latencia previsivel** ainda ha gargalos estruturais:
+  1. persistencia operacional em arquivo local (`.war-room/ops-store.json`);
+  2. processamento e agregacao em memoria no processo Node;
+  3. ausencia de cache materializado para leitura executiva;
+  4. risco de lock contention em mutacoes concorrentes do store.
 
-### Gargalos principais
-1. **I/O de arquivo local** na camada de ops store sob carga concorrente.
-2. **Processamento sincrono de retries** no request path.
-3. **Ausencia de fila distribuida** para webhook/eventos.
-4. **Falta de cache de leitura** para cards executivos.
-5. **Agregacoes em runtime** sem materializacao (picos de CPU no server).
+### Gargalos que podem gerar lag no Dashboard do CEO
+1. **I/O local com lock global** no ops-store sob pico de eventos.
+2. **Merge de integracoes em runtime** (CPU bound) sem snapshot precomputado.
+3. **Sem fila distribuida** (single runtime): melhora resiliencia, mas nao escala horizontalmente.
+4. **Polling uniforme** de 60s para toda tela sem priorizacao por painel.
+5. **Sem SLO/SLI automatizados** de backlog, erro e tempo de recuperacao.
 
-### Recomendacao imediata
-- Migrar eventos para fila + worker (Redis Streams/SQS + consumer).
-- Materializar snapshots do dashboard (cada 15-60s) e servir leitura cacheada.
-- Persistencia em banco (Postgres/Supabase) para eventos, naming e auditoria.
+### Risco tecnico (objetivo)
+- **Risco de throughput:** medio
+- **Risco de latencia executiva:** medio/alto em dia de scale burst
+- **Risco de perda de evento:** baixo/medio (retry + DLQ ajudam, mas sem bus distribuido)
 
 ---
 
-## 2) Gap Analysis vs Agora Inc.
+## 2) GAP Analysis vs Agora Inc.
 
-### Pontos fortes ja implementados
-- Big Idea Vault + Ficha de Desconstrucao + Score de validacao.
-- Nomenclatura universal com regex e builder.
-- Fortress (Safe Browsing, Meta debugger, Cloudflare DoH, sirene global).
-- Command Center com automacoes intersetoriais.
+### O que ja esta em nivel forte
+- Vault + Siren + Pixel Sync + push alerts.
+- Reconciliacao financeira inicial + Opportunity Lost Engine.
+- Big Idea Vault + Ficha de desconstrucao + naming DNA + drift guard.
+- Command Center com automacoes intersetoriais e gate de aprovacao.
 
-### Gaps de maturidade
-1. **Loop fechado Copy <-> Media ainda parcial**: feedback de CPA/ROAS nao recalcula score da ficha automaticamente por janela temporal.
-2. **Versionamento de Big Idea** ainda em estado local (sem trilha de revisao por versao em banco).
-3. **Atribuicao resiliente a erro humano** ainda depende de mapeamento local e heuristica simples (drift alert), sem reconciliacao server-side com auto-correcoes persistidas.
+### O que ainda falta para virar "arma de guerra" completa
+1. **Loop fechado Copy <- CPA por ID (automatico) ainda parcial**
+   - hoje existe input para copy, mas falta atualizar score/estado de Big Idea por janela 7d/14d automaticamente.
+2. **Versionamento formal de estrategia**
+   - Big Idea sem trilha completa de v1/v2/v3 em storage transacional.
+3. **Attribution governance enterprise**
+   - falta reconciliacao canonica com aliases aprovados + bloqueio de deploy sem DNA valido.
+4. **Observabilidade de producao**
+   - sem paines de SLO/erro-budget/MTTR por squad e por integracao.
 
 ---
 
 ## 3) Engenharia Avancada
 
-### AI Predictive (LTV 90d)
-- Implementado baseline inicial em constants e merge:
-  - projecao LTV90 baseada em sinais de 7d, aprovacao Appmax, upsell, share CRM, saude pixel e abandono.
-- Proximo nivel:
-  1. armazenar features por cohort diario;
-  2. treinar regressao simples (XGBoost/LightGBM) offline;
-  3. publicar score por cohort em tabela `ltv_predictions`.
+### Previsibilidade (AI Predictive LTV90)
+**Ja existe baseline heuristico** por sinais de D7 + aprovacao + upsell + CRM share + saude de pixel.
 
-### Nomenclatura e atribuicao
-- Regex valida geracao local.
-- Drift guard detecta typo e criativo sem mapeamento.
-- Proximo nivel:
-  - reconciliacao server-side com dicionario canonico;
-  - fluxo de aprovacao de correcoes de mapping;
-  - bloqueio de deploy de campanha sem DNA valido.
+**Proxima evolucao recomendada:**
+1. persistir features por cohort diario em tabela (`ltv_feature_store`);
+2. treinar modelo supervisionado simples (regressao + gradient boosting);
+3. servir score online com confianca e drift monitor;
+4. comparar baseline heuristico vs modelo em holdout.
+
+### Nomenclatura e atribuicao (anti-erro humano)
+**Atual:** regex + drift alert por distancia de Levenshtein.
+
+**Para ficar blindado:**
+1. dicionario canonico `creative_aliases` com aprovacao de squad head;
+2. reconciliacao server-side que normaliza typo antes de consolidar KPI;
+3. bloqueio de subida para naming invalido em export/integração;
+4. incidente automatico quando erro de mapping ultrapassar limiar diario.
 
 ---
 
 ## 4) Seguranca e Contingencia (The Vault)
 
 ### Estado atual
-- Dominio monitorado por Safe Browsing + Meta + Cloudflare DoH.
-- Siren com triggers por MER, dominio bloqueado, Pixel unhealthy e queda Appmax.
-- Push webhook opcional para transicao de estado (`WAR_ROOM_PUSH_ALERT_WEBHOOK`).
+- Safe Browsing + Meta Graph + Cloudflare DoH.
+- Sirene global por MER/pixel/approval/domain.
+- Push alert em mudanca de estado.
 
-### Reforco recomendado
-- Assinatura HMAC nos push alerts internos.
-- Dedupe de alertas por chave de incidente.
-- Escalonamento por severidade (Slack -> WhatsApp -> Pager).
+### Evolucao recomendada
+1. dedupe de alerta por `incident_key` e janela configuravel;
+2. assinatura HMAC interna de alertas push;
+3. escalonamento por severidade (warning -> critical);
+4. historico de incidentes com SLA e MTTR por squad.
 
 ---
 
 ## 5) Veredito Final
 
-**Veredito:** robusto para operacao agressiva, mas ainda em transicao para classe global.
+**Veredito tecnico sincero:** plataforma forte (faixa 92-95%), com arquitetura madura para operacao agressiva, mas ainda sem os ultimos pilares de escala global horizontal.
 
-### 3 funcionalidades Killer para fechar maturidade
-1. **Event Bus + Worker Fleet** para ingestao, retries e enrichments desacoplados.
-2. **Attribution Reconciliation Engine** com auto-correcao assistida e trilha auditavel.
-3. **Opportunity Lost Engine** (impacto financeiro por incidente em tempo real).
+### 3 funcionalidades "Killer" para fechar 100%
+1. **Event Bus Distribuido + Worker Fleet**
+   - Redis Streams/SQS/Kafka + consumers isolados por dominio de evento.
+2. **Attribution Reconciliation Engine Oficial**
+   - ledger canonico com correcoes aprovadas, auditoria e incidentes formais.
+3. **Observability Command (SLO/MTTR/Error Budget)**
+   - painel tecnico com alertas de severidade, backlog aging e recuperação.
 
 ---
 
 ## To-Do Tecnico (proximos modulos)
 
-### P0
-- [ ] Migrar ops-store para Postgres (eventos, approvals, naming_registry, drift_alerts).
-- [ ] Introduzir fila (Redis/SQS) para webhooks e retries assinc.
-- [ ] Snapshot cache para dashboard executivo (TTL 15-30s).
+### Onda 1 - Hardening estrutural (P0)
+- [ ] Migrar ops-store para Postgres/Supabase (eventos, jobs, approvals, aliases).
+- [ ] Adotar fila distribuida para webhook ingest + retries assinc.
+- [ ] Criar snapshot cache do dashboard executivo (TTL 15-30s) com invalidação por evento critico.
+- [ ] Implementar SLO basico: p95 API, backlog queue, taxa de erro por integracao.
 
-### P1
-- [ ] Reconciliacao de nomenclatura server-side com tabela de aliases.
-- [ ] Auto-score da ficha de copy retroalimentado por CPA/ROAS por janela (7d/14d).
-- [ ] Opportunity Lost Report (valor perdido por indisponibilidade de checkout/approval drop).
+### Onda 2 - Governanca de atribuicao e copy intelligence (P1)
+- [ ] Tabela de aliases canonicos para naming e auto-correcoes aprovadas.
+- [ ] Retroalimentar score da Ficha de Copy por CPA/ROAS real em janelas 7/14 dias.
+- [ ] Gate de deploy: impedir criativo sem DNA valido de entrar em export para trafego.
+- [ ] Historico de Big Idea por versao (v1/v2/v3) com aprovacao formal.
 
-### P2
-- [ ] Modelo ML supervisionado para LTV90 real (treino offline + serving online).
-- [ ] Alert routing multi-canal com dedupe e escalonamento.
-- [ ] Export executivo diario com benchmark de mecanismo (Agora style).
+### Onda 3 - Predicao e operacao autonoma (P2)
+- [ ] Feature store + modelo supervisionado para LTV90 com monitor de drift.
+- [ ] Motor de decisao de experimentos (alpha, power, MDE, stop rules).
+- [ ] Incident center com SLA/MTTR por squad e custeio de oportunidade perdida por incidente.
+- [ ] Relatorio executivo diario automatizado por mecanismo/angulo (benchmark interno estilo Agora).

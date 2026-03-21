@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { processOpsJobQueue } from "@/lib/ops/war-room-ops-worker";
 import { getOpsJobStats } from "@/lib/persistence/war-room-ops-store";
+import { WAR_ROOM_OPS_CONSTANTS } from "@/lib/config/war-room-ops.constants";
 
 export const runtime = "nodejs";
 
@@ -19,7 +20,7 @@ export async function GET(request: Request) {
   if (!isAuthorized(request)) {
     return NextResponse.json({ error: "Nao autorizado." }, { status: 401 });
   }
-  const result = await processOpsJobQueue(50);
+  const result = await processOpsJobQueue(WAR_ROOM_OPS_CONSTANTS.queue.worker.defaultBatchSize);
   return NextResponse.json({ ok: true, ...result });
 }
 
@@ -28,7 +29,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Nao autorizado." }, { status: 401 });
   }
   const body = (await request.json().catch(() => ({}))) as { limit?: number };
-  const limit = Number.isFinite(body.limit) ? Math.max(1, Math.min(200, Number(body.limit))) : 50;
+  const limit = Number.isFinite(body.limit)
+    ? Math.max(1, Math.min(WAR_ROOM_OPS_CONSTANTS.queue.worker.maxBatchSize, Number(body.limit)))
+    : WAR_ROOM_OPS_CONSTANTS.queue.worker.defaultBatchSize;
   const result = await processOpsJobQueue(limit);
   return NextResponse.json({ ok: true, ...result });
 }

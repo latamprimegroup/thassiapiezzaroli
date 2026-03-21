@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useWarRoom } from "@/context/war-room-context";
+import { WAR_ROOM_OPS_CONSTANTS } from "@/lib/config/war-room-ops.constants";
 import { buildCreativeDnaName, CREATIVE_DNA_REGEX } from "@/lib/copy/creative-naming";
 import { computeIntelligenceEngine } from "@/lib/metrics/intelligence-engine";
 import { computeKpis, toFiniteNumber } from "@/lib/metrics/kpis";
@@ -173,7 +174,7 @@ export function TestLaboratoryModule({ actorName, actorRole }: TestLaboratoryMod
   });
 
   useEffect(() => {
-    const timer = window.setInterval(() => setClockMs(Date.now()), 60_000);
+    const timer = window.setInterval(() => setClockMs(Date.now()), WAR_ROOM_OPS_CONSTANTS.performance.dashboardRefreshMs);
     return () => window.clearInterval(timer);
   }, []);
 
@@ -191,7 +192,7 @@ export function TestLaboratoryModule({ actorName, actorRole }: TestLaboratoryMod
   const readyQueue = items.filter((item) => item.stage === "ready");
   const testingQueue = items.filter((item) => item.stage === "testing");
   const decisionQueue = items.filter((item) => item.stage === "decision");
-  const fatigueRisk = readyQueue.length === 0;
+  const fatigueRisk = readyQueue.length < WAR_ROOM_OPS_CONSTANTS.thresholds.testLab.minReadyToUploadQueue;
 
   const dnaPreview = useMemo(() => {
     return buildCreativeDnaName({
@@ -321,8 +322,8 @@ export function TestLaboratoryModule({ actorName, actorRole }: TestLaboratoryMod
       targetCpa: current.targetCpa,
       hookRate: current.hookRate,
       ctrOutbound: current.ctrOutbound,
-      minSpendMultiplier: 1,
-      maxSpendMultiplier: 2,
+      minSpendMultiplier: WAR_ROOM_OPS_CONSTANTS.thresholds.testLab.minSpendMultiplier,
+      maxSpendMultiplier: WAR_ROOM_OPS_CONSTANTS.thresholds.testLab.maxSpendMultiplier,
     };
 
     let evaluation = evaluateCreativeTest(payload);
@@ -369,7 +370,7 @@ export function TestLaboratoryModule({ actorName, actorRole }: TestLaboratoryMod
 
   async function notifyFatigueRisk() {
     const message =
-      "RISCO DE FADIGA: fila Ready to Upload vazia. Sem novos testes, tendencia de queda de ROAS em ate 72h.";
+      `RISCO DE FADIGA: fila Ready to Upload vazia. Sem novos testes, tendencia de queda de ROAS em ate ${WAR_ROOM_OPS_CONSTANTS.thresholds.testLab.fatigueRiskHours}h.`;
     await fetch("/api/notify-squad", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -699,7 +700,7 @@ export function TestLaboratoryModule({ actorName, actorRole }: TestLaboratoryMod
           <CardHeader>
             <CardTitle className="text-base">Capacidade e Burn Rate</CardTitle>
             <CardDescription className="text-xs">
-              Se Ready to Upload ficar vazio, risco de fadiga em ate 72h.
+              Se Ready to Upload ficar vazio, risco de fadiga em ate {WAR_ROOM_OPS_CONSTANTS.thresholds.testLab.fatigueRiskHours}h.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
@@ -727,9 +728,17 @@ export function TestLaboratoryModule({ actorName, actorRole }: TestLaboratoryMod
 
             <div className="rounded border border-white/10 bg-black/30 p-3 text-xs">
               <p className="mb-1 text-slate-300">Regras de validacao automatica (backend)</p>
-              <p className="text-slate-400">APPROVED: CPA abaixo do alvo + Hook Rate 3s acima de 25%.</p>
-              <p className="text-slate-400">HOOK FAILURE: CTR alto, mas Hook Rate abaixo de 15%.</p>
-              <p className="text-slate-400">KILLED: CPA acima de 2x alvo apos gasto minimo.</p>
+              <p className="text-slate-400">
+                APPROVED: CPA abaixo do alvo + Hook Rate 3s acima de{" "}
+                {WAR_ROOM_OPS_CONSTANTS.thresholds.testLab.approvedHookRatePct}%.
+              </p>
+              <p className="text-slate-400">
+                HOOK FAILURE: CTR alto, mas Hook Rate abaixo de{" "}
+                {WAR_ROOM_OPS_CONSTANTS.thresholds.testLab.hookFailureRatePct}%.
+              </p>
+              <p className="text-slate-400">
+                KILLED: CPA acima de {WAR_ROOM_OPS_CONSTANTS.thresholds.testLab.maxSpendMultiplier}x alvo apos gasto minimo.
+              </p>
             </div>
           </CardContent>
         </Card>

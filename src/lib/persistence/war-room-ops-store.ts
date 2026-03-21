@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { ProviderName } from "@/lib/integrations/warroom-adapters";
+import { WAR_ROOM_OPS_CONSTANTS } from "@/lib/config/war-room-ops.constants";
 import type { WarRoomData } from "@/lib/war-room/types";
 
 type DemandTask = WarRoomData["commandCenter"]["tasks"][number];
@@ -134,8 +135,8 @@ export async function upsertWebhookEvent(record: WebhookEventRecord) {
     } else {
       store.webhookEvents.push(record);
     }
-    if (store.webhookEvents.length > 2000) {
-      store.webhookEvents = store.webhookEvents.slice(-2000);
+    if (store.webhookEvents.length > WAR_ROOM_OPS_CONSTANTS.queue.store.maxWebhookEvents) {
+      store.webhookEvents = store.webhookEvents.slice(-WAR_ROOM_OPS_CONSTANTS.queue.store.maxWebhookEvents);
     }
     return record;
   });
@@ -172,7 +173,9 @@ export async function writePersistedCommandCenterTasks(tasks: DemandTask[]) {
 
 export async function appendTaskApproval(approval: TaskApprovalRecord) {
   return withStoreMutation((store) => {
-    store.commandCenter.approvals = [...store.commandCenter.approvals, approval].slice(-2000);
+    store.commandCenter.approvals = [...store.commandCenter.approvals, approval].slice(
+      -WAR_ROOM_OPS_CONSTANTS.queue.store.maxApprovals,
+    );
     return approval;
   });
 }
@@ -210,8 +213,8 @@ export async function enqueueOpsJob(params: {
     } else {
       store.jobs.push(record);
     }
-    if (store.jobs.length > 10_000) {
-      store.jobs = store.jobs.slice(-10_000);
+    if (store.jobs.length > WAR_ROOM_OPS_CONSTANTS.queue.store.maxJobs) {
+      store.jobs = store.jobs.slice(-WAR_ROOM_OPS_CONSTANTS.queue.store.maxJobs);
     }
     return record;
   });

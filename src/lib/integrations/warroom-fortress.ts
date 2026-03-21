@@ -33,6 +33,13 @@ function toVaultStatus(
   if (safeBrowsingStatus === "unsafe" || facebookDebuggerStatus === "down" || cloudflareStatus === "down") {
     return "blocked";
   }
+  const score = computeDomainHealthScore(safeBrowsingStatus, facebookDebuggerStatus, cloudflareStatus);
+  if (score <= WAR_ROOM_OPS_CONSTANTS.vault.healthScoreThresholds.blocked) {
+    return "blocked";
+  }
+  if (score <= WAR_ROOM_OPS_CONSTANTS.vault.healthScoreThresholds.warning) {
+    return "warning";
+  }
   if (
     safeBrowsingStatus === "unknown" ||
     facebookDebuggerStatus === "warning" ||
@@ -43,6 +50,20 @@ function toVaultStatus(
     return fallback === "blocked" ? "warning" : fallback;
   }
   return "ok";
+}
+
+function computeDomainHealthScore(
+  safeBrowsingStatus: SafeBrowsingStatus,
+  facebookDebuggerStatus: FacebookDebuggerStatus,
+  cloudflareStatus: CloudflareStatus,
+) {
+  const weights = WAR_ROOM_OPS_CONSTANTS.vault.healthScoreWeights;
+  const safeScore = safeBrowsingStatus === "safe" ? 100 : safeBrowsingStatus === "unknown" ? 65 : 0;
+  const facebookScore =
+    facebookDebuggerStatus === "ok" ? 100 : facebookDebuggerStatus === "warning" ? 60 : facebookDebuggerStatus === "unknown" ? 50 : 20;
+  const cloudflareScore =
+    cloudflareStatus === "up" ? 100 : cloudflareStatus === "degraded" ? 55 : cloudflareStatus === "unknown" ? 45 : 0;
+  return safeScore * weights.safeBrowsing + facebookScore * weights.facebookDebugger + cloudflareScore * weights.cloudflare;
 }
 
 async function checkSafeBrowsing(domain: string): Promise<SafeBrowsingStatus> {
@@ -174,6 +195,7 @@ async function runDomainChecks(base: WarRoomData): Promise<VaultDomainSnapshot[]
       const safeBrowsingStatus = await checkSafeBrowsing(domain);
       const facebookDebuggerStatus = await checkFacebookDebugger(domain);
       const cloudflareStatus = await checkCloudflareDomain(domain);
+      const score = computeDomainHealthScore(safeBrowsingStatus, facebookDebuggerStatus, cloudflareStatus);
       const status = toVaultStatus(safeBrowsingStatus, facebookDebuggerStatus, cloudflareStatus, fallback?.status ?? "warning");
       const note =
         status === "blocked"
@@ -188,7 +210,7 @@ async function runDomainChecks(base: WarRoomData): Promise<VaultDomainSnapshot[]
         cloudflareStatus,
         blacklistHits: safeBrowsingStatus === "unsafe" ? 1 : 0,
         status,
-        note,
+        note: `${note} Health Score: ${score.toFixed(1)}.`,
         checkedAt,
       } satisfies VaultDomainSnapshot;
     }),

@@ -4,6 +4,7 @@ import {
   resolveAdapterByProvider,
   type ProviderName,
 } from "@/lib/integrations/warroom-adapters";
+import { WAR_ROOM_OPS_CONSTANTS } from "@/lib/config/war-room-ops.constants";
 import { listDeadLetterEvents } from "@/lib/persistence/war-room-ops-store";
 import { enqueueOpsJob, getOpsJobStats } from "@/lib/persistence/war-room-ops-store";
 import { processOpsJobQueue } from "@/lib/ops/war-room-ops-worker";
@@ -113,7 +114,7 @@ export async function POST(request: Request) {
       signature,
     },
   });
-  const workerKick = await processOpsJobQueue(10);
+  const workerKick = await processOpsJobQueue(WAR_ROOM_OPS_CONSTANTS.queue.webhook.enqueueWorkerKickBatchSize);
   const stats = await getOpsJobStats();
   return NextResponse.json({
     ok: true,
@@ -144,9 +145,9 @@ export async function GET(request: Request) {
   if (!isAuthorized(request)) {
     return NextResponse.json({ error: "Nao autorizado." }, { status: 401 });
   }
-  const retries = await processDueWebhookRetries(50);
-  const worker = await processOpsJobQueue(25);
-  const deadLetters = await listDeadLetterEvents(25);
+  const retries = await processDueWebhookRetries(WAR_ROOM_OPS_CONSTANTS.queue.webhook.retryScanBatchSize);
+  const worker = await processOpsJobQueue(WAR_ROOM_OPS_CONSTANTS.queue.worker.observabilityBatchSize);
+  const deadLetters = await listDeadLetterEvents(WAR_ROOM_OPS_CONSTANTS.queue.webhook.deadLetterListBatchSize);
   return NextResponse.json({
     retries,
     worker,

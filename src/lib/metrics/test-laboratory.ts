@@ -1,4 +1,5 @@
 import { safeDivide, toFiniteNumber } from "@/lib/metrics/kpis";
+import { WAR_ROOM_OPS_CONSTANTS } from "@/lib/config/war-room-ops.constants";
 
 export type TestLabVerdict = "continue" | "approved" | "hook_failure" | "killed";
 
@@ -20,13 +21,17 @@ export type TestLabEvaluationResult = {
   reason: string;
 };
 
-const DEFAULT_MIN_SPEND_MULTIPLIER = 1;
-const DEFAULT_MAX_SPEND_MULTIPLIER = 2;
-const APPROVED_HOOK_RATE_PCT = 25;
-const HOOK_FAILURE_RATE_PCT = 15;
-const HIGH_CTR_OUTBOUND_PCT = 1.2;
+const DEFAULT_MIN_SPEND_MULTIPLIER = WAR_ROOM_OPS_CONSTANTS.thresholds.testLab.minSpendMultiplier;
+const DEFAULT_MAX_SPEND_MULTIPLIER = WAR_ROOM_OPS_CONSTANTS.thresholds.testLab.maxSpendMultiplier;
+const APPROVED_HOOK_RATE_PCT = WAR_ROOM_OPS_CONSTANTS.thresholds.testLab.approvedHookRatePct;
+const HOOK_FAILURE_RATE_PCT = WAR_ROOM_OPS_CONSTANTS.thresholds.testLab.hookFailureRatePct;
+const HIGH_CTR_OUTBOUND_PCT = WAR_ROOM_OPS_CONSTANTS.thresholds.testLab.highCtrOutboundPct;
 
-export function getValidationSpendWindow(targetCpa: number, minMultiplier = DEFAULT_MIN_SPEND_MULTIPLIER, maxMultiplier = DEFAULT_MAX_SPEND_MULTIPLIER) {
+export function getValidationSpendWindow(
+  targetCpa: number,
+  minMultiplier: number = DEFAULT_MIN_SPEND_MULTIPLIER,
+  maxMultiplier: number = DEFAULT_MAX_SPEND_MULTIPLIER,
+) {
   const safeTarget = Math.max(1, toFiniteNumber(targetCpa, 0));
   const safeMinMultiplier = Math.max(0.5, toFiniteNumber(minMultiplier, DEFAULT_MIN_SPEND_MULTIPLIER));
   const safeMaxMultiplier = Math.max(safeMinMultiplier, toFiniteNumber(maxMultiplier, DEFAULT_MAX_SPEND_MULTIPLIER));

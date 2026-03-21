@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 import { ingestIntegrationEvent, markProviderError } from "./warroom-integration-store";
 import { resolveAdapterByProvider, type ProviderName } from "./warroom-adapters";
+import { WAR_ROOM_OPS_CONSTANTS } from "@/lib/config/war-room-ops.constants";
 import {
   listDueRetryEvents,
   readWebhookEvent,
@@ -8,7 +9,7 @@ import {
   upsertWebhookEvent,
 } from "@/lib/persistence/war-room-ops-store";
 
-const MAX_RETRY_ATTEMPTS = 4;
+const MAX_RETRY_ATTEMPTS = WAR_ROOM_OPS_CONSTANTS.queue.webhook.maxRetryAttempts;
 
 type ProcessWebhookInput = {
   provider: ProviderName;
@@ -54,7 +55,11 @@ function verifyHmacSignature(provider: ProviderName, rawBody: string, incomingSi
 }
 
 function computeNextRetryIso(attempts: number) {
-  const backoffMinutes = Math.min(60, 2 ** Math.max(1, attempts - 1));
+  const base = WAR_ROOM_OPS_CONSTANTS.queue.webhook.retryBaseMinutes;
+  const backoffMinutes = Math.min(
+    WAR_ROOM_OPS_CONSTANTS.queue.webhook.maxBackoffMinutes,
+    base ** Math.max(1, attempts - 1),
+  );
   return new Date(Date.now() + backoffMinutes * 60 * 1000).toISOString();
 }
 
