@@ -857,6 +857,7 @@ export default function Dashboard({ data, users, session, initialSection }: Dash
                 canUseScalingAdvisor={permissions.canUseScalingAdvisor}
                 canViewSystemHealthMode={permissions.canViewSystemHealthMode}
                 actorName={activeUser.name}
+                actorRole={sessionState.role}
               />
             )}
             {activeSection === "testLaboratory" && isSectionAllowed && (

@@ -7,6 +7,18 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ContingencyMonitor } from "@/components/war-room/contingency-monitor";
 import { computeIntelligenceEngine } from "@/lib/metrics/intelligence-engine";
+import { calculateEstimatedNetProfit, toDateOnlyIso } from "@/lib/metrics/daily-settlement";
+import type { UserRole } from "@/lib/auth/rbac";
+import {
+  CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 const percent = (value: number) => `${value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
 const currency = (value: number) => value.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -18,6 +30,49 @@ type TrafficAttributionModuleProps = {
   canUseScalingAdvisor: boolean;
   canViewSystemHealthMode: boolean;
   actorName: string;
+  actorRole: UserRole;
+};
+
+type DailySettlementForm = {
+  date: string;
+  niche: string;
+  adSpend: number;
+  salesCount: number;
+  grossRevenue: number;
+  ctr: number;
+  cpc: number;
+  cpm: number;
+  checkoutRate: number;
+  winningCreativeId: string;
+  audienceInsight: string;
+  productionFeedback: string;
+};
+
+type DailySettlementSummaryPayload = {
+  userId: string;
+  pendingStatus: {
+    date: string;
+    hasRecord: boolean;
+  };
+  weeklyProfit: number;
+  monthlyProfit: number;
+  trend: Array<{
+    date: string;
+    adSpend: number;
+    grossRevenue: number;
+    netProfit: number;
+  }>;
+};
+
+type SettlementFeedbackItem = {
+  id: string;
+  date: string;
+  managerName: string;
+  niche: string;
+  winningCreativeId: string;
+  audienceInsight: string;
+  productionFeedback: string;
+  netProfit: number;
 };
 
 export function TrafficAttributionModule({
@@ -25,6 +80,7 @@ export function TrafficAttributionModule({
   canUseScalingAdvisor,
   canViewSystemHealthMode,
   actorName,
+  actorRole,
 }: TrafficAttributionModuleProps) {
   const { data, updateTrafficCpa, addActivity } = useWarRoom();
   const [manualDailySpend, setManualDailySpend] = useState({
@@ -62,6 +118,47 @@ export function TrafficAttributionModule({
       source: string;
     }>
   >([]);
+  const [dailySettlementForm, setDailySettlementForm] = useState<DailySettlementForm>({
+    date: toDateOnlyIso(new Date()),
+    niche: "geral",
+    adSpend: 0,
+    salesCount: 0,
+    grossRevenue: 0,
+    ctr: 0,
+    cpc: 0,
+    cpm: 0,
+    checkoutRate: 0,
+    winningCreativeId: data.liveAdsTracking[0]?.id ?? "CR-001",
+    audienceInsight: "",
+    productionFeedback: "",
+  });
+  const [dailySettlementSummary, setDailySettlementSummary] = useState<DailySettlementSummaryPayload | null>(null);
+  const [savingDailySettlement, setSavingDailySettlement] = useState(false);
+  const [dailySettlementError, setDailySettlementError] = useState("");
+  const [settlementFeedback, setSettlementFeedback] = useState<SettlementFeedbackItem[]>([]);
+  const [adminSnapshot, setAdminSnapshot] = useState<{
+    managers: Array<{
+      userId: string;
+      userName: string;
+      totalNetProfit: number;
+      totalGrossRevenue: number;
+      totalAdSpend: number;
+      daysReported: number;
+      topNiche: string;
+      avgNetPerDay: number;
+    }>;
+    niches: Array<{
+      niche: string;
+      totalNetProfit: number;
+      totalGrossRevenue: number;
+      totalAdSpend: number;
+      daysReported: number;
+    }>;
+  } | null>(null);
+  const [adminFilters, setAdminFilters] = useState({
+    managerUserId: "",
+    niche: "",
+  });
   const squads = data.enterprise.trafficAttribution.squads;
   const intelligence = computeIntelligenceEngine(data);
   const killSwitch = data.integrations.operations.killSwitch;
@@ -87,6 +184,12 @@ export function TrafficAttributionModule({
     .sort((a, b) => a.effectiveCpa - b.effectiveCpa)[0];
   const offersLabApiOnline = data.integrations.apiStatus.utmify.status === "online";
   const effectiveDataMode = manualMode || !offersLabApiOnline ? "manual" : "api";
+  const liveNetProfit = calculateEstimatedNetProfit({
+    grossRevenue: dailySettlementForm.grossRevenue,
+    adSpend: dailySettlementForm.adSpend,
+  }).netProfit;
+  const isAdminView = actorRole === "ceo" || actorRole === "financeManager" || actorRole === "cfo";
+  const pendingYesterday = dailySettlementSummary?.pendingStatus && !dailySettlementSummary.pendingStatus.hasRecord;
 
 
   function renderSquad(source: Source, label: string) {
@@ -188,12 +291,415 @@ export function TrafficAttributionModule({
     void fetchTimelinePreview();
   }
 
+  const fetchDailySettlementSummary = useCallback(async () => {
+    const response = await fetch("/api/daily-settlements/summary", { cache: "no-store" }).catch(() => null);
+    if (!response?.ok) {
+      return;
+    }
+    const payload = (await response.json().catch(() => null)) as DailySettlementSummaryPayload | null;
+    if (!payload) {
+      return;
+    }
+    setDailySettlementSummary(payload);
+  }, []);
+
+  const fetchSettlementFeedback = useCallback(async () => {
+    const response = await fetch("/api/daily-settlements?mode=feedback&team=editing&limit=8", { cache: "no-store" }).catch(() => null);
+    if (!response?.ok) {
+      return;
+    }
+    const payload = (await response.json().catch(() => null)) as { items?: SettlementFeedbackItem[] } | null;
+    if (!payload?.items) {
+      return;
+    }
+    setSettlementFeedback(payload.items);
+  }, []);
+
+  const fetchAdminSnapshot = useCallback(async () => {
+    if (!isAdminView) {
+      return;
+    }
+    const query = new URLSearchParams();
+    if (adminFilters.managerUserId) {
+      query.set("managerUserId", adminFilters.managerUserId);
+    }
+    if (adminFilters.niche) {
+      query.set("niche", adminFilters.niche);
+    }
+    const response = await fetch(`/api/daily-settlements/admin?${query.toString()}`, { cache: "no-store" }).catch(() => null);
+    if (!response?.ok) {
+      return;
+    }
+    const payload = (await response.json().catch(() => null)) as
+      | {
+          managers?: Array<{
+            userId: string;
+            userName: string;
+            totalNetProfit: number;
+            totalGrossRevenue: number;
+            totalAdSpend: number;
+            daysReported: number;
+            topNiche: string;
+            avgNetPerDay: number;
+          }>;
+          niches?: Array<{
+            niche: string;
+            totalNetProfit: number;
+            totalGrossRevenue: number;
+            totalAdSpend: number;
+            daysReported: number;
+          }>;
+        }
+      | null;
+    if (!payload?.managers || !payload?.niches) {
+      return;
+    }
+    setAdminSnapshot({
+      managers: payload.managers,
+      niches: payload.niches,
+    });
+  }, [adminFilters.managerUserId, adminFilters.niche, isAdminView]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void fetchDailySettlementSummary();
+      void fetchSettlementFeedback();
+      void fetchAdminSnapshot();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [fetchAdminSnapshot, fetchDailySettlementSummary, fetchSettlementFeedback]);
+
+  function validateDailySettlementForm() {
+    if (!dailySettlementForm.niche.trim()) {
+      return "Informe o nicho da operacao.";
+    }
+    if (!dailySettlementForm.winningCreativeId.trim()) {
+      return "Informe o ID do criativo vencedor.";
+    }
+    if (!dailySettlementForm.audienceInsight.trim()) {
+      return "Audience insight para o time de Copy e obrigatorio.";
+    }
+    if (!dailySettlementForm.productionFeedback.trim()) {
+      return "Production feedback para o time de Edicao e obrigatorio.";
+    }
+    const numericValues = [
+      dailySettlementForm.adSpend,
+      dailySettlementForm.salesCount,
+      dailySettlementForm.grossRevenue,
+      dailySettlementForm.ctr,
+      dailySettlementForm.cpc,
+      dailySettlementForm.cpm,
+      dailySettlementForm.checkoutRate,
+    ];
+    if (numericValues.some((value) => !Number.isFinite(value) || value < 0)) {
+      return "Todos os campos numericos devem ser validos e >= 0.";
+    }
+    return "";
+  }
+
+  async function saveDailySettlement() {
+    const validationError = validateDailySettlementForm();
+    if (validationError) {
+      setDailySettlementError(validationError);
+      return;
+    }
+    setDailySettlementError("");
+    setSavingDailySettlement(true);
+    const response = await fetch("/api/daily-settlements", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(dailySettlementForm),
+    }).catch(() => null);
+    setSavingDailySettlement(false);
+    if (!response?.ok) {
+      const payload = (await response?.json().catch(() => null)) as { error?: string; detail?: string } | null;
+      setDailySettlementError(payload?.detail || payload?.error || "Falha ao salvar Daily Settlement.");
+      return;
+    }
+    addActivity(
+      "Trafego",
+      actorName,
+      "salvou daily settlement",
+      dailySettlementForm.date,
+      `nicho ${dailySettlementForm.niche} | winner ${dailySettlementForm.winningCreativeId}`,
+    );
+    void fetchDailySettlementSummary();
+    void fetchSettlementFeedback();
+    void fetchAdminSnapshot();
+  }
+
   return (
     <section className="war-fade-in space-y-4">
       {killSwitch?.autoTrafficBlocked && (
         <Card className="border-rose-300/40 bg-rose-500/10">
           <CardContent className="p-3 text-sm text-rose-100">
             Auto-block ativo: trafego pausado por contingencia ({killSwitch.reason}).
+          </CardContent>
+        </Card>
+      )}
+
+      {pendingYesterday && (
+        <Card className="border-[#FF9900]/40 bg-[#FF9900]/10">
+          <CardContent className="p-3 text-sm text-[#FFD39A]">
+            Pendencia operacional: nao existe Daily Settlement para {dailySettlementSummary?.pendingStatus.date}. Complete o fechamento para liberar o dia atual.
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Daily Settlement (Fechamento Diário)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid gap-2 md:grid-cols-3">
+            <div className="rounded border border-white/10 bg-white/5 p-3 text-xs">
+              <p className="text-slate-400">Lucro do Dia (input atual)</p>
+              <p className={liveNetProfit >= 0 ? "text-emerald-300" : "text-rose-300"}>
+                {currency(liveNetProfit)}
+              </p>
+            </div>
+            <div className="rounded border border-white/10 bg-white/5 p-3 text-xs">
+              <p className="text-slate-400">Lucro da Semana (7D)</p>
+              <p className={(dailySettlementSummary?.weeklyProfit ?? 0) >= 0 ? "text-emerald-300" : "text-rose-300"}>
+                {currency(dailySettlementSummary?.weeklyProfit ?? 0)}
+              </p>
+            </div>
+            <div className="rounded border border-white/10 bg-white/5 p-3 text-xs">
+              <p className="text-slate-400">Lucro do Mes (30D)</p>
+              <p className={(dailySettlementSummary?.monthlyProfit ?? 0) >= 0 ? "text-emerald-300" : "text-rose-300"}>
+                {currency(dailySettlementSummary?.monthlyProfit ?? 0)}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-2 md:grid-cols-4">
+            <label className="space-y-1 text-xs text-slate-300">
+              <span>Data</span>
+              <input
+                type="date"
+                value={dailySettlementForm.date}
+                onChange={(event) => setDailySettlementForm((prev) => ({ ...prev, date: event.target.value }))}
+                className="h-8 w-full rounded border border-white/10 bg-slate-900/70 px-2"
+              />
+            </label>
+            <label className="space-y-1 text-xs text-slate-300">
+              <span>Nicho</span>
+              <input
+                value={dailySettlementForm.niche}
+                onChange={(event) => setDailySettlementForm((prev) => ({ ...prev, niche: event.target.value }))}
+                placeholder="ex: emagrecimento"
+                className="h-8 w-full rounded border border-white/10 bg-slate-900/70 px-2"
+              />
+            </label>
+            <label className="space-y-1 text-xs text-slate-300">
+              <span>ID criativo vencedor</span>
+              <input
+                value={dailySettlementForm.winningCreativeId}
+                onChange={(event) => setDailySettlementForm((prev) => ({ ...prev, winningCreativeId: event.target.value }))}
+                className="h-8 w-full rounded border border-white/10 bg-slate-900/70 px-2"
+              />
+            </label>
+            <label className="space-y-1 text-xs text-slate-300">
+              <span>Sales Count</span>
+              <input
+                type="number"
+                value={dailySettlementForm.salesCount}
+                onChange={(event) => setDailySettlementForm((prev) => ({ ...prev, salesCount: Number(event.target.value || 0) }))}
+                className="h-8 w-full rounded border border-white/10 bg-slate-900/70 px-2"
+              />
+            </label>
+          </div>
+
+          <div className="grid gap-2 md:grid-cols-4">
+            <label className="space-y-1 text-xs text-slate-300">
+              <span>Ad Spend</span>
+              <input
+                type="number"
+                value={dailySettlementForm.adSpend}
+                onChange={(event) => setDailySettlementForm((prev) => ({ ...prev, adSpend: Number(event.target.value || 0) }))}
+                className="h-8 w-full rounded border border-white/10 bg-slate-900/70 px-2"
+              />
+            </label>
+            <label className="space-y-1 text-xs text-slate-300">
+              <span>Gross Revenue</span>
+              <input
+                type="number"
+                value={dailySettlementForm.grossRevenue}
+                onChange={(event) => setDailySettlementForm((prev) => ({ ...prev, grossRevenue: Number(event.target.value || 0) }))}
+                className="h-8 w-full rounded border border-white/10 bg-slate-900/70 px-2"
+              />
+            </label>
+            <label className="space-y-1 text-xs text-slate-300">
+              <span>CTR (%)</span>
+              <input
+                type="number"
+                value={dailySettlementForm.ctr}
+                onChange={(event) => setDailySettlementForm((prev) => ({ ...prev, ctr: Number(event.target.value || 0) }))}
+                className="h-8 w-full rounded border border-white/10 bg-slate-900/70 px-2"
+              />
+            </label>
+            <label className="space-y-1 text-xs text-slate-300">
+              <span>CPC</span>
+              <input
+                type="number"
+                value={dailySettlementForm.cpc}
+                onChange={(event) => setDailySettlementForm((prev) => ({ ...prev, cpc: Number(event.target.value || 0) }))}
+                className="h-8 w-full rounded border border-white/10 bg-slate-900/70 px-2"
+              />
+            </label>
+            <label className="space-y-1 text-xs text-slate-300">
+              <span>CPM</span>
+              <input
+                type="number"
+                value={dailySettlementForm.cpm}
+                onChange={(event) => setDailySettlementForm((prev) => ({ ...prev, cpm: Number(event.target.value || 0) }))}
+                className="h-8 w-full rounded border border-white/10 bg-slate-900/70 px-2"
+              />
+            </label>
+            <label className="space-y-1 text-xs text-slate-300">
+              <span>Checkout Rate (%)</span>
+              <input
+                type="number"
+                value={dailySettlementForm.checkoutRate}
+                onChange={(event) => setDailySettlementForm((prev) => ({ ...prev, checkoutRate: Number(event.target.value || 0) }))}
+                className="h-8 w-full rounded border border-white/10 bg-slate-900/70 px-2"
+              />
+            </label>
+          </div>
+
+          <div className="grid gap-2 md:grid-cols-2">
+            <label className="space-y-1 text-xs text-slate-300">
+              <span>Audience Insight (feedback para Copy)</span>
+              <textarea
+                value={dailySettlementForm.audienceInsight}
+                onChange={(event) => setDailySettlementForm((prev) => ({ ...prev, audienceInsight: event.target.value }))}
+                className="min-h-20 w-full rounded border border-white/10 bg-slate-900/70 p-2"
+              />
+            </label>
+            <label className="space-y-1 text-xs text-slate-300">
+              <span>Production Feedback (feedback para Edicao)</span>
+              <textarea
+                value={dailySettlementForm.productionFeedback}
+                onChange={(event) => setDailySettlementForm((prev) => ({ ...prev, productionFeedback: event.target.value }))}
+                className="min-h-20 w-full rounded border border-white/10 bg-slate-900/70 p-2"
+              />
+            </label>
+          </div>
+
+          {dailySettlementError ? <p className="text-xs text-rose-300">{dailySettlementError}</p> : null}
+          <Button type="button" className="h-8 px-3 text-xs" onClick={() => void saveDailySettlement()} disabled={savingDailySettlement}>
+            {savingDailySettlement ? "Salvando..." : "Salvar Fechamento Diário"}
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Evolucao diaria: Investimento vs Lucro Liquido</CardTitle>
+        </CardHeader>
+        <CardContent className="h-72">
+          {dailySettlementSummary?.trend.length ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={dailySettlementSummary.trend}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#2b2b2b" />
+                <XAxis dataKey="date" stroke="#94A3B8" tick={{ fontSize: 11 }} />
+                <YAxis stroke="#94A3B8" tick={{ fontSize: 11 }} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: "#0f172a", border: "1px solid #334155", borderRadius: 8 }}
+                  formatter={(value) => currency(Number(value ?? 0))}
+                />
+                <Legend />
+                <Line type="monotone" dataKey="adSpend" name="Investimento" stroke="#FF9900" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="netProfit" name="Lucro Liquido" stroke="#10B981" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="text-xs text-slate-500">Sem historico suficiente para o grafico ainda.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Feedback Loop disparado para Copy e Edicao</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-xs">
+          {settlementFeedback.length === 0 ? (
+            <p className="rounded border border-white/10 bg-white/5 p-2 text-slate-400">
+              Nenhum feedback recente de Daily Settlement.
+            </p>
+          ) : (
+            settlementFeedback.map((item) => (
+              <div key={item.id} className="rounded border border-white/10 bg-white/5 p-2">
+                <p className="text-slate-100">
+                  {item.date} | {item.managerName} | Nicho: {item.niche}
+                </p>
+                <p className="text-[#FFB347]">Copy: {item.audienceInsight}</p>
+                <p className="text-slate-300">
+                  Edicao ({item.winningCreativeId}): {item.productionFeedback}
+                </p>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
+
+      {isAdminView && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Admin Daily Settlement (CEO) - Ranking por Gestor e Nicho</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-xs">
+            <div className="grid gap-2 md:grid-cols-[2fr_2fr_auto]">
+              <input
+                value={adminFilters.managerUserId}
+                onChange={(event) => setAdminFilters((prev) => ({ ...prev, managerUserId: event.target.value }))}
+                placeholder="Filtrar por user_id do gestor"
+                className="h-8 rounded border border-white/10 bg-slate-900/70 px-2"
+              />
+              <input
+                value={adminFilters.niche}
+                onChange={(event) => setAdminFilters((prev) => ({ ...prev, niche: event.target.value }))}
+                placeholder="Filtrar por nicho"
+                className="h-8 rounded border border-white/10 bg-slate-900/70 px-2"
+              />
+              <Button type="button" className="h-8 px-3 text-xs" onClick={() => void fetchAdminSnapshot()}>
+                Aplicar filtro
+              </Button>
+            </div>
+
+            <div className="grid gap-2 md:grid-cols-2">
+              <div className="rounded border border-white/10 bg-white/5 p-2">
+                <p className="mb-1 text-slate-300">Lucro por Gestor</p>
+                <div className="space-y-1">
+                  {adminSnapshot?.managers.slice(0, 10).map((row) => (
+                    <div key={row.userId} className="rounded border border-white/10 bg-black/30 p-2">
+                      <p className="text-slate-100">
+                        {row.userName} ({row.userId})
+                      </p>
+                      <p className={row.totalNetProfit >= 0 ? "text-emerald-300" : "text-rose-300"}>
+                        Lucro: {currency(row.totalNetProfit)} | Nicho top: {row.topNiche}
+                      </p>
+                    </div>
+                  ))}
+                  {!adminSnapshot?.managers.length ? <p className="text-slate-500">Sem dados no periodo.</p> : null}
+                </div>
+              </div>
+              <div className="rounded border border-white/10 bg-white/5 p-2">
+                <p className="mb-1 text-slate-300">Lucro por Nicho</p>
+                <div className="space-y-1">
+                  {adminSnapshot?.niches.slice(0, 10).map((row) => (
+                    <div key={row.niche} className="rounded border border-white/10 bg-black/30 p-2">
+                      <p className="text-slate-100">{row.niche}</p>
+                      <p className={row.totalNetProfit >= 0 ? "text-emerald-300" : "text-rose-300"}>
+                        Lucro: {currency(row.totalNetProfit)} | Spend: {currency(row.totalAdSpend)}
+                      </p>
+                    </div>
+                  ))}
+                  {!adminSnapshot?.niches.length ? <p className="text-slate-500">Sem dados no periodo.</p> : null}
+                </div>
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}

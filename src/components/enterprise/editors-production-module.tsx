@@ -50,6 +50,17 @@ export function EditorsProductionModule({
       updatedAt: string;
     }>
   >([]);
+  const [settlementFeedback, setSettlementFeedback] = useState<
+    Array<{
+      id: string;
+      date: string;
+      managerName: string;
+      niche: string;
+      winningCreativeId: string;
+      productionFeedback: string;
+      netProfit: number;
+    }>
+  >([]);
   const priorityQueue = useMemo(
     () =>
       data.liveAdsTracking
@@ -131,12 +142,37 @@ export function EditorsProductionModule({
     setAssetWorkflow(payload.items);
   }, []);
 
+  const fetchDailySettlementFeedback = useCallback(async () => {
+    const response = await fetch("/api/daily-settlements?mode=feedback&team=editing&limit=10", { cache: "no-store" }).catch(() => null);
+    if (!response?.ok) {
+      return;
+    }
+    const payload = (await response.json().catch(() => null)) as
+      | {
+          items?: Array<{
+            id: string;
+            date: string;
+            managerName: string;
+            niche: string;
+            winningCreativeId: string;
+            productionFeedback: string;
+            netProfit: number;
+          }>;
+        }
+      | null;
+    if (!payload?.items) {
+      return;
+    }
+    setSettlementFeedback(payload.items);
+  }, []);
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void fetchAssetWorkflow();
+      void fetchDailySettlementFeedback();
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [fetchAssetWorkflow]);
+  }, [fetchAssetWorkflow, fetchDailySettlementFeedback]);
 
   async function finalizeAssetForTraffic(creativeUrl: string) {
     if (!deliveryDraft.assetId) {
@@ -175,6 +211,32 @@ export function EditorsProductionModule({
             ))
           )}
           {!canManageProductionQueue && <p className="text-slate-500">Permissão de gestão de fila restrita ao squad de produção.</p>}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Feedback do Daily Settlement (Time de Edição)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-xs">
+          {settlementFeedback.length === 0 ? (
+            <p className="rounded border border-white/10 bg-white/5 p-2 text-slate-500">
+              Sem feedback recente de producao vindo dos gestores.
+            </p>
+          ) : (
+            settlementFeedback.map((item) => (
+              <div key={item.id} className="rounded border border-white/10 bg-white/5 p-2">
+                <p className="text-slate-100">
+                  {item.date} | {item.managerName} | Nicho: {item.niche}
+                </p>
+                <p className="text-[#FFB347]">Criativo winner: {item.winningCreativeId}</p>
+                <p className="text-slate-300">{item.productionFeedback}</p>
+                <p className="text-slate-500">
+                  Contexto de lucro: {item.netProfit.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}
+                </p>
+              </div>
+            ))
+          )}
         </CardContent>
       </Card>
 

@@ -213,6 +213,17 @@ export function CopyResearchModule({
       score: number;
     }>;
   } | null>(null);
+  const [settlementFeedback, setSettlementFeedback] = useState<
+    Array<{
+      id: string;
+      date: string;
+      managerName: string;
+      niche: string;
+      winningCreativeId: string;
+      audienceInsight: string;
+      netProfit: number;
+    }>
+  >([]);
 
   const selectedIdea = ideas.find((idea) => idea.id === selectedIdeaId) ?? ideas[0];
 
@@ -577,13 +588,38 @@ export function CopyResearchModule({
     });
   }, []);
 
+  const fetchDailySettlementFeedback = useCallback(async () => {
+    const response = await fetch("/api/daily-settlements?mode=feedback&team=copy&limit=10", { cache: "no-store" }).catch(() => null);
+    if (!response?.ok) {
+      return;
+    }
+    const payload = (await response.json().catch(() => null)) as
+      | {
+          items?: Array<{
+            id: string;
+            date: string;
+            managerName: string;
+            niche: string;
+            winningCreativeId: string;
+            audienceInsight: string;
+            netProfit: number;
+          }>;
+        }
+      | null;
+    if (!payload?.items) {
+      return;
+    }
+    setSettlementFeedback(payload.items);
+  }, []);
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void fetchAssetWorkflow();
       void fetchDeepInsights();
+      void fetchDailySettlementFeedback();
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [fetchAssetWorkflow, fetchDeepInsights]);
+  }, [fetchAssetWorkflow, fetchDailySettlementFeedback, fetchDeepInsights]);
 
   async function copyNamingToClipboard() {
     if (!namingPreview.valid) {
@@ -734,6 +770,32 @@ export function CopyResearchModule({
             </div>
           </div>
           <div className="rounded border border-white/10 bg-black/30 p-2 text-xs text-slate-200">{sentiment.recommendation}</div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Feedback do Daily Settlement (Time de Copy)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-xs">
+          {settlementFeedback.length === 0 ? (
+            <p className="rounded border border-white/10 bg-white/5 p-2 text-slate-500">
+              Sem feedback recente de gestores de trafego.
+            </p>
+          ) : (
+            settlementFeedback.map((item) => (
+              <div key={item.id} className="rounded border border-white/10 bg-white/5 p-2">
+                <p className="text-slate-100">
+                  {item.date} | {item.managerName} | Nicho: {item.niche}
+                </p>
+                <p className="text-[#FFB347]">{item.audienceInsight}</p>
+                <p className="text-slate-400">
+                  Winner: {item.winningCreativeId} | Lucro estimado:{" "}
+                  {item.netProfit.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}
+                </p>
+              </div>
+            ))
+          )}
         </CardContent>
       </Card>
 
