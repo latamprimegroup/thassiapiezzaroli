@@ -536,6 +536,26 @@ export type WarRoomData = {
       avgPredictedLtv90d: number;
     }>;
   };
+  organization?: {
+    workforceMap: Array<{
+      squadId: "copywriting" | "trafficData" | "creativeProduction" | "operationsTech" | "commercialCx" | "strategicAdmin";
+      squadName: string;
+      mission: string;
+      roles: Array<{
+        title: string;
+        headcount: number;
+        criticality: "high" | "critical";
+      }>;
+    }>;
+    individualGoals: Array<{
+      userName: string;
+      roleTitle: string;
+      squadName: string;
+      dailyGoal: string;
+      progressPct: number;
+      impactRevenue: number;
+    }>;
+  };
   activityLog: Array<{
     id: string;
     actorRole: string;

@@ -666,6 +666,35 @@ export function CommandCenterModule({ actorName, actorRole }: CommandCenterModul
         </CardContent>
       </Card>
 
+      {data.organization?.workforceMap && data.organization.workforceMap.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Mapa Industrial de Talentos (DR 9D)</CardTitle>
+            <CardDescription className="text-xs text-slate-400">
+              Estrutura de squads inspirada em operacao de alta performance para eliminar gargalos.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {data.organization.workforceMap.map((squad) => (
+              <div key={squad.squadId} className="rounded-md border border-white/10 bg-white/5 p-2 text-xs">
+                <p className="text-slate-100">{squad.squadName}</p>
+                <p className="mb-2 text-slate-400">{squad.mission}</p>
+                <div className="space-y-1">
+                  {squad.roles.map((role) => (
+                    <div key={role.title} className="flex items-center justify-between">
+                      <span className="text-slate-300">{role.title}</span>
+                      <Badge variant={role.criticality === "critical" ? "danger" : "warning"}>
+                        {role.headcount}x
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
       {DEPARTMENTS.map((department) => {
         const departmentTasks = tasks.filter((task) => task.department === department.id).sort(sortByPriority);
         const head = departmentTasks[0]?.squadHead ?? department.headLabel;

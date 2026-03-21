@@ -16,6 +16,45 @@
 | Comercial (Closer) | Sales Recovery, Squad Sync, Command Center | Sniper List (score 90+) + One-Tap WhatsApp | Sem financeiro |
 | CX Manager | Customer Experience, Squad Sync, Command Center | LTV/churn e follow-up de safra | Sem financeiro |
 
+## Estrutura completa de profissoes por squad (DR 9D)
+
+### 1) Squad de Copywriting (Coracao Intelectual)
+- Chief Copy Officer (CCO)
+- Copywriter Senior
+- Copywriter Junior
+- Especialista de Pesquisa (Researcher)
+- Editor de Texto (Copy Editor)
+
+### 2) Squad de Trafego e Dados (Motor de Escala)
+- Head de Trafego
+- Gestor de Trafego Senior
+- Gestor de Trafego Junior
+- Cientista de Dados / Analista de BI
+- Especialista em Atribuicao
+
+### 3) Squad de Producao Criativa (Fabrica de Ganchos)
+- Diretor de Arte / Motion Designer
+- Editor de Video (VSL Specialist)
+- Editor de Video (Ads/Hooks)
+- Videografo / Produtor
+
+### 4) Squad de Operacoes e Tecnologia (Blindagem)
+- CTO / Diretor de Tecnologia
+- Desenvolvedor Full-Stack
+- Analista de Compliance
+- Gerente de Projetos (Agile Coach)
+
+### 5) Squad Comercial e Pos-venda (Snipers de Lucro)
+- Head de Vendas / Closer
+- SDR / Recuperador de Vendas
+- Gerente de Customer Experience (CX)
+- Especialista de Onboarding
+
+### 6) Setor Administrativo e Estrategico (Tabuleiro)
+- CEO / Fundador
+- CFO / Diretor Financeiro
+- Gerente de Networking
+
 ## Fluxo de demandas entre setores (Ticketing)
 
 1. Tráfego (junior/senior) identifica gargalo ou fadiga.

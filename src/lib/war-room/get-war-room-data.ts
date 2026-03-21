@@ -4,6 +4,8 @@ import { processDueWebhookRetries } from "@/lib/integrations/warroom-webhook-ser
 import { applyFortressLayer } from "@/lib/integrations/warroom-fortress";
 import { processOpsJobQueue } from "@/lib/ops/war-room-ops-worker";
 import { mergeCommandCenterFromStore } from "@/lib/command-center/command-center-persistence";
+import { applyOfferScaleDemands } from "@/lib/command-center/offer-demand-automation";
+import { getOffersLabDashboard } from "@/lib/offers/offers-lab-service";
 import { enrichCustomerCentrality } from "@/lib/metrics/customer-centrality";
 import { mockWarRoomData } from "./mock-data";
 import { normalizeWarRoomData } from "./normalize";
@@ -48,7 +50,13 @@ export async function getWarRoomData(): Promise<WarRoomData> {
     const withCentrality = enrichCustomerCentrality(withIntegrations);
     const withFortress = await applyFortressLayer(withCentrality);
     const withOps = await enrichWarRoomOperations(withFortress);
-    return mergeCommandCenterFromStore(withOps);
+    const withPersistedTasks = await mergeCommandCenterFromStore(withOps);
+    try {
+      const offersLab = await getOffersLabDashboard({ validatedOnly: true });
+      return applyOfferScaleDemands(withPersistedTasks, offersLab.validatedOffers);
+    } catch {
+      return withPersistedTasks;
+    }
   } catch (error) {
     console.error("[war-room] Falha ao carregar dados reais:", error);
     const fallback = normalizeWarRoomData(
@@ -65,6 +73,12 @@ export async function getWarRoomData(): Promise<WarRoomData> {
     const withCentrality = enrichCustomerCentrality(withIntegrations);
     const withFortress = await applyFortressLayer(withCentrality);
     const withOps = await enrichWarRoomOperations(withFortress);
-    return mergeCommandCenterFromStore(withOps);
+    const withPersistedTasks = await mergeCommandCenterFromStore(withOps);
+    try {
+      const offersLab = await getOffersLabDashboard({ validatedOnly: true });
+      return applyOfferScaleDemands(withPersistedTasks, offersLab.validatedOffers);
+    } catch {
+      return withPersistedTasks;
+    }
   }
 }

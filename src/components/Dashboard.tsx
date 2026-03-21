@@ -135,6 +135,19 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
   );
   const isSectionAllowed = permissions.allowedSections.includes(activeSection);
   const canShowRoas = permissions.canViewRoasReal && sessionState.role !== "videoEditor";
+  const activeGoal = useMemo(() => {
+    const goals = viewData.organization?.individualGoals ?? [];
+    if (goals.length === 0) {
+      return null;
+    }
+    const userNameNormalized = activeUser.name.toLowerCase();
+    const byName = goals.find((goal) => userNameNormalized.includes(goal.userName.toLowerCase()));
+    if (byName) {
+      return byName;
+    }
+    const roleHint = permissions.label.toLowerCase();
+    return goals.find((goal) => roleHint.includes(goal.roleTitle.toLowerCase())) ?? goals[0];
+  }, [activeUser.name, permissions.label, viewData.organization?.individualGoals]);
 
   const updatedAtDate = new Date(viewData.updatedAt);
   const safeUpdatedAtDate = Number.isNaN(updatedAtDate.getTime()) ? new Date() : updatedAtDate;
@@ -503,6 +516,45 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
                 })}
               </CardContent>
             </Card>
+
+            {activeGoal && (
+              <Card className="mb-4 border-[#FF9900]/30 bg-[#050505]">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">Meta diaria e impacto do colaborador</CardTitle>
+                  <CardDescription className="text-xs text-slate-400">
+                    Transparencia operacional: cada pessoa ve sua meta e impacto no faturamento global.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-2 text-xs">
+                  <p className="text-slate-100">
+                    {activeGoal.userName} - {activeGoal.roleTitle} ({activeGoal.squadName})
+                  </p>
+                  <p className="text-slate-300">{activeGoal.dailyGoal}</p>
+                  <div className="h-2 rounded bg-slate-800">
+                    <div className="h-2 rounded bg-[#10B981]" style={{ width: `${Math.min(100, activeGoal.progressPct)}%` }} />
+                  </div>
+                  <p className="text-slate-400">
+                    Progresso: {activeGoal.progressPct.toFixed(0)}% | Impacto estimado:{" "}
+                    {activeGoal.impactRevenue.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      addActivity(
+                        permissions.label,
+                        activeUser.name,
+                        "check-in de meta diaria",
+                        activeGoal.roleTitle,
+                        `${activeGoal.progressPct.toFixed(0)}% concluido`,
+                      )
+                    }
+                    className="rounded border border-[#FF9900]/40 bg-[#FF9900]/20 px-2 py-1 text-[11px] text-[#FFD39A]"
+                  >
+                    Registrar check-in de meta
+                  </button>
+                </CardContent>
+              </Card>
+            )}
 
             {siren.active && (
               <Card className="mb-4 border-rose-300/70 bg-rose-500/15">
