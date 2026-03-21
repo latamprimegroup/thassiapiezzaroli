@@ -27,6 +27,7 @@ type OnboardingTourProps = {
 
 const sectionTitles: Record<SectionId, string> = {
   commandCenterCeo: "The Command Center",
+  ceoAudit: "CEO Audit Dashboard",
   offersLab: "Offers Lab",
   apiHub: "API Hub",
   ceoFinance: "The Boardroom",

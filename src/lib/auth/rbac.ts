@@ -24,6 +24,7 @@ export type UserRole =
 
 export type SectionId =
   | "commandCenterCeo"
+  | "ceoAudit"
   | "offersLab"
   | "apiHub"
   | "ceoFinance"
@@ -72,6 +73,7 @@ const baseRolePermissions = {
     icon: Crown,
     allowedSections: [
       "commandCenterCeo",
+      "ceoAudit",
       "offersLab",
       "apiHub",
       "ceoFinance",
@@ -133,7 +135,7 @@ const baseRolePermissions = {
     label: "Financeiro / CFO",
     description: "Boardroom financeiro: custos fixos, impostos e DRE",
     icon: ShieldCheck,
-    allowedSections: ["commandCenterCeo", "offersLab", "ceoFinance", "financeCompliance", "commandCenter", "techCro"],
+    allowedSections: ["commandCenterCeo", "ceoAudit", "offersLab", "ceoFinance", "financeCompliance", "commandCenter", "techCro"],
     canViewSensitiveFinancials: true,
     canViewRoasReal: true,
     canApproveScaleCampaigns: true,

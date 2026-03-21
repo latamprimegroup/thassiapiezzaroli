@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 import {
+  BarChart3,
   Binary,
   BrainCircuit,
   ClipboardList,
@@ -46,6 +47,12 @@ function moduleSkeleton(title: string, description: string) {
 const CeoFinanceModule = dynamic(() => import("@/components/enterprise/ceo-finance-module").then((mod) => mod.CeoFinanceModule), {
   loading: () => moduleSkeleton("CEO & Financeiro", "Carregando cockpit financeiro..."),
 });
+const CeoAuditDashboard = dynamic(
+  () => import("@/components/enterprise/ceo-audit-dashboard").then((mod) => mod.CeoAuditDashboard),
+  {
+    loading: () => moduleSkeleton("CEO Audit Dashboard", "Carregando auditoria executiva..."),
+  },
+);
 const CommandCenterCeoView = dynamic(
   () => import("@/components/enterprise/command-center-ceo-view").then((mod) => mod.CommandCenterCeoView),
   {
@@ -168,6 +175,7 @@ type Section = {
 
 const sections: Section[] = [
   { id: "commandCenterCeo", label: "The Command Center", subtitle: "CEO View 10D", icon: LayoutDashboard },
+  { id: "ceoAudit", label: "CEO Audit Dashboard", subtitle: "Performance & Holding", icon: BarChart3 },
   { id: "offersLab", label: "Offers Lab", subtitle: "Production & Validation", icon: FlaskConical },
   { id: "apiHub", label: "API Hub", subtitle: "Tech Admin (secreto)", icon: Binary, secret: true },
   { id: "ceoFinance", label: "CEO & Financeiro", subtitle: "Soberania de Caixa", icon: Wallet },
@@ -841,6 +849,7 @@ export default function Dashboard({ data, users, session, initialSection }: Dash
                 onDrillDown={(sectionId) => setActiveSection(sectionId)}
               />
             )}
+            {activeSection === "ceoAudit" && isSectionAllowed && <CeoAuditDashboard />}
             {activeSection === "offersLab" && isSectionAllowed && <OffersLabModule />}
             {activeSection === "apiHub" && isSectionAllowed && <ApiHubModule />}
             {activeSection === "copyResearch" && isSectionAllowed && (
