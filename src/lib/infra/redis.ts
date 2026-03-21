@@ -103,3 +103,19 @@ export async function redisIncrementWithWindow(key: string, windowSeconds: numbe
   }
 }
 
+export async function redisPing() {
+  const client = getRedisClient();
+  if (!client) {
+    return { ok: false, reason: "redis_unconfigured" as const };
+  }
+  try {
+    if (client.status !== "ready") {
+      await client.connect();
+    }
+    const pong = await client.ping();
+    return { ok: pong === "PONG", reason: pong === "PONG" ? ("ok" as const) : ("ping_failed" as const) };
+  } catch {
+    return { ok: false, reason: "redis_unreachable" as const };
+  }
+}
+

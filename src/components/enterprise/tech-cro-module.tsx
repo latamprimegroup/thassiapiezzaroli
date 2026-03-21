@@ -58,6 +58,19 @@ type OpsObservabilitySnapshot = {
   overallStatus: "pass" | "warning" | "breach";
 };
 
+type GoLiveSnapshot = {
+  generatedAt: string;
+  environment: string;
+  goNoGo: boolean;
+  checks: Array<{
+    id: string;
+    label: string;
+    status: "pass" | "warn" | "fail";
+    detail: string;
+  }>;
+  blockingFailures: string[];
+};
+
 export function TechCroModule() {
   const { data } = useWarRoom();
   const tech = data.enterprise.techCro;
@@ -67,6 +80,7 @@ export function TechCroModule() {
   const killSwitch = data.integrations.operations.killSwitch;
   const audioGuardRef = useRef<string>("");
   const [opsObservability, setOpsObservability] = useState<OpsObservabilitySnapshot | null>(null);
+  const [goLiveSnapshot, setGoLiveSnapshot] = useState<GoLiveSnapshot | null>(null);
   const [routingRules, setRoutingRules] = useState<
     Array<{
       id: string;
@@ -126,6 +140,27 @@ export function TechCroModule() {
     }
     void loadObservability();
     const timer = window.setInterval(loadObservability, WAR_ROOM_OPS_CONSTANTS.performance.dashboardRefreshMs);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    async function loadGoLiveReadiness() {
+      const response = await fetch("/api/ops/go-live", { cache: "no-store" }).catch(() => null);
+      if (!response?.ok || !active) {
+        return;
+      }
+      const payload = (await response.json().catch(() => null)) as { snapshot?: GoLiveSnapshot } | null;
+      if (!payload?.snapshot || !active) {
+        return;
+      }
+      setGoLiveSnapshot(payload.snapshot);
+    }
+    void loadGoLiveReadiness();
+    const timer = window.setInterval(loadGoLiveReadiness, WAR_ROOM_OPS_CONSTANTS.performance.dashboardRefreshMs);
     return () => {
       active = false;
       window.clearInterval(timer);
@@ -330,6 +365,45 @@ export function TechCroModule() {
               <p className="text-[11px] text-slate-500">
                 Snapshot: {new Date(opsObservability.generatedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
               </p>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Go-Live Readiness (Hardening)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-xs">
+          {!goLiveSnapshot ? (
+            <p className="rounded border border-white/10 bg-white/5 p-2 text-slate-400">Carregando readiness de producao...</p>
+          ) : (
+            <>
+              <div className="flex items-center justify-between rounded border border-white/10 bg-white/5 p-2">
+                <p className="text-slate-300">Ambiente: {goLiveSnapshot.environment}</p>
+                <Badge variant={goLiveSnapshot.goNoGo ? "success" : "danger"}>
+                  {goLiveSnapshot.goNoGo ? "GO" : "NO-GO"}
+                </Badge>
+              </div>
+              {goLiveSnapshot.checks.map((check) => (
+                <div key={check.id} className="rounded border border-white/10 bg-black/30 p-2">
+                  <div className="mb-1 flex items-center justify-between">
+                    <p className="text-slate-200">{check.label}</p>
+                    <Badge
+                      variant={
+                        check.status === "pass"
+                          ? "success"
+                          : check.status === "warn"
+                            ? "warning"
+                            : "danger"
+                      }
+                    >
+                      {check.status.toUpperCase()}
+                    </Badge>
+                  </div>
+                  <p className="text-slate-400">{check.detail}</p>
+                </div>
+              ))}
             </>
           )}
         </CardContent>

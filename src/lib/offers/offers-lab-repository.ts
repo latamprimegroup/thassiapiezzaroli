@@ -2,7 +2,15 @@ import * as fileStore from "@/lib/offers/offers-lab-store";
 import * as dbStore from "@/lib/offers/offers-lab-db";
 
 function isDatabaseMode() {
-  return process.env.WAR_ROOM_OPS_PERSISTENCE_MODE === "database" && Boolean(process.env.DATABASE_URL);
+  const enabled = process.env.WAR_ROOM_OPS_PERSISTENCE_MODE === "database" && Boolean(process.env.DATABASE_URL);
+  const mustUseDatabase =
+    process.env.NODE_ENV === "production" && process.env.WAR_ROOM_REQUIRE_DATABASE_IN_PROD === "true";
+  if (mustUseDatabase && !enabled) {
+    throw new Error(
+      "Persistencia em banco obrigatoria em producao. Configure WAR_ROOM_OPS_PERSISTENCE_MODE=database e DATABASE_URL.",
+    );
+  }
+  return enabled;
 }
 
 export async function readOffer(...args: Parameters<typeof fileStore.readOffer>) {

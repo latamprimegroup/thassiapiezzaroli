@@ -11,6 +11,7 @@ import { processOpsJobQueue } from "@/lib/ops/war-room-ops-worker";
 import { processDueWebhookRetries, processIncomingWebhook } from "@/lib/integrations/warroom-webhook-service";
 import { captureServerError } from "@/lib/observability/error-monitoring";
 import { checkRateLimit, readRequestIp } from "@/lib/security/rate-limit";
+import { assertProductionReadinessIfRequired } from "@/lib/runtime/go-live-readiness";
 
 export const runtime = "nodejs";
 
@@ -38,6 +39,7 @@ function isAuthorized(request: Request) {
 }
 
 export async function POST(request: Request) {
+  await assertProductionReadinessIfRequired("/api/webhooks/warroom");
   if (!isAuthorized(request)) {
     return NextResponse.json({ error: "Nao autorizado." }, { status: 401 });
   }

@@ -3,6 +3,7 @@ import { WAR_ROOM_OPS_CONSTANTS } from "@/lib/config/war-room-ops.constants";
 import { registerTrafficEvent, registerTrafficEventsBatch } from "@/lib/offers/offers-lab-service";
 import { captureServerError } from "@/lib/observability/error-monitoring";
 import { checkRateLimit, readRequestIp } from "@/lib/security/rate-limit";
+import { assertProductionReadinessIfRequired } from "@/lib/runtime/go-live-readiness";
 
 export const runtime = "nodejs";
 
@@ -18,6 +19,7 @@ function isAuthorized(request: Request) {
 }
 
 export async function POST(request: Request) {
+  await assertProductionReadinessIfRequired("/api/offers-lab/callback");
   if (!isAuthorized(request)) {
     return NextResponse.json({ error: "Nao autorizado." }, { status: 401 });
   }
