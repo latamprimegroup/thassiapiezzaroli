@@ -3,6 +3,7 @@ import { WAR_ROOM_OPS_CONSTANTS } from "@/lib/config/war-room-ops.constants";
 import { registerTrafficEvent, registerTrafficEventsBatch } from "@/lib/offers/offers-lab-service";
 import { captureServerError } from "@/lib/observability/error-monitoring";
 import { checkRateLimit, readRequestIp } from "@/lib/security/rate-limit";
+import { secureEquals } from "@/lib/security/secure-compare";
 import { assertProductionReadinessIfRequired } from "@/lib/runtime/go-live-readiness";
 import { normalizeOffersLabCallbackPayload } from "@/lib/validation/ingress-schemas";
 
@@ -13,10 +14,10 @@ function isAuthorized(request: Request) {
   if (!expected) {
     return process.env.NODE_ENV !== "production";
   }
-  const apiKey = request.headers.get("x-api-key");
+  const apiKey = request.headers.get("x-api-key")?.trim();
   const authorization = request.headers.get("authorization");
   const bearer = authorization?.startsWith("Bearer ") ? authorization.slice(7).trim() : "";
-  return apiKey === expected || bearer === expected;
+  return secureEquals(apiKey, expected) || secureEquals(bearer, expected);
 }
 
 export async function POST(request: Request) {

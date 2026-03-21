@@ -36,7 +36,7 @@ function isPrivateIpv6(hostname: string) {
 function isHostAllowed(hostname: string) {
   const allowedHosts = parseAllowedHosts();
   if (allowedHosts.length === 0) {
-    return true;
+    return process.env.NODE_ENV !== "production";
   }
   return allowedHosts.some((allowedHost) => hostname === allowedHost || hostname.endsWith(`.${allowedHost}`));
 }
@@ -61,6 +61,9 @@ function validateTargetUrl(rawUrl: string) {
   }
   if (!isHostAllowed(hostname)) {
     return { ok: false, reason: "Host nao permitido pela policy de compliance scanner." };
+  }
+  if (parsed.port && parsed.port !== "80" && parsed.port !== "443") {
+    return { ok: false, reason: "Porta nao permitida para compliance scanner." };
   }
   return { ok: true, normalizedUrl: parsed.toString() };
 }

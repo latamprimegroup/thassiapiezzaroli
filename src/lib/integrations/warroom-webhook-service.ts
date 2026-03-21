@@ -1,4 +1,4 @@
-import { createHmac } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { ingestIntegrationEvent, markProviderError } from "./warroom-integration-store";
 import { resolveAdapterByProvider, type ProviderName } from "./warroom-adapters";
 import { WAR_ROOM_OPS_CONSTANTS } from "@/lib/config/war-room-ops.constants";
@@ -53,9 +53,14 @@ function verifyHmacSignature(provider: ProviderName, rawBody: string, incomingSi
   if (!incomingSignature) {
     return false;
   }
-  const expectedHex = createHmac("sha256", secret).update(rawBody).digest("hex");
+  const expectedHex = createHmac("sha256", secret).update(rawBody).digest("hex").toLowerCase();
   const normalizedIncoming = sanitizeSignature(incomingSignature).toLowerCase();
-  return expectedHex.toLowerCase() === normalizedIncoming;
+  if (expectedHex.length !== normalizedIncoming.length) {
+    return false;
+  }
+  const expected = Buffer.from(expectedHex, "utf8");
+  const incoming = Buffer.from(normalizedIncoming, "utf8");
+  return timingSafeEqual(expected, incoming);
 }
 
 function computeNextRetryIso(attempts: number) {

@@ -99,7 +99,17 @@ export async function scanComplianceFromUrl(url: string): Promise<ComplianceScan
   }
 
   try {
-    const response = await fetch(normalizedUrl, { cache: "no-store" });
+    const response = await fetch(normalizedUrl, { cache: "no-store", redirect: "manual" });
+    if (response.status >= 300 && response.status < 400) {
+      return {
+        url: normalizedUrl,
+        status: "MODERATE RISK",
+        riskScore: 40,
+        matchedTerms: ["redirect_detected"],
+        disclaimerRequired: true,
+        summary: "URL com redirecionamento. Validar destino final manualmente antes do scan.",
+      };
+    }
     if (!response.ok) {
       return {
         url: normalizedUrl,
