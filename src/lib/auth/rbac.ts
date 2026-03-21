@@ -4,6 +4,7 @@ import { Clapperboard, Crown, Handshake, HeartPulse, PenSquare, SatelliteDish, S
 export type UserRole = "ceo" | "mediaBuyer" | "copywriter" | "videoEditor" | "closer" | "cxManager" | "financeManager";
 
 export type SectionId =
+  | "commandCenterCeo"
   | "ceoFinance"
   | "copyResearch"
   | "trafficAttribution"
@@ -38,6 +39,7 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     description: "Visao total e aprovacao final",
     icon: Crown,
     allowedSections: [
+      "commandCenterCeo",
       "ceoFinance",
       "copyResearch",
       "trafficAttribution",
@@ -64,7 +66,15 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     label: "Media Buyer",
     description: "Leilao, CPA e acionamento de squads",
     icon: SatelliteDish,
-    allowedSections: ["trafficAttribution", "testLaboratory", "commandCenter", "squadSync", "techCro", "editorsProduction"],
+    allowedSections: [
+      "commandCenterCeo",
+      "trafficAttribution",
+      "testLaboratory",
+      "commandCenter",
+      "squadSync",
+      "techCro",
+      "editorsProduction",
+    ],
     canViewSensitiveFinancials: false,
     canViewRoasReal: true,
     canApproveScaleCampaigns: false,
@@ -79,7 +89,15 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     label: "Copywriter / Creative Director",
     description: "Engajamento, backlog e retencao",
     icon: PenSquare,
-    allowedSections: ["copyResearch", "trafficAttribution", "testLaboratory", "commandCenter", "squadSync", "editorsProduction"],
+    allowedSections: [
+      "commandCenterCeo",
+      "copyResearch",
+      "trafficAttribution",
+      "testLaboratory",
+      "commandCenter",
+      "squadSync",
+      "editorsProduction",
+    ],
     canViewSensitiveFinancials: false,
     canViewRoasReal: true,
     canApproveScaleCampaigns: false,
@@ -94,7 +112,7 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     label: "Video Editor",
     description: "Performance por criativo e novas versoes",
     icon: Clapperboard,
-    allowedSections: ["trafficAttribution", "testLaboratory", "commandCenter", "squadSync", "editorsProduction"],
+    allowedSections: ["commandCenterCeo", "trafficAttribution", "testLaboratory", "commandCenter", "squadSync", "editorsProduction"],
     canViewSensitiveFinancials: false,
     canViewRoasReal: false,
     canApproveScaleCampaigns: false,
@@ -109,7 +127,7 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     label: "Closer / Recovery",
     description: "Sniper list e recuperacao comercial",
     icon: Handshake,
-    allowedSections: ["salesRecovery", "commandCenter", "squadSync"],
+    allowedSections: ["commandCenterCeo", "salesRecovery", "commandCenter", "squadSync"],
     canViewSensitiveFinancials: false,
     canViewRoasReal: false,
     canApproveScaleCampaigns: false,
@@ -124,7 +142,7 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     label: "Customer Experience",
     description: "Retencao, churn e LTV de pos-venda",
     icon: HeartPulse,
-    allowedSections: ["customerExperience", "squadSync", "commandCenter"],
+    allowedSections: ["commandCenterCeo", "customerExperience", "squadSync", "commandCenter"],
     canViewSensitiveFinancials: false,
     canViewRoasReal: false,
     canApproveScaleCampaigns: false,
@@ -139,7 +157,7 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     label: "Finance & Compliance",
     description: "DRE, margem e governanca legal",
     icon: ShieldCheck,
-    allowedSections: ["ceoFinance", "financeCompliance", "commandCenter", "techCro"],
+    allowedSections: ["commandCenterCeo", "ceoFinance", "financeCompliance", "commandCenter", "techCro"],
     canViewSensitiveFinancials: true,
     canViewRoasReal: true,
     canApproveScaleCampaigns: true,

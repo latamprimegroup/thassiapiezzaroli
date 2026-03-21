@@ -10,6 +10,7 @@ import {
   FlaskConical,
   Handshake,
   HeartPulse,
+  LayoutDashboard,
   Lock,
   MessageSquare,
   SatelliteDish,
@@ -20,6 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { CeoFinanceModule } from "@/components/enterprise/ceo-finance-module";
+import { CommandCenterCeoView } from "@/components/enterprise/command-center-ceo-view";
 import { CommandCenterModule } from "@/components/enterprise/command-center-module";
 import { CopyResearchModule } from "@/components/enterprise/copy-research-module";
 import { CustomerExperienceModule } from "@/components/enterprise/customer-experience-module";
@@ -34,6 +36,7 @@ import { ActionableInsights } from "@/components/war-room/actionable-insights";
 import { recalculateEnterpriseFinance, WarRoomContext } from "@/context/war-room-context";
 import { rolePermissions, type SectionId, type UserRole } from "@/lib/auth/rbac";
 import { WAR_ROOM_OPS_CONSTANTS } from "@/lib/config/war-room-ops.constants";
+import { subscribeWarRoomRealtime } from "@/lib/realtime/war-room-realtime";
 import type { DemoUser } from "@/lib/auth/users";
 import type { SquadSyncCommandOrder, SquadSyncKpiSnapshot, TrafficSourceKey, WarRoomData } from "@/lib/war-room/types";
 
@@ -54,6 +57,7 @@ type Section = {
 };
 
 const sections: Section[] = [
+  { id: "commandCenterCeo", label: "The Command Center", subtitle: "CEO View 10D", icon: LayoutDashboard },
   { id: "ceoFinance", label: "CEO & Financeiro", subtitle: "Soberania de Caixa", icon: Wallet },
   { id: "copyResearch", label: "Copy & Pesquisa", subtitle: "The Brain", icon: BrainCircuit },
   { id: "trafficAttribution", label: "Trafego & Atribuicao", subtitle: "The Engine", icon: SatelliteDish },
@@ -75,8 +79,13 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
   const [activityLog, setActivityLog] = useState(data.activityLog);
   const [isSwitchingUser, setIsSwitchingUser] = useState(false);
   const [ceoMode, setCeoMode] = useState(false);
+  const [presentationMode, setPresentationMode] = useState(false);
 
-  const initialSection = rolePermissions[session.role].allowedSections[0];
+  const defaultSection =
+    rolePermissions[session.role].allowedSections.includes("commandCenterCeo")
+      ? "commandCenterCeo"
+      : rolePermissions[session.role].allowedSections[0];
+  const initialSection = defaultSection;
   const [activeSection, setActiveSection] = useState<SectionId>(initialSection);
 
   const permissions = rolePermissions[sessionState.role];
@@ -93,28 +102,44 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
   const siren = viewData.integrations.fortress.siren;
   const sirenReasons = useMemo(() => siren.reasons.join(" | "), [siren.reasons]);
 
+  async function fetchLatestData() {
+    const response = await fetch("/api/war-room", { cache: "no-store" }).catch(() => null);
+    if (!response || !response.ok) {
+      return;
+    }
+    const payload = (await response.json().catch(() => null)) as
+      | {
+          data: WarRoomData;
+          session: { userId: string; role: UserRole };
+        }
+      | null;
+    if (!payload) {
+      return;
+    }
+    setViewData(payload.data);
+    setActivityLog(payload.data.activityLog);
+    setSessionState(payload.session);
+  }
+
   useEffect(() => {
     const interval = setInterval(() => {
-      void (async () => {
-        const response = await fetch("/api/war-room", { cache: "no-store" }).catch(() => null);
-        if (!response || !response.ok) {
-          return;
-        }
-        const payload = (await response.json().catch(() => null)) as
-          | {
-              data: WarRoomData;
-              session: { userId: string; role: UserRole };
-            }
-          | null;
-        if (!payload) {
-          return;
-        }
-        setViewData(payload.data);
-        setActivityLog(payload.data.activityLog);
-        setSessionState(payload.session);
-      })();
+      void fetchLatestData();
     }, WAR_ROOM_OPS_CONSTANTS.performance.dashboardRefreshMs);
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    let unsubscribe: (() => void) | undefined;
+    void (async () => {
+      unsubscribe = await subscribeWarRoomRealtime(() => {
+        void fetchLatestData();
+      });
+    })();
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
   }, []);
 
   function addActivity(actorRole: string, actorName: string, action: string, entity: string, reason: string) {
@@ -226,8 +251,9 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
   return (
     <WarRoomContext.Provider value={contextValue}>
       <div className={`min-h-screen bg-[#050505] p-3 sm:p-4 md:p-6 ${siren.active ? "war-siren-active" : ""}`}>
-        <div className="mx-auto grid max-w-[1700px] gap-5 xl:grid-cols-[320px_minmax(0,1fr)]">
-          <aside className="rounded-2xl border border-white/10 bg-slate-900/85 p-4 backdrop-blur">
+        <div className={`mx-auto grid max-w-[1900px] gap-5 ${presentationMode ? "xl:grid-cols-[minmax(0,1fr)]" : "xl:grid-cols-[320px_minmax(0,1fr)]"}`}>
+          {!presentationMode && (
+            <aside className="rounded-2xl border border-white/10 bg-slate-900/85 p-4 backdrop-blur">
             <div className="mb-5 rounded-xl border border-[#FF9900]/40 bg-[#FF9900]/10 p-3">
               <p className="text-xs uppercase tracking-[0.2em] text-[#FFB347]">Command Center</p>
               <h1 className="text-sm font-semibold text-white">WAR ROOM OS - Enterprise 9D</h1>
@@ -267,7 +293,8 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
               <p className="text-[#FFB347]">Squad Sync</p>
               <p className={syncBadgeClass}>{formatHours(hoursSinceUpdate)}h sem atualizacao completa</p>
             </div>
-          </aside>
+            </aside>
+          )}
 
           <main className={`rounded-2xl border p-4 md:p-6 ${siren.active ? "border-rose-400/60 bg-rose-950/20" : "border-white/10 bg-slate-950/70"}`}>
             <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
@@ -281,6 +308,22 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
                 <p className="mt-2 text-[11px] text-slate-500">Auto-refresh de dados estrategicos: 60s (sem F5)</p>
               </div>
               <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => {
+                    setPresentationMode((prev) => {
+                      const next = !prev;
+                      if (next && permissions.allowedSections.includes("commandCenterCeo")) {
+                        setActiveSection("commandCenterCeo");
+                      }
+                      return next;
+                    });
+                  }}
+                  className={`rounded border px-2 py-1 text-xs ${
+                    presentationMode ? "border-[#10B981]/50 bg-[#10B981]/20 text-[#C9FFE9]" : "border-white/20 bg-white/5 text-slate-300"
+                  }`}
+                >
+                  {presentationMode ? "Sair do modo apresentacao" : "Modo apresentacao (TV)"}
+                </button>
                 {sessionState.role === "ceo" && (
                   <button
                     onClick={() => setCeoMode((prev) => !prev)}
@@ -291,7 +334,8 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
                     {ceoMode ? "Modo Completo" : "Modo CEO"}
                   </button>
                 )}
-                {users.map((user) => {
+                {!presentationMode &&
+                  users.map((user) => {
                   const selected = user.id === sessionState.userId;
                   return (
                     <button
@@ -399,6 +443,13 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
             {activeSection === "ceoFinance" && isSectionAllowed && (
               <CeoFinanceModule canViewSensitiveFinancials={permissions.canViewSensitiveFinancials} />
             )}
+            {activeSection === "commandCenterCeo" && isSectionAllowed && (
+              <CommandCenterCeoView
+                data={viewData}
+                presentationMode={presentationMode}
+                onDrillDown={(sectionId) => setActiveSection(sectionId)}
+              />
+            )}
             {activeSection === "copyResearch" && isSectionAllowed && <CopyResearchModule />}
             {activeSection === "trafficAttribution" && isSectionAllowed && <TrafficAttributionModule />}
             {activeSection === "testLaboratory" && isSectionAllowed && (
@@ -422,7 +473,8 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
             {activeSection === "customerExperience" && isSectionAllowed && <CustomerExperienceModule />}
             {activeSection === "financeCompliance" && isSectionAllowed && <FinanceComplianceModule />}
 
-            <section className="mt-5 grid gap-4 xl:grid-cols-2">
+            {!presentationMode && (
+              <section className="mt-5 grid gap-4 xl:grid-cols-2">
               <ActionableInsights rows={viewData.liveAdsTracking} role={sessionState.role} contingency={viewData.contingency} />
               <Card>
                 <CardHeader>
@@ -442,7 +494,8 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
                   ))}
                 </CardContent>
               </Card>
-            </section>
+              </section>
+            )}
 
             <footer className="mt-4 text-xs text-slate-500">
               Sessao: {activeUser.name} | Fundo #050505 | Alertas de vulnerabilidade em #FF9900
