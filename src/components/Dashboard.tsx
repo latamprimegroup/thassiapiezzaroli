@@ -28,6 +28,7 @@ import { CopyResearchModule } from "@/components/enterprise/copy-research-module
 import { CustomerExperienceModule } from "@/components/enterprise/customer-experience-module";
 import { EditorsProductionModule } from "@/components/enterprise/editors-production-module";
 import { FinanceComplianceModule } from "@/components/enterprise/finance-compliance-module";
+import { OnboardingTour } from "@/components/enterprise/onboarding-tour";
 import { SalesRecoveryModule } from "@/components/enterprise/sales-recovery-module";
 import { SquadSyncModule } from "@/components/enterprise/squad-sync-module";
 import { TestLaboratoryModule } from "@/components/enterprise/test-laboratory-module";
@@ -116,6 +117,7 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
   const [isSwitchingUser, setIsSwitchingUser] = useState(false);
   const [ceoMode, setCeoMode] = useState(false);
   const [presentationMode, setPresentationMode] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   const defaultSection =
     rolePermissions[session.role].allowedSections.includes("commandCenterCeo")
@@ -127,6 +129,10 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
   const permissions = rolePermissions[sessionState.role];
   const ActiveRoleIcon = permissions.icon;
   const activeUser = users.find((user) => user.id === sessionState.userId) ?? users[0];
+  const onboardingStorageKey = useMemo(
+    () => `war-room-onboarding:v1:${sessionState.userId}:${sessionState.role}`,
+    [sessionState.role, sessionState.userId],
+  );
   const isSectionAllowed = permissions.allowedSections.includes(activeSection);
   const canShowRoas = permissions.canViewRoasReal && sessionState.role !== "videoEditor";
 
@@ -163,6 +169,18 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
     }, WAR_ROOM_OPS_CONSTANTS.performance.dashboardRefreshMs);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try {
+        const alreadyCompleted = window.localStorage.getItem(onboardingStorageKey) === "done";
+        setShowOnboarding(!alreadyCompleted);
+      } catch {
+        setShowOnboarding(true);
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [onboardingStorageKey]);
 
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
@@ -294,6 +312,15 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
     });
   }
 
+  function completeOnboarding() {
+    try {
+      window.localStorage.setItem(onboardingStorageKey, "done");
+    } catch {
+      // no-op
+    }
+    setShowOnboarding(false);
+  }
+
   async function switchUser(userId: string) {
     setIsSwitchingUser(true);
     try {
@@ -383,6 +410,16 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
           )}
 
           <main className={`rounded-2xl border p-4 md:p-6 ${siren.active ? "border-rose-400/60 bg-rose-950/20" : "border-white/10 bg-slate-950/70"}`}>
+            {showOnboarding && (
+              <OnboardingTour
+                role={sessionState.role}
+                userName={activeUser.name}
+                allowedSections={permissions.allowedSections}
+                onNavigate={(sectionId) => setActiveSection(sectionId)}
+                onComplete={completeOnboarding}
+                onSkip={completeOnboarding}
+              />
+            )}
             <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-xs uppercase tracking-[0.18em] text-slate-400">ERP de 9 digitos</p>
@@ -409,6 +446,12 @@ export default function Dashboard({ data, users, session }: DashboardProps) {
                   }`}
                 >
                   {presentationMode ? "Sair do modo apresentacao" : "Modo apresentacao (TV)"}
+                </button>
+                <button
+                  onClick={() => setShowOnboarding(true)}
+                  className="rounded border border-white/20 bg-white/5 px-2 py-1 text-xs text-slate-300"
+                >
+                  Rever onboarding (30s)
                 </button>
                 {sessionState.role === "ceo" && (
                   <button
