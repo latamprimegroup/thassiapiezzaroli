@@ -1,0 +1,438 @@
+import type { VaultStatus, WarRoomData } from "@/lib/war-room/types";
+import { WAR_ROOM_OPS_CONSTANTS } from "@/lib/config/war-room-ops.constants";
+
+type SafeBrowsingStatus = "safe" | "unsafe" | "unknown";
+type FacebookDebuggerStatus = "ok" | "warning" | "down" | "unknown";
+type CloudflareStatus = "up" | "degraded" | "down" | "unknown";
+
+type VaultDomainSnapshot = WarRoomData["integrations"]["fortress"]["vault"]["domains"][number];
+
+type VaultRuntimeState = {
+  lastRunAtMs: number;
+  domains: VaultDomainSnapshot[];
+  lastVaultHash: string;
+  lastSirenActive: boolean;
+  merBelowThresholdSinceMs: number;
+  killSwitchTriggeredAtMs: number;
+  killSwitchAlertsSent: number;
+};
+
+const CHECK_INTERVAL_MS = WAR_ROOM_OPS_CONSTANTS.vault.checkIntervalMinutes * 60 * 1000;
+
+declare global {
+  var __warRoomVaultRuntimeState: VaultRuntimeState | undefined;
+}
+
+function nowLabel() {
+  return new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+}
+
+function toVaultStatus(
+  safeBrowsingStatus: SafeBrowsingStatus,
+  facebookDebuggerStatus: FacebookDebuggerStatus,
+  cloudflareStatus: CloudflareStatus,
+  fallback: VaultStatus,
+): VaultStatus {
+  if (safeBrowsingStatus === "unsafe" || facebookDebuggerStatus === "down" || cloudflareStatus === "down") {
+    return "blocked";
+  }
+  const score = computeDomainHealthScore(safeBrowsingStatus, facebookDebuggerStatus, cloudflareStatus);
+  if (score <= WAR_ROOM_OPS_CONSTANTS.vault.healthScoreThresholds.blocked) {
+    return "blocked";
+  }
+  if (score <= WAR_ROOM_OPS_CONSTANTS.vault.healthScoreThresholds.warning) {
+    return "warning";
+  }
+  if (
+    safeBrowsingStatus === "unknown" ||
+    facebookDebuggerStatus === "warning" ||
+    facebookDebuggerStatus === "unknown" ||
+    cloudflareStatus === "degraded" ||
+    cloudflareStatus === "unknown"
+  ) {
+    return fallback === "blocked" ? "warning" : fallback;
+  }
+  return "ok";
+}
+
+function computeDomainHealthScore(
+  safeBrowsingStatus: SafeBrowsingStatus,
+  facebookDebuggerStatus: FacebookDebuggerStatus,
+  cloudflareStatus: CloudflareStatus,
+) {
+  const weights = WAR_ROOM_OPS_CONSTANTS.vault.healthScoreWeights;
+  const safeScore = safeBrowsingStatus === "safe" ? 100 : safeBrowsingStatus === "unknown" ? 65 : 0;
+  const facebookScore =
+    facebookDebuggerStatus === "ok" ? 100 : facebookDebuggerStatus === "warning" ? 60 : facebookDebuggerStatus === "unknown" ? 50 : 20;
+  const cloudflareScore =
+    cloudflareStatus === "up" ? 100 : cloudflareStatus === "degraded" ? 55 : cloudflareStatus === "unknown" ? 45 : 0;
+  return safeScore * weights.safeBrowsing + facebookScore * weights.facebookDebugger + cloudflareScore * weights.cloudflare;
+}
+
+async function checkSafeBrowsing(domain: string): Promise<SafeBrowsingStatus> {
+  const apiKey = process.env.GOOGLE_SAFE_BROWSING_API_KEY;
+  if (!apiKey) {
+    return "unknown";
+  }
+  try {
+    const response = await fetch(`https://safebrowsing.googleapis.com/v4/threatMatches:find?key=${encodeURIComponent(apiKey)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client: { clientId: "war-room-os", clientVersion: "1.0.0" },
+        threatInfo: {
+          threatTypes: ["MALWARE", "SOCIAL_ENGINEERING", "UNWANTED_SOFTWARE", "POTENTIALLY_HARMFUL_APPLICATION"],
+          platformTypes: ["ANY_PLATFORM"],
+          threatEntryTypes: ["URL"],
+          threatEntries: [{ url: `https://${domain}` }],
+        },
+      }),
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      return "unknown";
+    }
+    const payload = (await response.json().catch(() => ({}))) as { matches?: unknown[] };
+    return Array.isArray(payload.matches) && payload.matches.length > 0 ? "unsafe" : "safe";
+  } catch {
+    return "unknown";
+  }
+}
+
+async function checkFacebookDebugger(domain: string): Promise<FacebookDebuggerStatus> {
+  const token = process.env.META_GRAPH_ACCESS_TOKEN;
+  if (!token) {
+    return "unknown";
+  }
+  try {
+    const url = `https://graph.facebook.com/v20.0/?id=${encodeURIComponent(`https://${domain}`)}&access_token=${encodeURIComponent(token)}`;
+    const response = await fetch(url, { cache: "no-store" });
+    if (!response.ok) {
+      return "down";
+    }
+    const payload = (await response.json().catch(() => ({}))) as { id?: string; error?: unknown };
+    if (payload.error) {
+      return "warning";
+    }
+    return payload.id ? "ok" : "warning";
+  } catch {
+    return "down";
+  }
+}
+
+async function checkCloudflareDomain(domain: string): Promise<CloudflareStatus> {
+  try {
+    const response = await fetch(
+      `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(domain)}&type=A`,
+      {
+        headers: { Accept: "application/dns-json" },
+        cache: "no-store",
+      },
+    );
+    if (!response.ok) {
+      return "down";
+    }
+    const payload = (await response.json().catch(() => ({}))) as { Status?: number; Answer?: unknown[] };
+    if (payload.Status !== 0) {
+      return "degraded";
+    }
+    return Array.isArray(payload.Answer) && payload.Answer.length > 0 ? "up" : "degraded";
+  } catch {
+    return "unknown";
+  }
+}
+
+function getRuntimeState(): VaultRuntimeState {
+  if (!globalThis.__warRoomVaultRuntimeState) {
+    globalThis.__warRoomVaultRuntimeState = {
+      lastRunAtMs: 0,
+      domains: [],
+      lastVaultHash: "",
+      lastSirenActive: false,
+      merBelowThresholdSinceMs: 0,
+      killSwitchTriggeredAtMs: 0,
+      killSwitchAlertsSent: 0,
+    };
+  }
+  if (typeof globalThis.__warRoomVaultRuntimeState.lastVaultHash !== "string") {
+    globalThis.__warRoomVaultRuntimeState.lastVaultHash = "";
+  }
+  if (typeof globalThis.__warRoomVaultRuntimeState.lastSirenActive !== "boolean") {
+    globalThis.__warRoomVaultRuntimeState.lastSirenActive = false;
+  }
+  if (typeof globalThis.__warRoomVaultRuntimeState.merBelowThresholdSinceMs !== "number") {
+    globalThis.__warRoomVaultRuntimeState.merBelowThresholdSinceMs = 0;
+  }
+  if (typeof globalThis.__warRoomVaultRuntimeState.killSwitchTriggeredAtMs !== "number") {
+    globalThis.__warRoomVaultRuntimeState.killSwitchTriggeredAtMs = 0;
+  }
+  if (typeof globalThis.__warRoomVaultRuntimeState.killSwitchAlertsSent !== "number") {
+    globalThis.__warRoomVaultRuntimeState.killSwitchAlertsSent = 0;
+  }
+  return globalThis.__warRoomVaultRuntimeState;
+}
+
+function computeVaultHash(domains: VaultDomainSnapshot[]) {
+  return JSON.stringify(domains.map((domain) => [domain.domain, domain.status, domain.cloudflareStatus, domain.safeBrowsingStatus]));
+}
+
+async function sendPushAlert(message: string) {
+  const webhook = process.env.WAR_ROOM_PUSH_ALERT_WEBHOOK;
+  if (!webhook) {
+    return;
+  }
+  await fetch(webhook, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      message,
+      source: "war-room-vault",
+      at: new Date().toISOString(),
+    }),
+  }).catch(() => undefined);
+}
+
+async function sendHeadsAlert(message: string) {
+  const endpoints = [
+    process.env.WAR_ROOM_HEADS_WEBHOOK_URL,
+    process.env.SLACK_WEBHOOK_URL,
+    process.env.TELEGRAM_WEBHOOK_URL,
+  ].filter((value): value is string => Boolean(value && value.trim().length > 0));
+
+  await Promise.all(
+    endpoints.map((url) =>
+      fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: message,
+          message,
+          source: "war-room-kill-switch",
+          at: new Date().toISOString(),
+        }),
+      }).catch(() => undefined),
+    ),
+  );
+
+  const telegramBot = process.env.TELEGRAM_BOT_TOKEN;
+  const telegramChatId = process.env.TELEGRAM_CHAT_ID;
+  if (telegramBot && telegramChatId) {
+    const url = `https://api.telegram.org/bot${encodeURIComponent(telegramBot)}/sendMessage`;
+    await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: telegramChatId,
+        text: message,
+      }),
+    }).catch(() => undefined);
+  }
+}
+
+function isPeakHours(now: Date) {
+  const hour = now.getHours();
+  return hour >= WAR_ROOM_OPS_CONSTANTS.thresholds.killSwitch.peakStartHour &&
+    hour < WAR_ROOM_OPS_CONSTANTS.thresholds.killSwitch.peakEndHour;
+}
+
+async function runDomainChecks(base: WarRoomData): Promise<VaultDomainSnapshot[]> {
+  const configuredDomains = (process.env.WAR_ROOM_VAULT_DOMAINS ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+  const domains = (configuredDomains.length > 0 ? configuredDomains : base.contingency.domains.map((domain) => domain.name)).slice(
+    0,
+    WAR_ROOM_OPS_CONSTANTS.vault.maxDomainsPerCycle,
+  );
+  const fallbackByDomain = new Map(base.contingency.domains.map((domain) => [domain.name, domain]));
+  const checkedAt = nowLabel();
+
+  const snapshots = await Promise.all(
+    domains.map(async (domain) => {
+      const fallback = fallbackByDomain.get(domain);
+      const safeBrowsingStatus = await checkSafeBrowsing(domain);
+      const facebookDebuggerStatus = await checkFacebookDebugger(domain);
+      const cloudflareStatus = await checkCloudflareDomain(domain);
+      const score = computeDomainHealthScore(safeBrowsingStatus, facebookDebuggerStatus, cloudflareStatus);
+      const status = toVaultStatus(safeBrowsingStatus, facebookDebuggerStatus, cloudflareStatus, fallback?.status ?? "warning");
+      const note =
+        status === "blocked"
+          ? "Dominio em risco. Ativar contingencia imediatamente."
+          : status === "warning"
+            ? "Risco moderado. Revalidar DNS, reputacao e debugger."
+            : "Saude do dominio estavel.";
+      return {
+        domain,
+        safeBrowsingStatus,
+        facebookDebuggerStatus,
+        cloudflareStatus,
+        blacklistHits: safeBrowsingStatus === "unsafe" ? 1 : 0,
+        status,
+        note: `${note} Health Score: ${score.toFixed(1)}.`,
+        checkedAt,
+      } satisfies VaultDomainSnapshot;
+    }),
+  );
+
+  return snapshots;
+}
+
+function buildExecutiveBriefing(data: WarRoomData) {
+  const generatedAt = nowLabel();
+  const bestAsset =
+    [...data.integrations.attribution.validatedAssets]
+      .sort((a, b) => a.effectiveCpa - b.effectiveCpa)
+      .find((asset) => asset.status === "scale")?.assetId ?? "N/A";
+  const mer = data.integrations.merCross.value;
+  const profit = data.enterprise.ceoFinance.netProfit;
+  const approval = data.integrations.gateway.appmaxCardApprovalRate;
+
+  const summary =
+    mer >= 2.5
+      ? `Hoje o ativo ${bestAsset} sustentou a escala com MER em ${mer.toFixed(2)}x e lucro real em ${profit.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}.`
+      : `Hoje o MER fechou em ${mer.toFixed(2)}x, abaixo do nivel seguro, exigindo reducao imediata de risco operacional.`;
+  const suggestedAction =
+    approval < 80
+      ? "Aprovacao Appmax em queda: testar processador alternativo e revisar regra antifraude hoje."
+      : data.integrations.fortress.pixelSync.status === "unhealthy"
+        ? "Divergencia de Pixel/CAPI acima de 20%: revisar eventos Purchase e deduplicacao no Gerenciador."
+        : "Manter escala apenas nos IDs verdes e reforcar monitoramento do cofre de contingencia a cada 30 minutos.";
+
+  return { generatedAt, summary, suggestedAction };
+}
+
+export async function applyFortressLayer(input: WarRoomData): Promise<WarRoomData> {
+  const next = structuredClone(input);
+  const runtimeState = getRuntimeState();
+  const nowMs = Date.now();
+  const shouldRun = nowMs - runtimeState.lastRunAtMs >= CHECK_INTERVAL_MS || runtimeState.domains.length === 0;
+
+  if (shouldRun) {
+    runtimeState.domains = await runDomainChecks(next);
+    runtimeState.lastRunAtMs = nowMs;
+  }
+
+  if (runtimeState.domains.length > 0) {
+    const vaultHash = computeVaultHash(runtimeState.domains);
+    if (runtimeState.lastVaultHash && runtimeState.lastVaultHash !== vaultHash) {
+      await sendPushAlert("Vault status alterado: mudanca de saude de dominio detectada.");
+    }
+    runtimeState.lastVaultHash = vaultHash;
+    next.integrations.fortress.vault.domains = runtimeState.domains;
+    next.integrations.fortress.vault.lastCheckAt = nowLabel();
+    const blocked = runtimeState.domains.some((domain) => domain.status === "blocked");
+    const warning = runtimeState.domains.some((domain) => domain.status === "warning");
+    next.integrations.fortress.vault.overallStatus = blocked ? "blocked" : warning ? "warning" : "ok";
+
+    const statusByDomain = new Map(runtimeState.domains.map((domain) => [domain.domain, domain.status]));
+    next.contingency.domains = next.contingency.domains.map((domain) => ({
+      ...domain,
+      status: statusByDomain.get(domain.name) ?? domain.status,
+      lastCheck: next.integrations.fortress.vault.lastCheckAt,
+    }));
+  }
+
+  const sirenReasons: string[] = [];
+  if (
+    next.integrations.merCross.value > 0 &&
+    next.integrations.merCross.value < WAR_ROOM_OPS_CONSTANTS.thresholds.mer.sirenCritical
+  ) {
+    sirenReasons.push(
+      `MER Global ${next.integrations.merCross.value.toFixed(2)}x abaixo de ${WAR_ROOM_OPS_CONSTANTS.thresholds.mer.sirenCritical.toFixed(1)}x`,
+    );
+  }
+  if (next.integrations.fortress.vault.overallStatus === "blocked") {
+    sirenReasons.push("Dominio em status BLOCKED no Cofre de Contingencia");
+  }
+  if (next.integrations.fortress.pixelSync.status === "unhealthy") {
+    sirenReasons.push(
+      `Erro de CAPI/Pixel com divergencia acima de ${WAR_ROOM_OPS_CONSTANTS.thresholds.pixel.maxDiscrepancyPct}%`,
+    );
+  }
+  const approvalDropThreshold =
+    next.integrations.gateway.appmaxPreviousDayApprovalRate *
+    (1 - WAR_ROOM_OPS_CONSTANTS.thresholds.appmax.approvalDropAlertPct / 100);
+  if (
+    next.integrations.gateway.appmaxPreviousDayApprovalRate > 0 &&
+    next.integrations.gateway.appmaxCardApprovalRate < approvalDropThreshold
+  ) {
+    sirenReasons.push(
+      `Aprovacao Appmax caiu mais de ${WAR_ROOM_OPS_CONSTANTS.thresholds.appmax.approvalDropAlertPct}% vs D-1`,
+    );
+  }
+
+  next.integrations.fortress.siren = {
+    active: sirenReasons.length > 0,
+    reasons: sirenReasons,
+    severity: sirenReasons.length > 0 ? "critical" : "normal",
+  };
+  if (next.integrations.fortress.siren.active !== runtimeState.lastSirenActive) {
+    await sendPushAlert(
+      next.integrations.fortress.siren.active
+        ? `SIREN ON: ${next.integrations.fortress.siren.reasons.join(" | ")}`
+        : "SIREN OFF: sistema voltou para estado normal.",
+    );
+    runtimeState.lastSirenActive = next.integrations.fortress.siren.active;
+  }
+
+  const now = new Date();
+  const merThreshold = WAR_ROOM_OPS_CONSTANTS.thresholds.killSwitch.merCritical;
+  const requiredDurationMinutes = WAR_ROOM_OPS_CONSTANTS.thresholds.killSwitch.durationMinutes;
+  const peak = isPeakHours(now);
+  const merCriticalNow =
+    peak && next.integrations.merCross.value > 0 && next.integrations.merCross.value < merThreshold;
+  if (merCriticalNow) {
+    runtimeState.merBelowThresholdSinceMs = runtimeState.merBelowThresholdSinceMs || nowMs;
+  } else {
+    runtimeState.merBelowThresholdSinceMs = 0;
+    runtimeState.killSwitchTriggeredAtMs = 0;
+    runtimeState.killSwitchAlertsSent = 0;
+  }
+  const breachedDurationMs = runtimeState.merBelowThresholdSinceMs > 0 ? nowMs - runtimeState.merBelowThresholdSinceMs : 0;
+  const killSwitchByMer = merCriticalNow && breachedDurationMs >= requiredDurationMinutes * 60 * 1000;
+  if (killSwitchByMer && runtimeState.killSwitchTriggeredAtMs === 0) {
+    runtimeState.killSwitchTriggeredAtMs = nowMs;
+  }
+  const autoTrafficBlocked = killSwitchByMer || next.integrations.fortress.vault.overallStatus === "blocked";
+  if (autoTrafficBlocked) {
+    next.integrations.attribution.validatedAssets = next.integrations.attribution.validatedAssets.map((asset) => ({
+      ...asset,
+      status: "pause",
+      note:
+        next.integrations.fortress.vault.overallStatus === "blocked"
+          ? "Domain Health Monitor acionado: dominio em blacklist/risco. Trafego bloqueado automaticamente."
+          : "Kill Switch ativo: MER critico em horario de pico por >2h.",
+    }));
+  }
+  if (killSwitchByMer && runtimeState.killSwitchAlertsSent === 0) {
+    const message = `[WAR ROOM KILL SWITCH] MER ${next.integrations.merCross.value.toFixed(2)}x abaixo de ${merThreshold.toFixed(
+      1,
+    )} por mais de ${requiredDurationMinutes}min no pico. Trafego pausado automaticamente para preservar caixa.`;
+    await sendHeadsAlert(message);
+    runtimeState.killSwitchAlertsSent = 1;
+  }
+  next.integrations.operations.killSwitch = {
+    active: killSwitchByMer,
+    merThreshold,
+    requiredDurationMinutes,
+    belowThresholdSince:
+      runtimeState.merBelowThresholdSinceMs > 0 ? new Date(runtimeState.merBelowThresholdSinceMs).toISOString() : "",
+    triggeredAt: runtimeState.killSwitchTriggeredAtMs > 0 ? new Date(runtimeState.killSwitchTriggeredAtMs).toISOString() : "",
+    alertsSent: runtimeState.killSwitchAlertsSent,
+    autoTrafficBlocked,
+    reason:
+      next.integrations.fortress.vault.overallStatus === "blocked"
+        ? "Domain Health Monitor detectou blacklist/risco critico e bloqueou trafego."
+        : killSwitchByMer
+          ? "MER critico sustentado em horario de pico. Kill Switch algoritmico ativo."
+          : peak
+            ? "Monitorando MER em janela de pico."
+            : "Fora da janela de pico. Kill Switch preventivo em espera.",
+    peakWindow: `${String(WAR_ROOM_OPS_CONSTANTS.thresholds.killSwitch.peakStartHour).padStart(2, "0")}:00-${String(
+      WAR_ROOM_OPS_CONSTANTS.thresholds.killSwitch.peakEndHour,
+    ).padStart(2, "0")}:00`,
+  };
+
+  next.integrations.fortress.executiveBriefing = buildExecutiveBriefing(next);
+  return next;
+}

@@ -1,0 +1,100 @@
+import { rolePermissions, type UserRole } from "./rbac";
+import type { WarRoomData } from "@/lib/war-room/types";
+
+export function sanitizeWarRoomDataForRole(input: WarRoomData, role: UserRole): WarRoomData {
+  const permissions = rolePermissions[role];
+  const data: WarRoomData = structuredClone(input);
+
+  // Senior-only note: sensitive fields are sanitized server-side before serialization,
+  // so client state tampering cannot recover hidden financial values.
+  if (!permissions.canViewSensitiveFinancials) {
+    data.finance.netRevenue = 0;
+    data.finance.profitMargin = 0;
+    data.finance.contributionMargin = 0;
+    data.finance.ltv24h = 0;
+    data.finance.upsellTakeRate = 0;
+    data.enterprise.ceoFinance.netProfit = 0;
+    data.enterprise.ceoFinance.grossRevenue = 0;
+    data.enterprise.ceoFinance.gatewayFees = 0;
+    data.enterprise.ceoFinance.nfseTaxes = 0;
+    data.enterprise.ceoFinance.taxProvision = 0;
+    data.enterprise.ceoFinance.mer = 0;
+    data.integrations.gateway.consolidatedGrossRevenue = 0;
+    data.integrations.gateway.consolidatedNetRevenue = 0;
+    data.integrations.fortress.backEndLtv.revenueBySource = {
+      paidTraffic: 0,
+      crmEmail: 0,
+      crmSms: 0,
+      crmWhatsapp: 0,
+      crmTotal: 0,
+      total: 0,
+      crmSharePct: 0,
+    };
+    data.integrations.fortress.backEndLtv.cohort90d = data.integrations.fortress.backEndLtv.cohort90d.map((item) => ({
+      ...item,
+      projectedRevenue: 0,
+    }));
+    data.integrations.fortress.backEndLtv.predictiveModel.predictedLtv90d = 0;
+    data.integrations.fortress.backEndLtv.predictiveModel.baselineFromD7 = 0;
+    data.integrations.fortress.backEndLtv.predictiveModel.confidencePct = 0;
+    data.integrations.fortress.backEndLtv.predictiveModel.drivers = ["Sem permissao para modelo preditivo."];
+    data.integrations.fortress.scaleSimulator.projectedNetProfit = 0;
+    data.integrations.fortress.scaleSimulator.roiPct = 0;
+    data.integrations.fortress.executiveBriefing.summary = "Resumo executivo oculto para este perfil.";
+    data.integrations.fortress.executiveBriefing.suggestedAction = "Sem permissao para dados financeiros sensiveis.";
+    data.integrations.operations.opportunityLost.estimatedLossToday = 0;
+    data.integrations.operations.opportunityLost.currentLossPerMinute = 0;
+    data.integrations.operations.opportunityLost.incidents = data.integrations.operations.opportunityLost.incidents.map(
+      (incident) => ({ ...incident, estimatedLoss: 0 }),
+    );
+    data.integrations.operations.reconciliation.ledger = data.integrations.operations.reconciliation.ledger.map((row) => ({
+      ...row,
+      expected: 0,
+      observed: 0,
+      variancePct: 0,
+    }));
+    data.integrations.attribution.realRoiLeaderboard = data.integrations.attribution.realRoiLeaderboard.map((item) => ({
+      ...item,
+      realProfit: 0,
+    }));
+    if (data.enterprise.multiTenant) {
+      data.enterprise.multiTenant.squads = data.enterprise.multiTenant.squads.map((squad) => ({
+        ...squad,
+        cost: 0,
+        revenue: 0,
+        profit: 0,
+        marginPct: 0,
+        efficiencyScore: 0,
+      }));
+    }
+  }
+
+  if (!permissions.canViewRoasReal) {
+    data.liveAdsTracking = data.liveAdsTracking.map((row) => ({
+      ...row,
+      roas: 0,
+      trend24h: {
+        ...row.trend24h,
+        roas: row.trend24h.roas.map(() => 0),
+      },
+    }));
+    data.integrations.attribution.realRoiLeaderboard = data.integrations.attribution.realRoiLeaderboard.map((item) => ({
+      ...item,
+      realRoas: 0,
+    }));
+  }
+
+  if (role === "videoEditor" || role === "productionEditor" || role === "productionDesigner") {
+    data.globalOverview.revenue = 0;
+    data.globalOverview.trafficSources = data.globalOverview.trafficSources.map((source) => ({
+      ...source,
+      spend: 0,
+    }));
+    data.enterprise.trafficAttribution.deepAttribution = data.enterprise.trafficAttribution.deepAttribution.map((item) => ({
+      ...item,
+      netProfit: 0,
+    }));
+  }
+
+  return data;
+}
